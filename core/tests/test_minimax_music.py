@@ -558,3 +558,101 @@ async def test_runner_request_error_surfaces_as_failed(svc, monkeypatch):
     assert "content policy" in (final.error or "").lower()
     assert "Traceback" not in (final.error or "")
     assert final.artifacts == []
+
+
+# ============================================================================
+# MusicGenerateTool.execute — Agent-facing validation (Schema-Hints)
+# ============================================================================
+
+from unittest.mock import MagicMock
+
+from hydrahive_core.tool_registry import MusicGenerateTool
+
+
+@pytest.fixture
+def music_tool():
+    # JobService wird für die frühen Validierungs-Pfade nicht erreicht,
+    # aber die Tool-Instanz will ein Objekt — MagicMock reicht.
+    return MusicGenerateTool(job_service=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_prompt_mit_verse_marker_wird_als_songtext_erkannt(music_tool):
+    # Häufigster Agent-Fehler: ganzer Songtext in `prompt` gestopft.
+    result = await music_tool.execute(
+        agent_id="a",
+        project_id="p",
+        prompt="Slow Blues. [Verse 1] Woke up this morning [Chorus] Oh Lord",
+        lyrics="",
+    )
+    assert "error" in result
+    assert result.get("hint") == "split_prompt_into_prompt_and_lyrics"
+    assert "lyrics" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_prompt_mit_intro_marker_wird_erkannt(music_tool):
+    result = await music_tool.execute(
+        agent_id="a", project_id="p",
+        prompt="Slow Blues Hammond. [Intro] Mhm yeah [Verse 1] Woke up",
+        lyrics="",
+    )
+    assert "error" in result
+    assert result.get("hint") == "split_prompt_into_prompt_and_lyrics"
+
+
+@pytest.mark.asyncio
+async def test_prompt_mit_guitar_solo_marker_wird_erkannt(music_tool):
+    result = await music_tool.execute(
+        agent_id="a", project_id="p",
+        prompt="[Intro] Mhm [Verse 1] ... [Guitar Solo] [Outro] fade",
+        lyrics="",
+    )
+    assert "error" in result
+    assert result.get("hint") == "split_prompt_into_prompt_and_lyrics"
+
+
+@pytest.mark.asyncio
+async def test_prompt_mit_marker_aber_lyrics_gesetzt_ist_ok(music_tool, monkeypatch):
+    # Wenn lyrics schon gesetzt, war die Marker-Erwähnung im prompt Zufall
+    # (z.B. "Song with a jazzy [Bridge] feel"). Nicht rejecten.
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._minimax_music_api_key",
+        lambda: "fake-key-for-test",
+    ) if False else None  # _minimax_music_api_key kommt aus minimax_music
+    # Einfacher Weg: wir mocken den import im execute() — aber hier reicht,
+    # dass wir die Validation-Layer durchlaufen ohne Marker-Reject. Da
+    # danach der JobService-Key-Check kommt, setzen wir den Env-Key.
+    monkeypatch.setenv("MINIMAX_API_KEY", "k")
+    # JobService submit soll nicht aufgerufen werden — wir stoppen vorher,
+    # indem das Tool den Marker-Check überspringt: lyrics != "".
+    # Der nächste Check wäre Lyrics-Länge — erfüllen wir.
+    result = await music_tool.execute(
+        agent_id="a", project_id="p",
+        prompt="smooth jazz with a groovy [Bridge] moment",
+        lyrics="[Intro] la la la",
+    )
+    # Wir erwarten KEINEN hint-Fehler. Danach darf JobService-Pfad greifen.
+    # Falls JobService weiter-dispatcht und MagicMock-Submit-Quatsch macht,
+    # ist das OK — wir wollen nur, dass _unser_ Validation-Pfad OK ist.
+    assert result.get("hint") != "split_prompt_into_prompt_and_lyrics"
+
+
+@pytest.mark.asyncio
+async def test_prompt_zu_lang_zeigt_hinweis_auf_lyrics_feld(music_tool):
+    # Langer prompt ohne Marker → generischer Length-Error, aber mit
+    # Hinweis auf lyrics-Feld.
+    long = "blues " * 120  # ~720 Zeichen
+    result = await music_tool.execute(
+        agent_id="a", project_id="p",
+        prompt=long, lyrics="",
+    )
+    assert "error" in result
+    assert result.get("hint") == "split_prompt_into_prompt_and_lyrics"
+    assert "lyrics" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_prompt_leer_wird_abgewiesen(music_tool):
+    result = await music_tool.execute(agent_id="a", project_id="p", prompt="", lyrics="")
+    assert result.get("error") == "prompt ist leer"

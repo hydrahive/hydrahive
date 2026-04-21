@@ -3207,11 +3207,24 @@ class MusicGenerateTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Erzeugt einen Song aus einem Text-Prompt via MiniMax music-2.6. "
-            "Optional mit eigenen Lyrics oder rein instrumental. Blockt "
-            "synchron bis das MP3 fertig ist (~10–30 s). Gibt einen Job "
-            "mit fertigen Artifacts zurück. Cancel nach HTTP-Start stoppt "
-            "nur das lokale Artifact-Write; der Remote-Call läuft zu Ende."
+            "Erzeugt einen Song via MiniMax music-2.6. Sync (~1–4 min). "
+            "\n\n"
+            "WICHTIG — zwei getrennte Felder, NICHT beides in `prompt` packen:\n"
+            "  • `prompt` (max 500 Zeichen): NUR Style/Genre/Mood/Instrumente/BPM. "
+            "Kein Songtext, keine Struktur-Marker.\n"
+            "  • `lyrics` (max 3000 Zeichen): Songtext MIT Struktur-Markern "
+            "wie [Intro] [Verse 1] [Chorus] [Bridge] [Guitar Solo] [Outro].\n"
+            "  • `instrumental=true`: keine Vocals, dann `lyrics` leer lassen.\n"
+            "\n"
+            "Beispiel korrekt:\n"
+            '  prompt="Slow Blues, 72 BPM, 12-bar blues in E, Hammond organ, '
+            'slide guitar, weary male vocals with whiskey rasp"\n'
+            '  lyrics="[Intro]\\nMhm yeah...\\n[Verse 1]\\nWoke up this morning, '
+            'die Augen rot wie Wein\\n[Chorus]\\nOh Lord, Chris hat den KI-Blues..."\n'
+            "\n"
+            "Beispiel FALSCH (bricht mit 'prompt zu lang'):\n"
+            '  prompt="Slow Blues 72 BPM. [Intro] Mhm yeah... [Verse 1] Woke up '
+            'this morning..." ← Songtext gehört in `lyrics`, nicht `prompt`.'
         )
 
     @property
@@ -3221,20 +3234,27 @@ class MusicGenerateTool(BaseTool):
             "properties": {
                 "prompt": {
                     "type":        "string",
-                    "description": "Style/Mood/Scenario des Songs.",
+                    "description": (
+                        "NUR Style/Genre/Mood/Instrumente/BPM (max 500 Zeichen). "
+                        "Kein Songtext, keine [Verse]-Marker. "
+                        "Beispiel: 'Slow Blues, 72 BPM, Hammond organ, slide guitar, "
+                        "whiskey-rasped male vocals, smoky bar vibe'."
+                    ),
                 },
                 "lyrics": {
                     "type":        "string",
                     "description": (
-                        "Optional: eigene Lyrics. Bei leer generiert "
-                        "MiniMax Lyrics aus dem prompt."
+                        "Songtext MIT Struktur-Markern (max 3000 Zeichen). "
+                        "Struktur in eckigen Klammern: [Intro] [Verse 1] "
+                        "[Chorus] [Bridge] [Guitar Solo] [Outro]. Bei leer "
+                        "generiert MiniMax Lyrics aus dem prompt."
                     ),
                 },
                 "instrumental": {
                     "type":        "boolean",
                     "description": (
-                        "Optional: rein instrumental. Nicht gleichzeitig "
-                        "mit lyrics."
+                        "Optional: rein instrumental. Wenn true, `lyrics` "
+                        "leer lassen (widersprüchlich)."
                     ),
                 },
                 "model": {
@@ -3292,12 +3312,44 @@ class MusicGenerateTool(BaseTool):
         prompt_str = (prompt or "").strip()
         if not prompt_str:
             return {"error": "prompt ist leer"}
-        if len(prompt_str) > MAX_PROMPT_LEN:
-            return {"error": f"prompt zu lang (max {MAX_PROMPT_LEN} Zeichen)"}
 
         lyrics_str = (lyrics or "").strip()
+
+        # Heuristik: Agent hat Songtext in `prompt` gepackt (häufigster Fehler).
+        # Erkennbar an Struktur-Markern "[Intro]", "[Verse", "[Chorus]", "[Bridge]",
+        # "[Outro]", "[Guitar Solo]" in prompt (case-insensitive).
+        import re
+        _LYRICS_MARKER_RE = re.compile(
+            r"\[(intro|verse\s*\d*|chorus|refrain|bridge|outro|guitar\s*solo|solo|pre-?chorus|hook)\]",
+            re.IGNORECASE,
+        )
+        if _LYRICS_MARKER_RE.search(prompt_str) and not lyrics_str:
+            return {
+                "error": (
+                    "prompt enthält Struktur-Marker wie [Verse]/[Chorus]/[Intro] — "
+                    "das ist Songtext und gehört in das Feld `lyrics`, nicht `prompt`. "
+                    "`prompt` ist nur für Style/Genre/Mood/Instrumente (z.B. "
+                    "'Slow Blues, 72 BPM, Hammond organ, slide guitar'). "
+                    "Bitte Tool neu aufrufen: Style-Zeile → `prompt`, kompletten "
+                    "Songtext mit [Intro]/[Verse]/[Chorus]-Markern → `lyrics`."
+                ),
+                "hint": "split_prompt_into_prompt_and_lyrics",
+            }
+
+        if len(prompt_str) > MAX_PROMPT_LEN:
+            return {
+                "error": (
+                    f"prompt zu lang ({len(prompt_str)} Zeichen, max {MAX_PROMPT_LEN}). "
+                    f"`prompt` ist nur für Style (Genre/Mood/Instrumente/BPM). "
+                    f"Falls du Songtext drin hast: verschiebe den kompletten "
+                    f"Text mit [Verse]/[Chorus]-Markern ins Feld `lyrics` "
+                    f"(dort max {MAX_LYRICS_LEN} Zeichen)."
+                ),
+                "hint": "split_prompt_into_prompt_and_lyrics",
+            }
+
         if len(lyrics_str) > MAX_LYRICS_LEN:
-            return {"error": f"lyrics zu lang (max {MAX_LYRICS_LEN} Zeichen)"}
+            return {"error": f"lyrics zu lang ({len(lyrics_str)} Zeichen, max {MAX_LYRICS_LEN})"}
 
         if lyrics_str and instrumental:
             return {
