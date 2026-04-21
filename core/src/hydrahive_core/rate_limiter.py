@@ -279,13 +279,35 @@ class RateLimiter:
                 f"Möglicher Agent-Loop oder Kostenexplosion — wird blockiert."
             )
 
-    def track_token_usage(self, agent_id: str, tokens: int) -> None:
+    def _resolve_thresholds(
+        self,
+        warn_override: int | None = None,
+        hard_override: int | None = None,
+    ) -> tuple[int, int]:
+        """#820: Effektive (warn, hard) — Project-Override hat Vorrang vor
+        globalem Default. None = nicht überschrieben, dann globaler Wert.
+        0 = Limit deaktiviert (override turns it off pro Projekt)."""
+        warn = self.settings.agent_token_warn_per_hour if warn_override is None else max(0, int(warn_override))
+        hard = self.settings.agent_token_hard_per_hour if hard_override is None else max(0, int(hard_override))
+        return warn, hard
+
+    def track_token_usage(
+        self,
+        agent_id: str,
+        tokens: int,
+        *,
+        warn_override: int | None = None,
+        hard_override: int | None = None,
+    ) -> None:
         """Token-Verbrauch eines Agents tracken, Warning + Hard-Stop (#750).
 
         Raises TokenBudgetExceeded wenn der Hard-Threshold nach dem Update
         überschritten wurde. Das aktuelle Usage-Event ist gespeichert, der
         nächste LLM-Call wird durch den Entry-Check im Orchestrator
         blockiert — diese Exception hier ist die letzte Verteidigungslinie.
+
+        #820: warn/hard können pro Aufruf überschrieben werden (Project-
+        Override). None = globaler Default. 0 = deaktiviert.
         """
         now = time.time()
         hour_ago = now - 3600
@@ -294,8 +316,7 @@ class RateLimiter:
         self._agent_token_usage[agent_id] = [(t, n) for t, n in usage if t > hour_ago]
         self._agent_token_usage[agent_id].append((now, tokens))
         total_hour = sum(n for _, n in self._agent_token_usage[agent_id])
-        warn = self.settings.agent_token_warn_per_hour
-        hard = self.settings.agent_token_hard_per_hour
+        warn, hard = self._resolve_thresholds(warn_override, hard_override)
         if warn > 0 and total_hour > warn:
             self.logger.warning(
                 "Token-Budget-Warnung: Agent '%s' hat ~%d Tokens in der letzten Stunde verbraucht "
@@ -313,6 +334,8 @@ class RateLimiter:
         self,
         agent_id: str,
         estimated_next_call_tokens: int = 0,
+        *,
+        hard_override: int | None = None,
     ) -> None:
         """#750/#778: Pre-Call-Gate mit optionaler Call-Groessen-Schaetzung.
 
@@ -323,9 +346,10 @@ class RateLimiter:
         Backwards-compatible: estimated_next_call_tokens=0 → altes Verhalten
         (nur kumulierte History wird geprueft).
 
-        Disabled wenn agent_token_hard_per_hour == 0.
+        #820: hard_override (None=globaler Default, 0=deaktiviert,
+        >0=Projekt-Schwelle).
         """
-        hard = self.settings.agent_token_hard_per_hour
+        _, hard = self._resolve_thresholds(hard_override=hard_override)
         if hard <= 0:
             return
         total = self.get_token_usage_hour(agent_id)

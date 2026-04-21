@@ -111,6 +111,24 @@ class ProjectTaskAgents(BaseModel):
     max_parallel: int = 10
 
 
+# #820: Pro-Projekt Token-Budget Override.
+class TokenBudget(BaseModel):
+    """Token-Budget-Override für ein einzelnes Projekt.
+
+    Beide Felder sind optional (None = globaler Default greift).
+    0 = Limit für dieses Projekt deaktiviert.
+    >0 = neue Schwelle pro Stunde für den Boss-Agent.
+
+    Tracking-Bucket bleibt agent_id; das Override setzt nur die Schwelle.
+    Wenn ein Agent in mehreren Projekten boss ist, sehen die das gleiche
+    Token-Counter-Fenster, aber jedes Projekt kann seine eigene Schwelle
+    setzen — die strengere greift faktisch zuerst.
+    """
+    model_config = {"extra": "ignore"}
+    hard_per_hour: int | None = None
+    warn_per_hour: int | None = None
+
+
 # =========================================================================
 # Haupt-Config: Vereint v1 (project.yaml) und v2 (config.yaml)
 # =========================================================================
@@ -156,6 +174,15 @@ class ProjectConfig(BaseModel):
 
     # v2: Max Tool-Runden pro Chat-Nachricht (#613)
     max_tool_rounds: int = 50
+
+    # #820: Token-Budget Override pro Projekt. Überschreibt den globalen
+    # Default (RateLimitSettings.agent_token_*_per_hour bzw. Env
+    # HYDRAHIVE_TOKEN_HARD_PER_HOUR). Beide Werte sind optional:
+    #   None / fehlt → globaler Default greift
+    #   0           → Limit für dieses Projekt deaktiviert
+    #   >0          → harte/weiche Schwelle pro Stunde fuer Boss-Agent
+    # Tracking-Bucket bleibt agent_id; das Override setzt nur die Schwelle.
+    token_budget: TokenBudget = Field(default_factory=lambda: TokenBudget())
 
     # Wird nach dem Laden gesetzt
     project_dir: Path | None = Field(default=None, exclude=True)

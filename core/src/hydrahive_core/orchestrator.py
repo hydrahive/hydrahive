@@ -693,11 +693,14 @@ class Orchestrator:
         # #750: Token-Budget Pre-Check vor erstem LLM-Call.
         # Hard-Stop verhindert Token-Burn in hängenden/loopenden Agents.
         # Bei Überschreitung: saubere Assistant-Message in Session + return.
+        # #820: project_cfg.token_budget kann den globalen Default überschreiben.
         _rl = getattr(_tool_reg, "_rate_limiter", None)
+        _project_hard = getattr(getattr(project_cfg, "token_budget", None), "hard_per_hour", None)
+        _project_warn = getattr(getattr(project_cfg, "token_budget", None), "warn_per_hour", None)
         if _rl is not None:
             from .rate_limiter import TokenBudgetExceeded as _TBE
             try:
-                _rl.check_token_budget(boss_cfg.id)
+                _rl.check_token_budget(boss_cfg.id, hard_override=_project_hard)
             except _TBE as _budget_exc:
                 _msg = (
                     f"⛔ Token-Budget überschritten (#750): Agent '{boss_cfg.id}' hat "
@@ -991,7 +994,12 @@ class Orchestrator:
                 }
             total_t = input_t + output_t
             if total_t > 0 and _tool_reg._rate_limiter is not None:
-                _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
+                # #820: Project-Override durchreichen
+                _tool_reg._rate_limiter.track_token_usage(
+                    boss_cfg.id, total_t,
+                    warn_override=_project_warn,
+                    hard_override=_project_hard,
+                )
 
         await self._sessions.append(
             project_id, MessageRole.ASSISTANT,

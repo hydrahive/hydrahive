@@ -3,9 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from .matrix_agent import BossMatrixAgent
 from .settings import settings
+
+
+class TokenBudgetRequest(BaseModel):
+    """#820: Body für PUT /admin/projects/{id}/token-budget.
+    None / fehlt = globaler Default greift; 0 = Limit deaktiviert."""
+    model_config = {"extra": "ignore"}
+    hard_per_hour: int | None = None
+    warn_per_hour: int | None = None
 
 
 def update_project_matrix_space(projects_dir: str, project_id: str, space_id: str, *, logger) -> None:
@@ -258,6 +267,77 @@ def register_project_lifecycle_routes(
         except Exception as e:
             logger.error("Berechtigungen setzen fehlgeschlagen für %s: %s", project_id, e)
             raise HTTPException(500, "Berechtigungen konnten nicht gesetzt werden")
+
+    # ────────────────────────────────────────────────────────────────────
+    # #820: Pro-Projekt Token-Budget Override (überschreibt globalen Default)
+    # ────────────────────────────────────────────────────────────────────
+
+    @admin_router.get("/projects/{project_id}/token-budget")
+    async def get_project_token_budget(project_id: str, _a: tuple = Depends(require_admin)):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        tb = getattr(cfg, "token_budget", None)
+        return {
+            "project_id": project_id,
+            "hard_per_hour": getattr(tb, "hard_per_hour", None),
+            "warn_per_hour": getattr(tb, "warn_per_hour", None),
+        }
+
+    @admin_router.put("/projects/{project_id}/token-budget")
+    async def set_project_token_budget(
+        project_id: str,
+        body: TokenBudgetRequest,
+        _a: tuple = Depends(require_admin),
+    ):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        # Validation: negative Werte → 400 (None und 0 sind ok).
+        for label, val in (("hard_per_hour", body.hard_per_hour), ("warn_per_hour", body.warn_per_hour)):
+            if val is not None and val < 0:
+                raise HTTPException(400, f"{label} muss >= 0 sein (0 = deaktiviert, leer = globaler Default)")
+
+        # config.yaml laden, token_budget patchen, atomar speichern.
+        config_path = Path(projects_dir) / project_id / "config.yaml"
+        if not config_path.exists():
+            raise HTTPException(404, "config.yaml nicht gefunden — kein v2-Projekt")
+        import yaml as _yaml
+        try:
+            data = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            tb_section: dict = {}
+            if body.hard_per_hour is not None:
+                tb_section["hard_per_hour"] = int(body.hard_per_hour)
+            if body.warn_per_hour is not None:
+                tb_section["warn_per_hour"] = int(body.warn_per_hour)
+            if tb_section:
+                data["token_budget"] = tb_section
+            else:
+                # Beide None → Eintrag entfernen (back to global default).
+                data.pop("token_budget", None)
+            tmp = config_path.with_suffix(".yaml.tmp")
+            tmp.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+            tmp.replace(config_path)
+        except Exception as e:
+            logger.error("token_budget für '%s' konnte nicht geschrieben werden: %s", project_id, e)
+            raise HTTPException(500, f"Schreiben fehlgeschlagen: {e}")
+
+        # ProjectLoader cache invalidieren — neu registrieren
+        try:
+            projects._register(config_path.parent)
+        except Exception as e:
+            logger.warning("ProjectLoader-Reload für '%s' nach token_budget-Update fehlgeschlagen: %s", project_id, e)
+
+        audit_log("project.token_budget_set", target=project_id, details={
+            "hard_per_hour": body.hard_per_hour,
+            "warn_per_hour": body.warn_per_hour,
+        })
+        return {
+            "updated": True,
+            "project_id": project_id,
+            "hard_per_hour": body.hard_per_hour,
+            "warn_per_hour": body.warn_per_hour,
+        }
 
     @admin_router.post("/projects/reprovision-all")
     async def reprovision_all_projects(_a: tuple = Depends(require_admin)):

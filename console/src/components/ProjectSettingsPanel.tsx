@@ -141,6 +141,11 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [maxToolRounds, setMaxToolRounds] = useState(50);
   const [riskPolicy, setRiskPolicy] = useState<"interactive" | "trusted">("interactive");
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
+  // #820: Pro-Projekt Token-Budget Override (leer = globaler Default)
+  const [tokenHardPerHour, setTokenHardPerHour] = useState<string>("");
+  const [tokenWarnPerHour, setTokenWarnPerHour] = useState<string>("");
+  const [tokenBudgetSaving, setTokenBudgetSaving] = useState(false);
+  const [tokenBudgetMsg, setTokenBudgetMsg] = useState<string>("");
 
   // WhatsApp
   const [waStatus, setWaStatus] = useState<string>("unknown");
@@ -399,6 +404,43 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     } finally {
       setLoading(false);
     }
+    // #820: Token-Budget Override separat laden (Admin-only Endpoint)
+    if (isAdmin) {
+      try {
+        const tb = await api.getProjectTokenBudget(projectId);
+        setTokenHardPerHour(tb.hard_per_hour === null || tb.hard_per_hour === undefined ? "" : String(tb.hard_per_hour));
+        setTokenWarnPerHour(tb.warn_per_hour === null || tb.warn_per_hour === undefined ? "" : String(tb.warn_per_hour));
+      } catch { /* ignore — Endpoint kann auf älteren Cores fehlen */ }
+    }
+  }
+
+  async function saveTokenBudget() {
+    setTokenBudgetSaving(true);
+    setTokenBudgetMsg("");
+    const parse = (s: string): number | null => {
+      const trimmed = s.trim();
+      if (!trimmed) return null;
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0) return NaN as unknown as number;
+      return Math.floor(n);
+    };
+    const hard = parse(tokenHardPerHour);
+    const warn = parse(tokenWarnPerHour);
+    if (Number.isNaN(hard) || Number.isNaN(warn)) {
+      setTokenBudgetMsg("Werte müssen leer (= globaler Default), 0 (= deaktiviert) oder positive Ganzzahlen sein.");
+      setTokenBudgetSaving(false);
+      return;
+    }
+    try {
+      const r = await api.setProjectTokenBudget(projectId, { hard_per_hour: hard, warn_per_hour: warn });
+      setTokenBudgetMsg(
+        `Gespeichert. Hard=${r.hard_per_hour ?? "(global)"} · Warn=${r.warn_per_hour ?? "(global)"}`
+      );
+    } catch (e: any) {
+      setTokenBudgetMsg(`Fehler: ${e?.message || "unbekannt"}`);
+    } finally {
+      setTokenBudgetSaving(false);
+    }
   }
 
   async function loadKeys() {
@@ -619,6 +661,56 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
             />
           </div>
+
+          {/* #820: Token-Budget Override pro Projekt (Admin-only) */}
+          {isAdmin && (
+            <div className="md:col-span-2 border rounded-lg p-3 bg-muted/20">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
+                <Shield className="h-3 w-3" />
+                <span className="font-medium">Token-Budget pro Stunde</span>
+                <span className="text-[10px]">— leer = globaler Default · 0 = deaktiviert</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Hard-Limit (Stop)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="globaler Default"
+                    value={tokenHardPerHour}
+                    onChange={e => setTokenHardPerHour(e.target.value)}
+                    className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Warn-Schwelle (Log)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="globaler Default"
+                    value={tokenWarnPerHour}
+                    onChange={e => setTokenWarnPerHour(e.target.value)}
+                    className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={saveTokenBudget}
+                  disabled={tokenBudgetSaving}
+                  className="px-2 py-1 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                >
+                  {tokenBudgetSaving ? "Speichere…" : "Token-Budget speichern"}
+                </button>
+                {tokenBudgetMsg && (
+                  <span className={`text-[10px] ${tokenBudgetMsg.startsWith("Fehler") ? "text-destructive" : "text-green-600"}`}>
+                    {tokenBudgetMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Risiko-Policy — Trusted-Boss ohne CONFIRM-Klicks (Admin-only) */}
           <div className="md:col-span-2">

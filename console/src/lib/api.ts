@@ -324,6 +324,11 @@ export const api = {
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
   sambaCreds:         (id: string) => api.get<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-credentials`),
   sambaResetPassword: (id: string) => api.post<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-reset-password`, {}),
+  // #820: Pro-Projekt Token-Budget Override.
+  getProjectTokenBudget: (id: string) =>
+    api.get<{project_id:string; hard_per_hour:number|null; warn_per_hour:number|null}>(`/projects/${id}/token-budget`),
+  setProjectTokenBudget: (id: string, body: {hard_per_hour:number|null; warn_per_hour:number|null}) =>
+    api.put<{updated:boolean; project_id:string; hard_per_hour:number|null; warn_per_hour:number|null}>(`/projects/${id}/token-budget`, body),
   // Voice Interface (#131 + Provider-Registry #794)
   voiceStatus:    () => api.get<{
     installed: boolean;

@@ -235,11 +235,14 @@ async def handle_message_stream(
 
     # #750: Token-Budget Pre-Check vor erstem LLM-Call (Streaming-Pfad).
     # Hard-Stop verhindert Token-Burn in hängenden/loopenden Agents.
+    # #820: project_cfg.token_budget kann den globalen Default überschreiben.
     _rl = getattr(_tool_reg, "_rate_limiter", None)
     if _rl is not None:
         from .rate_limiter import TokenBudgetExceeded as _TBE
+        _project_hard = getattr(getattr(project_cfg, "token_budget", None), "hard_per_hour", None)
+        _project_warn = getattr(getattr(project_cfg, "token_budget", None), "warn_per_hour", None)
         try:
-            _rl.check_token_budget(boss_cfg.id)
+            _rl.check_token_budget(boss_cfg.id, hard_override=_project_hard)
         except _TBE as _budget_exc:
             _msg = (
                 f"⛔ Token-Budget überschritten (#750): Agent '{boss_cfg.id}' hat "
@@ -516,7 +519,12 @@ async def handle_message_stream(
             yield f"data: {_json.dumps({'text': '[Modell lieferte keine Antwort — ggf. Tool-Loop ohne Final-Message oder Provider-Stream leer. Modell: ' + str(_model_name) + ']'})}\n\n"
         total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
         if total_tokens > 0 and _tool_reg._rate_limiter is not None:
-            _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
+            # #820: Project-Override durchreichen
+            _tool_reg._rate_limiter.track_token_usage(
+                boss_cfg.id, total_tokens,
+                warn_override=_project_warn,
+                hard_override=_project_hard,
+            )
 
         # #512: Streaming-LLM-Call Metriken erfassen (akkumuliert über alle Rounds)
         _metrics.record_llm_call(

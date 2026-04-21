@@ -1,5 +1,15 @@
 # HydraHive Changelog
 
+## 2026-04-22
+
+### Added
+
+- **#820 — Token-Budget pro Projekt überschreibbar.** Globale Hard-/Warn-Schwellen pro Stunde (Standard 2M / 500k) lassen sich jetzt
+  - per Env-Variable global setzen (`HYDRAHIVE_TOKEN_HARD_PER_HOUR` + `HYDRAHIVE_TOKEN_WARN_PER_HOUR`, `0=disabled`)
+  - per Projekt überschreiben via `config.yaml → token_budget: { hard_per_hour, warn_per_hour }` oder UI in **Projekt → Einstellungen → Token-Budget pro Stunde**
+  - Admin-API: `GET/PUT /admin/projects/{id}/token-budget`
+  - leer = globaler Default greift, `0` = Limit für dieses Projekt deaktiviert. Tracking-Bucket bleibt agent_id; Override setzt nur die Schwelle.
+
 ## 2026-04-21
 
 ### Added
