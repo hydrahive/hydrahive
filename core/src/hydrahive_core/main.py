@@ -1796,7 +1796,12 @@ register_backup_restore_routes(
 register_migration_routes(admin_router, require_admin=require_admin, audit_log=audit_log)
 register_vpn_routes(admin_router, require_admin=require_admin)
 register_adminfun_routes(admin_router, audit_log=audit_log, logger=logger)
-register_doctor_routes(admin_router, require_admin=require_admin)
+register_doctor_routes(
+    admin_router,
+    require_admin=require_admin,
+    get_provisioner=lambda: provisioner,
+    project_loader=projects,
+)
 register_searxng_routes(admin_router, require_admin=require_admin)
 register_knowledge_routes(admin_router, require_admin=require_admin)
 register_codeserver_routes(admin_router, require_admin=require_admin)

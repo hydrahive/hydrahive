@@ -22,7 +22,13 @@ def _find_install_dir() -> Path:
     return settings.opt_dir
 
 
-def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
+def register_doctor_routes(
+    admin_router: APIRouter,
+    *,
+    require_admin,
+    get_provisioner=None,
+    project_loader=None,
+) -> None:
 
     @admin_router.get("/admin/tests")
     async def run_tests(_a=Depends(require_admin)):
@@ -82,6 +88,18 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
             return await _fix_repair_agentlink()
         if fix_id == "repair_samba":
             return await _fix_samba_permissions()
+        if fix_id == "reconcile_projects":
+            # #813: Self-healing Reconcile — Linux-User + Samba pro Projekt
+            if get_provisioner is None or project_loader is None:
+                raise _HTTP(503, "Provisioner/ProjectLoader nicht verfügbar")
+            _provisioner = get_provisioner()
+            if _provisioner is None:
+                raise _HTTP(503, "Provisioner nicht initialisiert")
+            report = await asyncio.to_thread(
+                _provisioner.reconcile_all_projects, project_loader
+            )
+            ok = not report.get("errors")
+            return {"ok": ok, "output": report}
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -98,6 +116,7 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         checks += _check_llm_config()
         checks += _check_nginx_upload_limit()
         checks += _check_samba()
+        checks += _check_projects_reconcile(project_loader)
         checks += _check_vpn()
 
         total = len(checks)
@@ -551,6 +570,63 @@ def _check_vpn() -> list[dict]:
         pass  # tailscale nicht installiert → kein Check
     except Exception as e:
         results.append(_check("VPN: Tailscale", "warn", str(e)))
+    return results
+
+
+def _check_projects_reconcile(project_loader) -> list[dict]:
+    """
+    #813: Prüft für jedes bekannte Projekt, ob Linux-User + Samba-Share
+    vorhanden sind. Trifft nach Server-Migration / Restore ohne Re-Provisioner.
+    """
+    if project_loader is None:
+        return []
+    try:
+        projects = project_loader.projects
+    except Exception:
+        return []
+    if not projects:
+        return []
+
+    shares_file = Path("/etc/samba/hydrahive-shares.conf")
+    shares_content = shares_file.read_text(encoding="utf-8") if shares_file.exists() else ""
+
+    missing_user = []
+    missing_share = []
+    for pid, cfg in projects.items():
+        username = cfg.effective_system_user()
+        try:
+            r = subprocess.run(["id", username], capture_output=True, timeout=2)
+            if r.returncode != 0:
+                missing_user.append(pid)
+                continue
+        except Exception:
+            continue
+        if f"[{pid}]" not in shares_content:
+            missing_share.append(pid)
+
+    results = []
+    if missing_user:
+        results.append(_check(
+            "Projekte: Linux-User",
+            "error",
+            f"{len(missing_user)} Projekt(e) ohne Linux-User: {', '.join(missing_user[:5])}"
+            + ("…" if len(missing_user) > 5 else ""),
+            fix="reconcile_projects",
+        ))
+    else:
+        results.append(_check("Projekte: Linux-User", "ok",
+                              f"Alle {len(projects)} Projekte haben einen Linux-User"))
+    if missing_share:
+        results.append(_check(
+            "Projekte: Samba-Share",
+            "error",
+            f"{len(missing_share)} Projekt(e) ohne Samba-Share: {', '.join(missing_share[:5])}"
+            + ("…" if len(missing_share) > 5 else ""),
+            fix="reconcile_projects",
+        ))
+    elif not missing_user:
+        results.append(_check("Projekte: Samba-Share", "ok",
+                              f"Alle {len(projects)} Projekte haben einen Samba-Share"))
     return results
 
 

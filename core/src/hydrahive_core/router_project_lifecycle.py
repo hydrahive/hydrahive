@@ -258,3 +258,23 @@ def register_project_lifecycle_routes(
         except Exception as e:
             logger.error("Berechtigungen setzen fehlgeschlagen für %s: %s", project_id, e)
             raise HTTPException(500, "Berechtigungen konnten nicht gesetzt werden")
+
+    @admin_router.post("/projects/reprovision-all")
+    async def reprovision_all_projects(_a: tuple = Depends(require_admin)):
+        """
+        #813: Self-healing Reconcile. Stellt Linux-User + Samba-Share für
+        jedes bekannte Projekt sicher. Heilt Migrations-Lücken nach
+        Server-Neuinstallation + Daten-Restore.
+        """
+        import asyncio
+        provisioner = get_provisioner()
+        if provisioner is None:
+            raise HTTPException(503, 'Provisioner nicht initialisiert')
+        report = await asyncio.to_thread(provisioner.reconcile_all_projects, projects)
+        logger.info(
+            "Reprovision-All: %d reconciled, %d skipped, %d errors",
+            len(report.get("reconciled", [])),
+            len(report.get("skipped", [])),
+            len(report.get("errors", [])),
+        )
+        return {"ok": True, "report": report}
