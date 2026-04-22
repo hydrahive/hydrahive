@@ -1191,6 +1191,23 @@ class FileWriteTool(BaseTool):
                     "path": str(safe_path), "hint": "file_read zuerst aufrufen",
                 }
 
+        # ── #841 Gate 5: Test-Quality-Linter ───────────────────────────
+        # Wenn Datei eine Test-Datei ist (test_*.py oder *_test.py): Linter
+        # laeuft VOR dem Schreiben. Bei Violations: kein Write, klare
+        # Liste im Tool-Response.
+        try:
+            from .test_lint import _is_test_file, lint_test_file, lint_response
+            if _is_test_file(safe_path):
+                violations = lint_test_file(content, safe_path)
+                # syntax_error skippen — py_compile faengt das spaeter
+                violations = [v for v in violations if v.get("rule") != "syntax_error"]
+                if violations:
+                    resp = lint_response(violations, safe_path)
+                    resp["error"] = "Test-Quality-Linter (#841): Schreiben abgelehnt"
+                    return resp
+        except Exception as _lint_err:
+            logger.debug("test_lint check failed: %s", _lint_err)
+
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)
 
