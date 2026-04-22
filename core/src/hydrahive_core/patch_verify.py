@@ -284,41 +284,74 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
       {
         "compile": "ok" | "error" | "skipped",
         "compile_error": ... (nur bei error),
+        "scope": {
+          "tests_found": int,    # scoped tests via AST
+          "tests_passed": int,
+          "tests_failed": [...],
+        },
+        "suite": {},              # verify_patch fuellt nur scope; leeres dict
+        "stdout_tail": str,
+        # Deprecated flat aliases (bleiben fuer Backward-Compat):
         "tests_found": int,
         "tests_passed": int,
         "tests_failed": [...],
-        "stdout_tail": str,
       }
     """
     result: dict[str, Any] = {}
     # Nur .py relevant fuer compile + tests
     if file_path.suffix != ".py":
-        return {"compile": "skipped", "reason": "not_python", "tests_found": 0}
+        result["compile"] = "skipped"
+        result["reason"] = "not_python"
+        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["suite"] = {}
+        result["tests_found"] = 0
+        result["tests_passed"] = 0
+        result["tests_failed"] = []
+        return result
 
     compile_res = await py_compile_check_async(file_path)
     result.update(compile_res)
     # Bei Compile-Error: kein Test-Lauf
     if compile_res.get("compile") == "error":
+        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["suite"] = {}
         result["tests_found"] = 0
+        result["tests_passed"] = 0
+        result["tests_failed"] = []
         return result
 
     if not run_tests_flag:
+        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["suite"] = {}
         result["tests_found"] = 0
+        result["tests_passed"] = 0
+        result["tests_failed"] = []
         return result
 
     repo_root = find_repo_root(file_path)
     if repo_root is None:
-        result["tests_found"] = 0
+        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["suite"] = {}
         result["tests_skipped_reason"] = "no_git_repo"
+        result["tests_found"] = 0
+        result["tests_passed"] = 0
+        result["tests_failed"] = []
         return result
 
     related = find_related_tests(file_path, repo_root)
+    scope = {"tests_found": len(related), "tests_passed": 0, "tests_failed": []}
+    result["scope"] = scope
+    result["suite"] = {}
     result["tests_found"] = len(related)
     if not related:
+        result["tests_passed"] = 0
+        result["tests_failed"] = []
         return result
 
     test_res = await run_tests_async(related, repo_root)
     if test_res.get("ran"):
+        scope["tests_passed"] = test_res.get("passed", 0)
+        scope["tests_failed"] = test_res.get("failed", [])
         result["tests_passed"] = test_res.get("passed", 0)
         result["tests_failed"] = test_res.get("failed", [])
         result["stdout_tail"] = test_res.get("stdout_tail", "")

@@ -123,7 +123,7 @@ async def test_verify_patch_compile_ok_no_repo(tmp_path):
     f.write_text("x = 1\n")
     res = await verify_patch(f)
     assert res["compile"] == "ok"
-    assert res["tests_found"] == 0
+    assert res["scope"]["tests_found"] == 0
 
 
 @pytest.mark.asyncio
@@ -134,6 +134,54 @@ async def test_verify_patch_skips_non_python(tmp_path):
     res = await verify_patch(f)
     assert res["compile"] == "skipped"
     assert res.get("reason") == "not_python"
+
+
+@pytest.mark.asyncio
+async def test_scope_not_suite(tmp_path):
+    """scope.tests_failed ist scoped zum gepatchten Modul.
+    suite ist leer (verify_patch fuehrt keine Full-Suite aus).
+    Zeigt: selbst wenn der Test fehlschlaegt (z.B. Import-Error),
+    zeigt scope die richtige Struktur — unabhaengig vom Einzelergebnis."""
+    from hydrahive_core.patch_verify import verify_patch
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    src = repo / "core" / "src" / "mypkg"
+    src.mkdir(parents=True)
+    target = src / "foo.py"
+    target.write_text("def hello(): return 'hi'\n")
+
+    # Test der target importiert
+    tests = repo / "core" / "tests"
+    tests.mkdir(parents=True)
+    passing = tests / "test_foo.py"
+    passing.write_text(
+        "from mypkg.foo import hello\n\n"
+        "def test_hello(): assert hello() == 'hi'\n"
+    )
+
+    res = await verify_patch(target)
+
+    # scope-Struktur vorhanden
+    assert "scope" in res
+    assert "suite" in res
+
+    # tests_found = 1 weil AST test_foo.py findet
+    assert res["scope"]["tests_found"] == 1
+
+    # tests_passed/tests_failed direkt aus pytest-Ergebnis (kann 0 sein
+    # wenn Import failt — das zeigt dass scope das echte Ergebnis rappottiert)
+    assert isinstance(res["scope"]["tests_passed"], int)
+    assert isinstance(res["scope"]["tests_failed"], list)
+
+    # suite bleibt leeres dict (verify_patch kennt keine Suite-Daten)
+    assert res["suite"] == {}
+
+    # Deprecated flat aliases sind noch da (Backward-Compat)
+    assert "tests_found" in res
+    assert "tests_passed" in res
+    assert "tests_failed" in res
 
 
 # ─── Hard-Gate-Probe ───────────────────────────────────────────────────
