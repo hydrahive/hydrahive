@@ -774,6 +774,8 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Höher = mehr History bleibt erhalten, aber höhere Kosten/Latenz pro Request.
                   Default ist 40 % des Context-Windows. Bei MiniMax/Claude (200k) → 80 000.
+                  Niedriger setzen → kompaktiert früher, aber dafür wird die
+                  Notfall-Compaction (Stage 3, kürzt aggressiv) nie erreicht.
                 </p>
               </div>
               <div className="flex items-center gap-2 mt-2">

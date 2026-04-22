@@ -109,3 +109,17 @@ async def test_compact_project_override_lowers_threshold():
     sessions = _FakeSessions(estimated=70_000)
     boss_cfg = _make_boss_cfg("minimax-m2.7")
     await _compact_if_needed(sessions, "p", boss_cfg, threshold_override=30_000)
+
+
+def test_stage3_defaults_softened():
+    """Stage 3 verwendet jetzt keep_last=8/keep_last_rounds=2 + Tool-Trim ab 500.
+    Dieser Test sichert die Default-Werte gegen Regressions ab — keine direkte
+    Aufrufpfad-Pruefung, sondern Source-Inspektion damit die Schrauben nicht
+    versehentlich zurueck auf 4/1/200 wandern."""
+    import inspect
+    from hydrahive_core import orchestrator_context as oc
+    src = inspect.getsource(oc._compact_if_needed)
+    # Stage-3 keep_last=8, keep_last_rounds=2
+    assert "keep_last=8, keep_last_rounds=2" in src, "Stage-3 keep_last/keep_last_rounds geaendert?"
+    # Tool-Trim ab 500 Zeichen statt 200
+    assert "len(m.content) > 500" in src, "Stage-3 Tool-Trim-Schwelle geaendert?"

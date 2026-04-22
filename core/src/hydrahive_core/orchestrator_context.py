@@ -1436,26 +1436,27 @@ async def _compact_if_needed(
                     project_id, sessions.estimated_tokens(project_id),
                 )
 
-        # Stufe 3 (#416): Full-Compaction bei 80% Context-Window
-        # Aggressiver: keep_last auf 4 reduzieren, alle Tool-Results entfernen
+        # Stufe 3 (#416): Full-Compaction bei 80% Context-Window.
+        # Mit #821-Defaults (Stufe-1 bei 40% des Windows) ist das fast nie
+        # erreichbar — wenn doch, dann mildere Kuerzung als frueher:
+        # keep_last=8/keep_last_rounds=2 statt 4/1, Tool-Trim ab 500 statt 200,
+        # damit nicht alle Details verloren gehen.
         current = sessions.estimated_tokens(project_id)
         if current >= full_compaction_threshold:
             logger.warning(
                 "Full-Compaction triggered (Projekt: %s, ~%d Tokens >= 80%% von %d)",
                 project_id, current, ctx_window,
             )
-            # Tool-Results auf Kurzform kürzen statt komplett entfernen
             session = sessions.get_active(project_id)
             if session:
                 for m in session.messages:
-                    if m.role == MessageRole.TOOL and len(m.content) > 200:
+                    if m.role == MessageRole.TOOL and len(m.content) > 500:
                         # Behalte Tool-Name + erste Zeile + Längeninfo
                         _tool_name = m.metadata.get("tool_name", "")
-                        _first_line = m.content.split("\n", 1)[0][:120]
+                        _first_line = m.content.split("\n", 1)[0][:300]
                         m.content = f"[{_tool_name}] {_first_line}… [{len(m.content)} Zeichen]"
                 sessions._db_replace_messages(session)
-            # Nochmal kompaktieren mit weniger keep_last (1 Round in Notfall)
-            await sessions.compact(project_id, summary, keep_last=4, keep_last_rounds=1)
+            await sessions.compact(project_id, summary, keep_last=8, keep_last_rounds=2)
             _metrics.record_compaction(project_id, stage=3)
             logger.info(
                 "Full-Compaction abgeschlossen (Projekt: %s, ~%d Tokens)",
