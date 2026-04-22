@@ -135,6 +135,12 @@ class GitCloneRequest(BaseModel):
     branch: str = "main"
 
 
+class ProjectMemoryWriteRequest(BaseModel):
+    filename: str
+    content: str
+    mode: Literal["append", "overwrite"] = "append"
+
+
 def register_project_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -1624,6 +1630,63 @@ def register_project_routes(
             "file_count": len(files_info),
             "files": files_info,
         }
+
+    # ── Project Memory Write (#852) ─────────────────────────────────────────────
+    class ProjectMemoryWriteRequest(BaseModel):
+        filename: str
+        content: str
+        mode: Literal["append", "overwrite"] = "append"
+
+    def write_project_memory_file(
+        *,
+        project_id: str,
+        filename: str,
+        content: str,
+        mode: str = "append",
+        projects_dir: str,
+    ) -> dict:
+        """Write project memory to projects/{id}/memory/{filename}.md."""
+        import re as _re
+
+        safe_name = filename.strip().removesuffix(".md")
+        if not _re.match(r"^[a-zA-Z0-9_-]{1,64}$", safe_name):
+            raise HTTPException(400, "Ungültiger Dateiname (nur a-z, 0-9, -, _, max 64 Zeichen)")
+
+        clean_content = content.strip()
+        if not clean_content:
+            raise HTTPException(400, "content fehlt")
+
+        project_dir = Path(projects_dir) / project_id
+        memory_dir = project_dir / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        target = memory_dir / f"{safe_name}.md"
+
+        if mode == "append":
+            target.open("a", encoding="utf-8").write(clean_content)
+        else:
+            target.open("w", encoding="utf-8").write(clean_content)
+
+        target.chmod(0o600)
+        return {"ok": True, "path": str(target), "bytes": len(clean_content.encode())}
+
+    @auth_router.post("/projects/{project_id}/memory", status_code=201)
+    def write_project_memory(
+        project_id: str,
+        req: ProjectMemoryWriteRequest,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """POST /projects/{id}/memory — external memory write."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+        return write_project_memory_file(
+            project_id=project_id,
+            filename=req.filename,
+            content=req.content,
+            mode=req.mode,
+            projects_dir=projects_dir,
+        )
 
     # ── WhatsApp pro Projekt (#615) ────────────────────────────────────────────
 
