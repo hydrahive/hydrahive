@@ -163,6 +163,39 @@ def _resolve_sandbox_scope(
     if not cwd_in_scope:
         cwd_path = project_dir if (project_dir is not None and project_dir.exists()) else Path("/tmp")
 
+    # ─── #842 Gate 6: Sandbox-Fix ───────────────────────────────────
+    # PATH: bevorzugt Core-venv-bin (immer dort wo HydraHive installiert ist),
+    # plus Projekt-eigenes .venv/bin wenn vorhanden, plus System-PATH.
+    # HOME: persistent unter <project_dir>/.home (statt fluechtiger /tmp),
+    # damit pip --user, mypy-cache, pytest-cache ueberdauert.
+    _path_parts = []
+    # Core-venv (wo HydraHive selbst pytest etc. installiert hat)
+    _core_venv_bin = Path("/opt/hydrahive/venv/bin")
+    if _core_venv_bin.exists():
+        _path_parts.append(str(_core_venv_bin))
+    # Projekt-venv-bin
+    if project_dir is not None and (project_dir / ".venv" / "bin").exists():
+        _path_parts.append(str(project_dir / ".venv" / "bin"))
+    # User-local fuer persistent installierte Tools
+    if project_dir is not None:
+        _user_local_bin = project_dir / ".home" / ".local" / "bin"
+        if _user_local_bin.exists():
+            _path_parts.append(str(_user_local_bin))
+    # System-PATH
+    _path_parts.append("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    _final_path = ":".join(_path_parts)
+
+    # HOME: persistent in project_dir/.home wenn moeglich
+    if project_dir is not None and project_dir.exists():
+        _home_path = project_dir / ".home"
+        try:
+            _home_path.mkdir(parents=True, exist_ok=True)
+            _home_str = str(_home_path)
+        except OSError:
+            _home_str = "/tmp"
+    else:
+        _home_str = "/tmp"
+
     # Minimale Sandbox — nur System-Binaries/Libs + Projekt + /tmp
     # NICHT `/` komplett mounten (#593: verhindert Host-Leak)
     bind_args: list[str] = [
@@ -178,15 +211,15 @@ def _resolve_sandbox_scope(
         "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
         "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
         "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
+        # Core-venv RO mounten damit pytest/python aus dem Sandbox erreichbar
+        "--ro-bind-try", "/opt/hydrahive/venv", "/opt/hydrahive/venv",
         "--bind", "/tmp", "/tmp",
         "--dev", "/dev",
         "--proc", "/proc",
-        "--setenv", "HOME", "/tmp",
-        "--setenv", "PATH",
-            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-            + (f":{project_dir / '.venv' / 'bin'}"
-               if project_dir is not None and (project_dir / ".venv" / "bin").exists()
-               else ""),
+        "--setenv", "HOME", _home_str,
+        "--setenv", "PATH", _final_path,
+        # PYTHONUSERBASE auf persistentes Verzeichnis damit pip --user funktioniert
+        "--setenv", "PYTHONUSERBASE", str(Path(_home_str) / ".local"),
     ]
     # Workspace-Root rw binden — DAS ist der gemeinsame Tree für file_*/git_*/shell
     if project_dir is not None and project_dir.exists():
@@ -1283,6 +1316,18 @@ class FilePatchTool(BaseTool):
                 "error": f"Read-Before-Edit: '{path}' nicht vorher gelesen.",
                 "path": resolved, "hint": "file_read zuerst aufrufen",
             }
+
+        # ── #838 Gate 2: Pre-Patch Stale-Check ─────────────────────────
+        # Wenn Datei in Git-Repo: prueft ob upstream neue Commits auf diese
+        # Datei hat. Wenn ja: Patch abort. Verhindert Boss-Pattern alte
+        # Baseline patchen.
+        try:
+            from .patch_stale_check import check_stale_async, stale_response
+            stale_res = await check_stale_async(file_path)
+            if stale_res.get("stale"):
+                return stale_response(stale_res)
+        except Exception as _stale_err:
+            logger.debug("stale-check failed: %s", _stale_err)
 
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
