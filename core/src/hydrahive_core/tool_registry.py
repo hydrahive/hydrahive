@@ -1073,8 +1073,15 @@ class FileReadTool(BaseTool):
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis"},
-                "offset": {"type": "integer", "description": "Zeichen-Offset (Standard: 0)"},
-                "limit": {"type": "integer", "description": "Max. Zeichen (Standard: 8000, Max: 32000)"},
+                "offset": {"type": "integer", "description": "Zeichen-Offset (Standard: 0)", "minimum": 0},
+                # #840 Gate 4: Schema-seitiges Hard-Minimum auf 4000.
+                # Verhindert Tool-Loops durch absurd kleine Chunks (Issue #824).
+                "limit": {
+                    "type": "integer",
+                    "description": "Max. Zeichen pro Read (Standard: 8000, Min: 4000, Max: 32000)",
+                    "minimum": 4000,
+                    "maximum": 32000,
+                },
             },
             "required": ["path"],
         }
@@ -1083,6 +1090,14 @@ class FileReadTool(BaseTool):
         self, agent_id: str, project_id: str,
         path: str, offset: int = 0, limit: int = 8000, **kwargs,
     ) -> dict:
+        # #840 Gate 4: Runtime-Floor zusaetzlich zum Schema, falls Provider
+        # den Schema-Check nicht durchsetzt (defensive).
+        if limit < 4000:
+            limit = 4000
+        if limit > 32000:
+            limit = 32000
+        if offset < 0:
+            offset = 0
         try:
             safe_path = assert_path_within_project(path, project_id)
         except PathSafetyError as e:
@@ -1299,6 +1314,9 @@ class FilePatchTool(BaseTool):
             new_content = content.replace(search, replace, count)
             replaced = min(count, occurrences)
 
+        # Original-Content fuer Auto-Revert bei Compile-Error (#837 Gate 1)
+        _original_content = content
+
         try:
             file_path.write_text(new_content, encoding="utf-8")
         except PermissionError:
@@ -1311,6 +1329,37 @@ class FilePatchTool(BaseTool):
             Path(tmp_path).unlink(missing_ok=True)
             if r.returncode != 0:
                 return {"error": f"Schreibfehler (auch mit sudo): {r.stderr.decode()[:200]}"}
+
+        # ── #837 Gate 1: Auto-Verify (py_compile + pytest) ─────────────
+        # Boss kann nicht "fertig" sagen ohne dass das Tool den Patch
+        # automatisch verifiziert hat. Bei py_compile-Error: Auto-Revert.
+        # Bei Test-Fail: kein Revert, aber tests_failed im Response.
+        verify_result: dict | None = None
+        try:
+            from .patch_verify import verify_patch as _verify_patch
+            verify_result = await _verify_patch(file_path)
+        except Exception as _verify_err:
+            logger.debug("patch_verify failed: %s", _verify_err)
+            verify_result = {"compile": "skipped", "reason": f"verify_exception: {_verify_err}"}
+
+        # Auto-Revert bei Compile-Error
+        if verify_result.get("compile") == "error":
+            try:
+                file_path.write_text(_original_content, encoding="utf-8")
+            except Exception as _revert_err:
+                logger.error("Auto-Revert nach Compile-Error fehlgeschlagen: %s", _revert_err)
+            return {
+                "ok": False,
+                "path": str(file_path),
+                "occurrences_found": occurrences,
+                "replaced": 0,
+                "reverted": True,
+                "verify": verify_result,
+                "hint": (
+                    "Patch hat Python-Syntax kaputtgemacht. Datei wurde auf "
+                    "Original zurueckgesetzt. Prueffe deine search/replace-Werte."
+                ),
+            }
 
         new_lines = new_content.split("\n")
         context_lines = []
@@ -1325,6 +1374,7 @@ class FilePatchTool(BaseTool):
             "ok": True, "path": str(file_path),
             "occurrences_found": occurrences, "replaced": replaced,
             "context": "\n".join(context_lines) if context_lines else "(keine Kontextzeilen)",
+            "verify": verify_result,
         }
 
 
@@ -1380,7 +1430,14 @@ class FileSearchTool(BaseTool):
                         "Ohne Filter werden auch HTML/Doku/etc durchsucht und floodet die Treffer."
                     ),
                 },
-                "max_results": {"type": "integer", "description": "Max. Treffer (Standard: 20)"},
+                # #840 Gate 4: Schema-seitiges Hard-Minimum 20 — verhindert
+                # zu kleine Result-Sets die Code-Files abschneiden.
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max. Treffer (Standard: 20, Min: 20, Max: 200)",
+                    "minimum": 20,
+                    "maximum": 200,
+                },
             },
             "required": ["pattern"],
         }
