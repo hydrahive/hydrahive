@@ -213,3 +213,89 @@ def test_file_read_missing_offset_defaults_to_zero():
         "file_read", '{"path": "/projects/x/big_file.py", "offset": 0}'
     )
     assert fp_no_offset == fp_offset_0
+
+
+# ========================================================
+# #853: file_patch/file_edit Fingerprint inkludiert search
+# ========================================================
+
+class TestFuzzyPatchFingerprint:
+    """Tests für Issue #853: Multi-Patch-Refactor auf derselben Datei
+    verschiedene Stellen soll ohne künstlichen Loop-Abruch möglich sein."""
+
+    def test_different_search_same_path_no_loop_abort(self):
+        """6× file_patch auf dieselbe Datei, verschiedene search-Strings —
+        legitime Multi-Stellen-Editierung, kein Loop."""
+        history = [
+            _fuzzy_fingerprint(
+                "file_patch",
+                f'{{"path": "/projects/x/config.py", "search": "old_{i}", "replace": "new_{i}"}}',
+            )
+            for i in range(6)
+        ]
+        abort, dominant = check_fuzzy_loop(history)
+        assert not abort, (
+            f"6× file_patch auf gleiche Datei mit verschiedenen search-Strings "
+            f"darf nicht als Loop gelten. dominant={dominant!r}"
+        )
+
+    def test_identical_search_and_path_triggers_loop(self):
+        """6× file_patch auf dieselbe Datei mit identischem (path + search) —
+        echter Loop, muss geblockt werden."""
+        history = [
+            _fuzzy_fingerprint(
+                "file_patch",
+                '{"path": "/projects/x/config.py", "search": "DEBUG = True", "replace": "DEBUG = False"}',
+            )
+            for _ in range(6)
+        ]
+        abort, dominant = check_fuzzy_loop(history)
+        assert abort, "6× identischer (path + search) muss Loop auslösen"
+        assert "/projects/x/config.py" in dominant
+
+    def test_file_write_loop_detection_unchanged(self):
+        """#853 darf file_write-Logik nicht verändern — file_write nutzt nur
+        path, kein search. 6× file_write auf gleiche Datei = Loop."""
+        history = [
+            _fuzzy_fingerprint(
+                "file_write",
+                f'{{"path": "/projects/x/main.py", "content": "v{i}"}}',
+            )
+            for i in range(6)
+        ]
+        abort, dominant = check_fuzzy_loop(history)
+        assert abort, "6× file_write auf gleiche Datei muss Loop auslösen"
+        assert "/projects/x/main.py" in dominant
+
+    def test_search_truncated_at_80_chars(self):
+        """search-String über 80 Zeichen wird für den Fingerprint gekürzt —
+        Zwei verschiedene search mit gleichem 80-Char-Präfix → identischer FP."""
+        common_prefix = "x" * 80
+        extra = "y" * 70
+        fp_80 = _fuzzy_fingerprint(
+            "file_patch",
+            f'{{"path": "/p.py", "search": "{common_prefix}", "replace": "r"}}',
+        )
+        fp_150 = _fuzzy_fingerprint(
+            "file_patch",
+            f'{{"path": "/p.py", "search": "{common_prefix}{extra}", "replace": "r"}}',
+        )
+        # Gleicher Pfad + gleiches 80-Char-Präfix des search → identischer FP
+        assert fp_80 == fp_150
+
+    def test_file_edit_and_file_patch_are_different_tools(self):
+        """file_edit und file_patch sind verschiedene Tools — verschiedene
+        Tool-Namen erzeugen verschiedene Fingerprints, selbst bei gleichen
+        Args. Das ist korrekt und gewünscht."""
+        patch_fp = _fuzzy_fingerprint(
+            "file_patch",
+            '{"path": "/p.py", "search": "a", "replace": "b"}',
+        )
+        edit_fp = _fuzzy_fingerprint(
+            "file_edit",
+            '{"path": "/p.py", "search": "a", "replace": "b"}',
+        )
+        # Unterschiedliche Tool-Namen → unterschiedliche FP (korrekt)
+        assert patch_fp != edit_fp
+        assert patch_fp.startswith("file_patch::")
+        assert edit_fp.startswith("file_edit::")

@@ -826,11 +826,17 @@ def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
                     # wegen has_more:true) nicht fälschlich als Loop gewertet
                     # wird. Nur gleiche Datei + gleicher Offset = echter Loop.
                     payload = f"{data.get('path','')}@{data.get('offset',0)}"
-                elif tool_name in ("file_write", "file_patch", "file_edit"):
+                elif tool_name == "file_write":
                     # #623: Pfad als alleinige Identifier-Achse — Batch-Edits auf
                     # unterschiedliche Dateien sollen durchlaufen, gleiche Datei
                     # 5× hintereinander bleibt Loop.
                     payload = str(data.get("path", ""))
+                elif tool_name in ("file_patch", "file_edit"):
+                    # #853: search/old_string dazunehmen, damit Multi-Patch-
+                    # Refactor auf derselben Datei verschiedene Stellen ohne
+                    # künstlichen Loop-Abruch editieren kann. Lediglich identische
+                    # (path + search) Kombination → Loop.
+                    payload = f"{data.get('path','')}|{str(data.get('search',''))[:80]}"
                 elif tool_name == "file_search":
                     payload = f"{data.get('path','')}|{data.get('query','')}"
                 elif tool_name == "web_search":
