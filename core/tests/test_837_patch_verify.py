@@ -123,7 +123,7 @@ async def test_verify_patch_compile_ok_no_repo(tmp_path):
     f.write_text("x = 1\n")
     res = await verify_patch(f)
     assert res["compile"] == "ok"
-    assert res["scope"]["tests_found"] == 0
+    assert res["scope"]["test_files_found"] == 0
 
 
 @pytest.mark.asyncio
@@ -167,8 +167,8 @@ async def test_scope_not_suite(tmp_path):
     assert "scope" in res
     assert "suite" in res
 
-    # tests_found = 1 weil AST test_foo.py findet
-    assert res["scope"]["tests_found"] == 1
+    # test_files_found = 1 weil AST test_foo.py findet
+    assert res["scope"]["test_files_found"] == 1
 
     # tests_passed/tests_failed direkt aus pytest-Ergebnis (kann 0 sein
     # wenn Import failt — das zeigt dass scope das echte Ergebnis rappottiert)

@@ -285,16 +285,14 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
         "compile": "ok" | "error" | "skipped",
         "compile_error": ... (nur bei error),
         "scope": {
-          "tests_found": int,    # scoped tests via AST
-          "tests_passed": int,
+          "test_files_found": int,  # scoped test FILES via AST
+          "tests_passed": int,       # passed test CASES from pytest
           "tests_failed": [...],
         },
         "suite": {},              # verify_patch fuellt nur scope; leeres dict
         "stdout_tail": str,
         # Deprecated flat aliases (bleiben fuer Backward-Compat):
-        "tests_found": int,
-        "tests_passed": int,
-        "tests_failed": [...],
+        "tests_found": int,        # deprecated — alias for scope["test_files_found"]
       }
     """
     result: dict[str, Any] = {}
@@ -302,7 +300,7 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
     if file_path.suffix != ".py":
         result["compile"] = "skipped"
         result["reason"] = "not_python"
-        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["scope"] = {"test_files_found": 0, "tests_passed": 0, "tests_failed": []}
         result["suite"] = {}
         result["tests_found"] = 0
         result["tests_passed"] = 0
@@ -313,7 +311,7 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
     result.update(compile_res)
     # Bei Compile-Error: kein Test-Lauf
     if compile_res.get("compile") == "error":
-        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["scope"] = {"test_files_found": 0, "tests_passed": 0, "tests_failed": []}
         result["suite"] = {}
         result["tests_found"] = 0
         result["tests_passed"] = 0
@@ -321,7 +319,7 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
         return result
 
     if not run_tests_flag:
-        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["scope"] = {"test_files_found": 0, "tests_passed": 0, "tests_failed": []}
         result["suite"] = {}
         result["tests_found"] = 0
         result["tests_passed"] = 0
@@ -330,7 +328,7 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
 
     repo_root = find_repo_root(file_path)
     if repo_root is None:
-        result["scope"] = {"tests_found": 0, "tests_passed": 0, "tests_failed": []}
+        result["scope"] = {"test_files_found": 0, "tests_passed": 0, "tests_failed": []}
         result["suite"] = {}
         result["tests_skipped_reason"] = "no_git_repo"
         result["tests_found"] = 0
@@ -339,7 +337,7 @@ async def verify_patch(file_path: Path, *, run_tests_flag: bool = True) -> dict[
         return result
 
     related = find_related_tests(file_path, repo_root)
-    scope = {"tests_found": len(related), "tests_passed": 0, "tests_failed": []}
+    scope = {"test_files_found": len(related), "tests_passed": 0, "tests_failed": []}
     result["scope"] = scope
     result["suite"] = {}
     result["tests_found"] = len(related)
