@@ -92,6 +92,25 @@ The blocklist is enforced in `tool_registry.py::ShellExecTool.execute()` before 
 
 `root` mode requires explicit admin approval in the Console. It is intended for DevOps agents running on trusted infrastructure, not for user-facing chatbots.
 
+### Tool-Result Budgets (#786)
+
+Tool-Results are budgeted by op-type to prevent context blow-up. The effective
+matrix is dumped to the INFO log on every Core start (look for
+`context_lifecycle effective policies (#786)`). Defaults at a glance:
+
+| Op-Type   | max_chars | keep_full_count | aged_chars | age_threshold_min |
+|-----------|-----------|-----------------|------------|-------------------|
+| MUTATION  | 8000      | 8               | 2000       | 60                |
+| READ      | 3000      | 3               | 150        | 15                |
+| SEARCH    | 4000      | 4               | 500        | 30                |
+| META      | 500       | 1               | 100        | 5                 |
+
+Memory budget: 6000 chars normal, 12000 chars full-context, 2000 chars after compaction.
+
+Source of truth: `core/src/hydrahive_core/context_lifecycle.py:_BUDGETS` /
+`_TOOL_OP_TYPES` / `_TOOL_POLICIES`. Tools not listed in the op-type map fall
+back to `READ` (most aggressive trim — defensive).
+
 ### What is NOT sandboxed
 
 - Outbound network requests — agents can call external URLs

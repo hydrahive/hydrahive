@@ -293,6 +293,16 @@ async def lifespan(app: FastAPI):
     except Exception as _ssh_check_err:
         logger.debug("SSH host-key startup check failed: %s", _ssh_check_err)
 
+    # #786: Effektive context_lifecycle-Policy-Matrix einmalig beim Start ins
+    # INFO-Log dumpen (Op-Type-Mapping + Detail-Policies + Result-Budgets).
+    # Admins koennen so im journal nachvollziehen welche Defaults greifen,
+    # ohne in den Source schauen zu muessen.
+    try:
+        from .context_lifecycle import log_effective_policies_once
+        log_effective_policies_once()
+    except Exception as _pol_err:
+        logger.debug("context_lifecycle policy-dump failed: %s", _pol_err)
+
     # #443: Idempotente Migrations beim Start
     from .migrations import run_migrations
     run_migrations()

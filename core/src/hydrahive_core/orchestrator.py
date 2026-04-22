@@ -232,6 +232,12 @@ class Orchestrator:
         # #584-C: Projekt-Target-Tools. Immer verfügbar — Tool liefert bei
         # fehlender Zuweisung einen klaren Fehler, kein Side-Effect.
         "server_shell", "server_file_read", "server_file_write", "wks_shell_exec",
+        # #773: MiniMax Media-Tools. Always-loaded weil Bild-/Video-/Musik-
+        # Generierung haeufige User-Anfragen sind und der Agent sie sonst
+        # halluziniert als "kann ich nicht". Schema-Overhead ~1KB pro Tool
+        # ist bei MiniMax/Claude 200k vernachlaessigbar. Tool gibt einen
+        # klaren Fehler wenn der MiniMax-Key fehlt — kein Side-Effect.
+        "image_generate", "video_generate", "music_generate",
     })
 
     def _allowed_tools(

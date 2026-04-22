@@ -80,20 +80,27 @@ class ToolCategory(str, Enum):
 
 
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
-    # READ
-    "file_read":   ToolCategory.READ,
-    "file_search": ToolCategory.READ,
-    "read_memory": ToolCategory.READ,
-    "web_search":  ToolCategory.READ,
-    "git_status":  ToolCategory.READ,
-    "git_log":     ToolCategory.READ,
-    "git_diff":    ToolCategory.READ,
-    # WRITE
-    "file_write":   ToolCategory.WRITE,
-    "file_patch":   ToolCategory.WRITE,
-    "write_memory": ToolCategory.WRITE,
-    # SHELL
-    "shell_exec": ToolCategory.SHELL,
+    # READ (lokal + remote)
+    "file_read":        ToolCategory.READ,
+    "file_search":      ToolCategory.READ,
+    "read_memory":      ToolCategory.READ,
+    "web_search":       ToolCategory.READ,
+    "server_file_read": ToolCategory.READ,
+    "git_status":       ToolCategory.READ,
+    "git_log":          ToolCategory.READ,
+    "git_diff":         ToolCategory.READ,
+    # WRITE (lokal + remote + Media-Tools die Files produzieren)
+    "file_write":        ToolCategory.WRITE,
+    "file_patch":        ToolCategory.WRITE,
+    "write_memory":      ToolCategory.WRITE,
+    "server_file_write": ToolCategory.WRITE,
+    "image_generate":    ToolCategory.WRITE,
+    "video_generate":    ToolCategory.WRITE,
+    "music_generate":    ToolCategory.WRITE,
+    # SHELL (lokal + remote + workspace)
+    "shell_exec":     ToolCategory.SHELL,
+    "server_shell":   ToolCategory.SHELL,
+    "wks_shell_exec": ToolCategory.SHELL,
     # GIT_MUTATE
     "git_clone":       ToolCategory.GIT_MUTATE,
     "git_commit_all":  ToolCategory.GIT_MUTATE,

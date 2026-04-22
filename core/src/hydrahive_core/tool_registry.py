@@ -2831,13 +2831,14 @@ class ImageGenerateTool(BaseTool):
     def is_read_only(self) -> bool:
         return False
 
-    # #773: Deferred — nur im <available-deferred-tools>-Block, Schema lädt
-    # via tool_search bei Bedarf. Spart Tokens für User ohne Bild-Bedarf,
-    # und vermeidet dass das Tool stumm in _V2_CORE_TOOL_IDS-Whitelist-Lücke
-    # fällt (Tool war registriert aber für den LLM unsichtbar).
+    # #773 v2: Always-loaded — in _V2_CORE_TOOL_IDS aufgenommen. Deferred war
+    # ein Workaround weil das Tool sonst aus der Whitelist gefallen waere und
+    # der Agent halluzinierte "kann ich nicht". Schema-Overhead ~1KB ist bei
+    # MiniMax/Claude 200k vernachlaessigbar. Tool gibt klaren Fehler bei
+    # fehlendem MiniMax-Key — kein Side-Effect.
     @property
     def always_loaded(self) -> bool:
-        return False
+        return True
 
     @property
     def semantic_tags(self) -> list[str]:
@@ -3061,10 +3062,10 @@ class VideoGenerateTool(BaseTool):
     def is_read_only(self) -> bool:
         return False
 
-    # #773: Deferred — siehe ImageGenerateTool.
+    # #773 v2: Always-loaded — siehe ImageGenerateTool.
     @property
     def always_loaded(self) -> bool:
-        return False
+        return True
 
     @property
     def semantic_tags(self) -> list[str]:
@@ -3280,10 +3281,10 @@ class MusicGenerateTool(BaseTool):
     def is_read_only(self) -> bool:
         return False
 
-    # #773: Deferred — siehe ImageGenerateTool.
+    # #773 v2: Always-loaded — siehe ImageGenerateTool.
     @property
     def always_loaded(self) -> bool:
-        return False
+        return True
 
     @property
     def semantic_tags(self) -> list[str]:

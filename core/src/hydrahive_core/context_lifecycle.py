@@ -186,6 +186,63 @@ def get_budget(tool_name: str) -> dict:
     return _BUDGETS[get_tool_op_type(tool_name)]
 
 
+# ── #786: effektive Policy-Matrix als Markdown ────────────────────────────
+
+def dump_effective_policies_markdown() -> str:
+    """Rendert die effektiven Tool-Policies + Budget-Defaults als Markdown.
+
+    Wird (a) beim Core-Start einmalig in INFO-Log gedumpt, (b) in der
+    SECURITY.md-Doku referenziert.
+    """
+    lines: list[str] = []
+    lines.append("## Tool-Op-Type Mapping")
+    lines.append("")
+    lines.append("Tools die nicht hier stehen: Default = `READ` (konservativ kuerzen).")
+    lines.append("")
+    lines.append("| Tool | Op-Type |")
+    lines.append("|---|---|")
+    for tool, op in sorted(_TOOL_OP_TYPES.items()):
+        lines.append(f"| `{tool}` | `{op.value}` |")
+    lines.append("")
+    lines.append("## Detail-Policies")
+    lines.append("")
+    lines.append("Tools die nicht hier stehen: Default-`ToolPolicy()` = READ, sequential, low cost.")
+    lines.append("")
+    lines.append("| Tool | Op-Type | Parallel | Cost | Log |")
+    lines.append("|---|---|---|---|---|")
+    for tool, p in sorted(_TOOL_POLICIES.items()):
+        lines.append(f"| `{tool}` | `{p.op_type.value}` | {p.parallel_safe} | {p.cost} | {p.log_level} |")
+    lines.append("")
+    lines.append("## Result-Budgets pro Op-Type")
+    lines.append("")
+    lines.append("| Op-Type | max_chars | keep_full_count | aged_chars | age_threshold_min |")
+    lines.append("|---|---|---|---|---|")
+    for op, b in _BUDGETS.items():
+        lines.append(
+            f"| `{op.value}` | {b['max_chars']} | {b['keep_full_count']} | "
+            f"{b['aged_chars']} | {b['age_threshold_min']} |"
+        )
+    lines.append("")
+    lines.append(
+        f"Memory-Budgets: normal={MEMORY_BUDGET_NORMAL} chars, "
+        f"full={MEMORY_BUDGET_FULL} chars, post-compact={MEMORY_BUDGET_COMPACT} chars."
+    )
+    return "\n".join(lines)
+
+
+def log_effective_policies_once() -> None:
+    """Einmalig beim Core-Start die effektive Policy-Matrix ins INFO-Log dumpen.
+
+    Idempotent — falls mehrfach aufgerufen, loggt jedes Mal (kein State).
+    Aufrufer (main.lifespan) ruft genau einmal auf.
+    """
+    md = dump_effective_policies_markdown()
+    logger.info(
+        "context_lifecycle effective policies (#786):\n%s",
+        md,
+    )
+
+
 # ── #498: Selektive microCompact — strukturierte Summaries statt Head-Truncation ──
 
 def _micro_compact(content: str, tool_name: str) -> str:
