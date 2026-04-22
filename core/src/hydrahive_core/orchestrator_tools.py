@@ -820,7 +820,13 @@ def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
                         if amp != -1:
                             cmd = cmd[amp + 2:].strip()
                     payload = cmd
-                elif tool_name in ("file_read", "file_write", "file_patch", "file_edit"):
+                elif tool_name == "file_read":
+                    # #845: file_read inkludiert offset, damit Pagination
+                    # (gleiche Datei, aufeinanderfolgende 4000-Zeichen-Fenster
+                    # wegen has_more:true) nicht fälschlich als Loop gewertet
+                    # wird. Nur gleiche Datei + gleicher Offset = echter Loop.
+                    payload = f"{data.get('path','')}@{data.get('offset',0)}"
+                elif tool_name in ("file_write", "file_patch", "file_edit"):
                     # #623: Pfad als alleinige Identifier-Achse — Batch-Edits auf
                     # unterschiedliche Dateien sollen durchlaufen, gleiche Datei
                     # 5× hintereinander bleibt Loop.

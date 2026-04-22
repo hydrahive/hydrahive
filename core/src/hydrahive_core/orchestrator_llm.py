@@ -20,6 +20,13 @@ from pathlib import Path
 
 import litellm
 
+# #845: Anthropic erfordert tools= wenn die History tool_use-Blöcke enthält.
+# Der Tool-Loop-Abort-Pfad (_finalize_tool_loop_response) ruft _llm_call mit
+# tools=None auf, was sonst zu UnsupportedParamsError führt. modify_params=True
+# lässt litellm bei Bedarf einen Dummy-Tool anhängen — macht den Recovery-Call
+# robust, ohne dass Call-Sites sich darum kümmern müssen.
+litellm.modify_params = True
+
 from .llm_config_validation import clean_provider_base_url, clean_provider_secret
 from .settings import settings
 

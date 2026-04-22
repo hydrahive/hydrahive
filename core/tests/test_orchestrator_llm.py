@@ -221,3 +221,25 @@ class TestLlmCallFailover:
         # Failover auf Fallback-Modell
         assert len(calls) == 2
         assert calls[1] == "claude-3-haiku-20240307"
+
+
+# ================================================================= #845 modify_params
+
+class TestLitellmModifyParams:
+    """#845: litellm.modify_params muss True sein, damit der Tool-Loop-Abort-
+    Pfad funktioniert. _finalize_tool_loop_response ruft _llm_call mit
+    tools=None auf, aber Anthropic verlangt tools= wenn die History
+    tool_use-Blöcke enthält. modify_params=True lässt litellm einen Dummy-
+    Tool anhängen."""
+
+    def test_modify_params_ist_true(self):
+        """Globale litellm.modify_params-Flag muss beim Import des Moduls
+        auf True stehen — sonst crasht der Abort-Recovery-Call mit
+        UnsupportedParamsError."""
+        import litellm
+        # Import triggert das Setzen
+        import hydrahive_core.orchestrator_llm  # noqa: F401
+        assert litellm.modify_params is True, (
+            "litellm.modify_params muss True sein, damit Tool-Loop-Abort-Pfad "
+            "mit tools=None keinen UnsupportedParamsError auslöst (#845)."
+        )

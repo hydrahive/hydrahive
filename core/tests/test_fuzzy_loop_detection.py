@@ -164,3 +164,52 @@ def test_no_abort_file_read_different_paths():
     ]
     abort, _ = check_fuzzy_loop(history)
     assert not abort
+
+
+# =============================================================================
+# #845 — Pagination (gleiche Datei, verschiedene offsets) ist kein Loop
+# =============================================================================
+
+def test_no_abort_file_read_pagination_same_file():
+    """#845: 6× file_read auf dieselbe Datei mit unterschiedlichen offsets
+    (Gate #840 Schema-Minimum liefert 4000-Zeichen-Fenster → pagination via
+    has_more:true ist legitim) darf nicht als Loop gewertet werden."""
+    history = [
+        _fuzzy_fingerprint(
+            "file_read",
+            f'{{"path": "/projects/x/big_file.py", "offset": {i * 4000}}}',
+        )
+        for i in range(6)
+    ]
+    abort, dominant = check_fuzzy_loop(history)
+    assert not abort, (
+        f"Pagination auf gleicher Datei mit verschiedenen offsets darf nicht "
+        f"als Loop gelten. dominant={dominant!r}"
+    )
+
+
+def test_abort_file_read_same_path_and_offset():
+    """#845 Gegenprobe: 6× file_read mit gleichem path UND gleichem offset
+    → echter Loop (Agent liest immer wieder dieselben 4000 Zeichen)."""
+    history = [
+        _fuzzy_fingerprint(
+            "file_read",
+            '{"path": "/projects/x/big_file.py", "offset": 0}',
+        )
+        for _ in range(6)
+    ]
+    abort, dominant = check_fuzzy_loop(history)
+    assert abort
+    assert dominant is not None and "/projects/x/big_file.py" in dominant
+
+
+def test_file_read_missing_offset_defaults_to_zero():
+    """#845: wenn offset nicht übergeben wird, wird 0 angenommen. So bleibt
+    der Abort-Check konsistent: 6× file_read(path=X) ohne offset ≡ 6× offset=0."""
+    fp_no_offset = _fuzzy_fingerprint(
+        "file_read", '{"path": "/projects/x/big_file.py"}'
+    )
+    fp_offset_0 = _fuzzy_fingerprint(
+        "file_read", '{"path": "/projects/x/big_file.py", "offset": 0}'
+    )
+    assert fp_no_offset == fp_offset_0
