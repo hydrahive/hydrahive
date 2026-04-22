@@ -277,3 +277,59 @@ def test_x():
     assert any(e["rule"] == "trivial_assert" for e in v), (
         f"Re-Binding auf letzten Literal gleich Compare-Literal ist trivial: {v}"
     )
+# ─── Rule 1b: hardcoded_path HTTP-URL whitelist (#857) ────────────────
+
+def test_lint_allows_client_post_with_projects_url():
+    """#857: client.post("/projects/proj1/memory") ist ein legitimer
+    API-Endpunkt, kein hardcoded Systempfad — darf nicht geflaggt werden."""
+    from hydrahive_core.test_lint import lint_test_file
+    good = '''
+import pytest
+def test_x():
+    client.post("/projects/proj1/memory", json={"key": "value"})
+    assert True
+'''
+    v = lint_test_file(good)
+    paths = [x for x in v if x["rule"] == "hardcoded_path"]
+    assert not paths, f"client.post URL sollte nicht geflaggt werden: {paths}"
+
+
+def test_lint_allows_requests_get_with_projects_url():
+    """#857: requests.get() als freie Funktion mit /projects/-URL."""
+    from hydrahive_core.test_lint import lint_test_file
+    good = '''
+def test_x():
+    r = requests.get("/projects/proj1/memory")
+    assert r.status_code == 200
+'''
+    v = lint_test_file(good)
+    paths = [x for x in v if x["rule"] == "hardcoded_path"]
+    assert not paths, f"requests.get URL sollte nicht geflaggt werden: {paths}"
+
+
+def test_lint_rejects_open_with_projects_path():
+    """#857: open("/projects/...") ist KEIN HTTP-Client — muss geflaggt werden."""
+    from hydrahive_core.test_lint import lint_test_file
+    bad = '''
+def test_x():
+    with open("/projects/hydrahive-coding/repo/data.txt") as f:
+        pass
+'''
+    v = lint_test_file(bad)
+    assert any(x["rule"] == "hardcoded_path" for x in v), f"open() sollte geflaggt werden: {v}"
+
+
+def test_lint_rejects_assert_with_hardcoded_path():
+    """#857: assert path == "/projects/foo.py" ist kein HTTP-Call — flag."""
+    from hydrahive_core.test_lint import lint_test_file
+    bad = '''
+def test_x():
+    path = "/projects/foo.py"
+    assert path == "something_else"
+'''
+    v = lint_test_file(bad)
+    # Genau 1 hardcoded_path violation (nur die Zuweisung)
+    paths = [x for x in v if x["rule"] == "hardcoded_path"]
+    assert len(paths) == 1 and paths[0]["line"] == 3, (
+        f"nur die Zuweisung sollte geflaggt werden: {paths}"
+    )

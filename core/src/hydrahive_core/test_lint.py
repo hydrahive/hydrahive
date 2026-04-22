@@ -43,6 +43,9 @@ _FORBIDDEN_PATH_PREFIXES = (
     # in der Umgebung haben.
 )
 
+# HTTP-Methoden fuer Whitelist in _hardcoded_paths (#857)
+HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "request"})
+
 
 def _is_test_file(path: Path) -> bool:
     """Heuristik: ist path eine Pytest-Test-Datei?"""
@@ -192,17 +195,45 @@ def _self_validating_assert(func: ast.FunctionDef) -> tuple[bool, str]:
     return False, ""
 
 
+def _build_parent_map(tree: ast.Module) -> dict[ast.AST, ast.AST]:
+    """Erzeugt Child→Parent Map fuer alle Knoten im Baum (fuer #857 whitelist)."""
+    parent: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+    return parent
+
+
+def _is_http_call_arg(node: ast.Constant, parent_map: dict[ast.AST, ast.AST]) -> bool:
+    """#857: True wenn node ein String-Argument zu einer HTTP-Methoden-Client-
+    methode ist (client.post, requests.get, etc.). Solche URLs sind legitime
+    API-Endpunkte, keine hardcoded Systempfade."""
+    parent = parent_map.get(node)
+    if not isinstance(parent, ast.Call):
+        return False
+    func = parent.func
+    if isinstance(func, ast.Attribute) and func.attr in HTTP_METHODS:
+        return True
+    if isinstance(func, ast.Name) and func.id in HTTP_METHODS:
+        return True
+    return False
+
+
 def _hardcoded_paths(tree: ast.Module) -> list[tuple[int, str]]:
     """Findet String-Literale die auf absolute Pfade zeigen.
-    Whitelist: tmp_path / monkeypatch-context (heuristisch — wir flaggen
-    String-Literale, nicht fixture-uses).
+    Whitelist: HTTP-Client-Aufrufe mit /projects/- URLs (API-Endpunkte, #857)
+    werden nicht geflaggt.
     """
     hits: list[tuple[int, str]] = []
+    parent_map = _build_parent_map(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             v = node.value
             # leerer / sehr kurzer String → ignore
             if len(v) < 5:
+                continue
+            # Whitelist: HTTP-Client-URLs (#857)
+            if _is_http_call_arg(node, parent_map):
                 continue
             for prefix in _FORBIDDEN_PATH_PREFIXES:
                 if v.startswith(prefix):
