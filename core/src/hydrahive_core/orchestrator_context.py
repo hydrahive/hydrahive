@@ -547,6 +547,8 @@ async def build_system_prompt(
         # vorhanden ist (in 'repo/' oder 'files/<id>/' Subdir), explizit den
         # Pfad nennen — Boss raet sonst falsch und scheitert mit file_read /
         # file_search auf den falschen relativen Pfaden.
+        # Aufgabe-7-Befund: idempotent (kein Doppel-Anhaengen wenn Header schon da),
+        # tighter except (nur OSError fuer Path-Fragen), kein .replace-Relikt.
         try:
             project_fs = Path(f"/projects/{boss_cfg.id}")
             if project_fs.exists():
@@ -561,14 +563,17 @@ async def build_system_prompt(
                             f"- Repo unter `{label}/` (relativ zu Projekt-Root). "
                             f"Verwende `{label}/<pfad>` in file_read / file_search / file_write."
                         )
-                if _layout_lines:
-                    channels.repos = (channels.repos or "") + (
-                        "\n\n## Filesystem-Layout\n\n"
-                        "Dein Projekt-Filesystem ist `/projects/{boss_cfg.id}/`. Folgende Sub-Pfade enthalten Code:\n"
+                _layout_header = "\n\n## Filesystem-Layout\n\n"
+                _existing_repos = channels.repos or ""
+                if _layout_lines and _layout_header.strip() not in _existing_repos:
+                    channels.repos = _existing_repos + (
+                        _layout_header
+                        + f"Dein Projekt-Filesystem ist `/projects/{boss_cfg.id}/`. "
+                        + "Folgende Sub-Pfade enthalten Code:\n"
                         + "\n".join(_layout_lines)
-                    ).replace("{boss_cfg.id}", boss_cfg.id)
-        except Exception:
-            pass
+                    )
+        except OSError as _layout_err:
+            logger.debug("filesystem-layout hint skipped: %s", _layout_err)
 
         # #584-A: Projekt-Target-Injektion mit Legacy-Fallback.
         # Bei v2-Projekt-Agents (Bridge agent_config_from_project) ist boss_cfg.id == project_id
