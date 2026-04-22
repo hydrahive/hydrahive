@@ -18,6 +18,7 @@ Alles andere (Git, Discord, Server, Mail, etc.) geht über shell_exec.
 
 import asyncio
 import contextvars
+import hashlib
 import json
 import logging
 import os
@@ -1150,6 +1151,7 @@ class FileReadTool(BaseTool):
             has_more = (offset + limit) < total
             logger.info("file_read: %s liest %s offset=%d limit=%d", agent_id, safe_path, offset, limit)
             FileWriteTool.mark_read(agent_id, str(safe_path))
+            FileWriteTool.mark_read_hash(str(safe_path))
             result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
             if has_more:
                 result["has_more"] = True
@@ -1166,6 +1168,7 @@ class FileReadTool(BaseTool):
 class FileWriteTool(BaseTool):
 
     _read_state: dict[str, set[str]] = {}
+    _read_hash_state: dict[str, str] = {}  # path → SHA256 at read-time
     _MAX_READ_STATE_PER_AGENT = 500
     _checkpoints: dict[str, list[tuple[str, str]]] = {}
     _MAX_CHECKPOINTS = 50
@@ -1177,6 +1180,23 @@ class FileWriteTool(BaseTool):
         if len(paths) > cls._MAX_READ_STATE_PER_AGENT:
             to_keep = list(paths)[cls._MAX_READ_STATE_PER_AGENT // 2:]
             cls._read_state[agent_id] = set(to_keep)
+
+    @classmethod
+    def mark_read_hash(cls, path: str) -> None:
+        """Store SHA256 of file content at read-time. Clears after patch/write."""
+        try:
+            sha = hashlib.sha256(Path(path).resolve().read_bytes()).hexdigest()
+            cls._read_hash_state[path] = sha
+        except Exception:
+            pass  # non-critical
+
+    @classmethod
+    def get_read_hash(cls, path: str) -> str | None:
+        return cls._read_hash_state.get(path)
+
+    @classmethod
+    def clear_read_hash(cls, path: str) -> None:
+        cls._read_hash_state.pop(path, None)
 
     @property
     def id(self) -> str: return "file_write"
@@ -1260,6 +1280,7 @@ class FileWriteTool(BaseTool):
             # #834: write → automatic read-state registration so immediate
             # file_patch on the same file succeeds without extra file_read
             self.__class__.mark_read(agent_id, str(safe_path.resolve()))
+            FileWriteTool.clear_read_hash(str(safe_path.resolve()))
             logger.info("file_write: %s schreibt %s (%s)", agent_id, safe_path, mode)
             return {"written": True, "path": str(safe_path), "bytes": len(content.encode())}
         except OSError as e:
@@ -1294,6 +1315,7 @@ class FilePatchTool(BaseTool):
                 "search": {"type": "string", "description": "Text der gesucht werden soll (exakt)"},
                 "replace": {"type": "string", "description": "Ersetzungstext"},
                 "count": {"type": "integer", "description": "Max. Ersetzungen (0=alle, Standard: 1)"},
+                "force_stale": {"type": "boolean", "description": "#849: Local modification between read→patch tolerieren. Default false."},
             },
             "required": ["path", "search", "replace"],
         }
@@ -1316,6 +1338,22 @@ class FilePatchTool(BaseTool):
                 "error": f"Read-Before-Edit: '{path}' nicht vorher gelesen.",
                 "path": resolved, "hint": "file_read zuerst aufrufen",
             }
+
+        # ── #849 Hash-Stale-Check ─────────────────────────────────────
+        # Wenn file_read die Datei gelesen hat: damaligen SHA256 merken.
+        # Vor Patch: wenn aktueller SHA256 ≠ gespeicherter SHA256 →
+        # Datei wurde zwischen read→patch geändert → stale.
+        force_stale = kwargs.get("force_stale", False)
+        stored_hash = FileWriteTool.get_read_hash(resolved)
+        if stored_hash and not force_stale:
+            current_hash = hashlib.sha256(file_path.resolve().read_bytes()).hexdigest()
+            if current_hash != stored_hash:
+                return {
+                    "stale": True,
+                    "error": f"#849 Stale-Detection: '{path}' wurde seit dem letzten file_read geändert.",
+                    "path": resolved,
+                    "hint": "Erneut file_read aufrufen (mit force_stale=true wenn du sicher bist).",
+                }
 
         # ── #838 Gate 2: Pre-Patch Stale-Check ─────────────────────────
         # Wenn Datei in Git-Repo: prueft ob upstream neue Commits auf diese
@@ -1403,6 +1441,9 @@ class FilePatchTool(BaseTool):
         except Exception as _verify_err:
             logger.debug("patch_verify failed: %s", _verify_err)
             verify_result = {"compile": "skipped", "reason": f"verify_exception: {_verify_err}"}
+
+        # ── #849: Hash-State aufräumen nach erfolgreichem Patch ──────
+        FileWriteTool.clear_read_hash(resolved)
 
         # Auto-Revert bei Compile-Error
         if verify_result.get("compile") == "error":
