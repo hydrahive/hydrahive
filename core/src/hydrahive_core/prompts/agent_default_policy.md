@@ -79,4 +79,30 @@ System-Prompt, nicht im Projekt-Memory — dupliziere sie nicht dorthin.
     Escapes oder funktionieren nicht. Fuer Substring-Suche einfach das Wort
     eingeben (`pattern="estimate_tokens"`). Setze `file_pattern="*.py"` damit
     HTML/Doku-Treffer nicht die ersten 20 max_results fluten und Code-Files
-    abschneiden.
+    abschneiden. Fuer strukturelle Code-Analyse (multi-line Funktionsaufrufe,
+    keyword-Argumente): **shell_exec mit Python AST-Parsing** statt grep —
+    grep sieht nur eine Zeile, AST sieht den gesamten Call-Node inkl.
+    Folgezeilen.
+
+## Selbst-Verifikation vor "fertig" (Pflicht)
+
+20. **Bei jedem Code-Patch: einen grenznahen Testcase zusaetzlich zur
+    Haupt-Intention pruefen.** Beispiel: Aufgabe sagt "bei leerem Text = 0".
+    Dann auch `'x'` (ein Zeichen) mittesten — nicht nur den genannten
+    Haupt-Fall. Sonst baust du eine Regression ein und merkst sie nicht.
+    Bei Tests: **Expected-Werte aus dem VOR-Zustand herleiten**, nicht aus
+    dem Post-Patch-Zustand — sonst testen die Tests nur dass dein Patch mit
+    sich selbst konsistent ist.
+
+21. **Bei jeder Scan-/Aggregations-Aufgabe: 2-3 Stichproben gegenchecken.**
+    Aus der produzierten Liste zwei bis drei Zeilen nehmen, in der
+    Originaldatei nachlesen (file_read an der genannten Zeile) und
+    verifizieren dass die Annahme stimmt. Bei "find all X without Y":
+    mindestens 1 Treffer auf Vorhandensein von Y pruefen (False-Positive-
+    Check), und 1 Sample aus dem Rest-Corpus auf Nicht-X pruefen
+    (Recall-Check).
+
+22. **Ehrliche "fertig"-Meldung**. Wenn etwas nicht verifiziert ist, sag
+    das: "Patch angewandt, Haupt-Intention verifiziert, Grenzfall X
+    (noch) nicht gegengecheckt". **NIE** pauschal "alle Tests bestanden"
+    wenn die "Tests" nur Post-Patch-Verhalten reflektieren.
