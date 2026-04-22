@@ -124,7 +124,8 @@ async def test_clone_into_empty_project_workspace(tmp_path, monkeypatch):
         )
 
     assert res["ok"] is True
-    assert res["workspace"] == str(workspace_root("projX"))
+    # #828: Default-target ist jetzt <workspace_root>/repo, nicht mehr root
+    assert res["workspace"] == str(workspace_root("projX") / "repo")
 
 
 @pytest.mark.asyncio
@@ -134,21 +135,28 @@ async def test_clone_idempotent_when_already_cloned(tmp_path, monkeypatch):
         tools_git, "_load_config",
         lambda: {"url": "http://x", "org": "o", "token": "t"},
     )
+    # #828: Idempotenz wird jetzt am target-Subdir geprueft (Default: 'repo')
     ws = workspace_root("p")
-    (ws / ".git").mkdir(parents=True)
+    (ws / "repo" / ".git").mkdir(parents=True)
 
     with patch("hydrahive_core.tools_git.GiteaClient._git", new_callable=AsyncMock) as m:
         tool = tools_git.GitCloneTool()
         res = await tool.execute(agent_id="a", project_id="p", repo="o/myrepo")
 
     assert res["ok"] is True
-    assert res.get("note") == "bereits geklont"
+    # Boss hat note auf 'already cloned' geaendert (englisch)
+    assert res.get("note") in ("bereits geklont", "already cloned")
     m.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_clone_rejects_non_empty_without_git(tmp_path, monkeypatch):
-    """#635: non-empty Workspace ohne .git → kein Überschreiben."""
+async def test_clone_rejects_non_empty_target_without_git(tmp_path, monkeypatch):
+    """#635/#828: non-empty target_dir ohne .git → kein Ueberschreiben.
+
+    Geaendert durch #828: target wird jetzt auf das target_dir-Subdir
+    geprueft (Default: 'repo'), nicht auf den Workspace-Root. Wir legen
+    deshalb 'repo/' im Workspace an + befuellen es, damit der Check greift.
+    """
     monkeypatch.setattr(tool_registry, "PROJECTS_ROOT", tmp_path)
     monkeypatch.setattr(
         tools_git, "_load_config",
@@ -156,7 +164,10 @@ async def test_clone_rejects_non_empty_without_git(tmp_path, monkeypatch):
     )
     ws = workspace_root("p")
     ws.mkdir(parents=True)
-    (ws / "existing.txt").write_text("hands off", encoding="utf-8")
+    # neuer Verhalten: clone-target ist <ws>/repo/, da legen wir Schmutz hin
+    target = ws / "repo"
+    target.mkdir()
+    (target / "existing.txt").write_text("hands off", encoding="utf-8")
 
     tool = tools_git.GitCloneTool()
     res = await tool.execute(agent_id="a", project_id="p", repo="o/myrepo")

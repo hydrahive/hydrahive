@@ -115,6 +115,10 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     file_write wird komplett ausgeschlossen: chunked-writes (overwrite + mehrfach append)
     zum selben Pfad sind legitim und kein Loop. max_rounds fängt echte Endlosschleifen ab.
     shell_exec: nur name, keine args (Output-abhängige Folgebefehle sind kein Loop).
+
+    #824: JSON-Args werden normalisiert (parse + re-serialisieren mit sort_keys und
+    compact separators), damit whitespace-Variationen (Trennzeichen-Spaces,
+    key-order) nicht zu unterschiedlichen Signaturen führen.
     """
     import json as _j
     # Tools die vom Loop-Fingerprint ausgeschlossen werden (max_rounds schützt trotzdem)
@@ -126,7 +130,15 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
         if name in _LOOP_EXCLUDE:
             continue
         args_raw = getattr(fn, "arguments", "") or ""
-        signature.append(f"{name}:{args_raw}")
+        # #824: Normalisieren damit gleiche Args mit verschiedenem whitespace
+        # (z.B. {"path":"foo"} vs {"path": "foo"} vs {"path":"foo"} ) dieselbe
+        # Signatur erzeugen.
+        try:
+            _parsed = _j.loads(args_raw)
+            args_norm = _j.dumps(_parsed, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            args_norm = args_raw
+        signature.append(f"{name}:{args_norm}")
     return tuple(signature)
 
 

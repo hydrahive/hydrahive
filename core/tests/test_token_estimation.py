@@ -4,7 +4,8 @@ from hydrahive_core.token_estimation import estimate_tokens, estimate_message_to
 
 
 def test_estimate_tokens_empty():
-    assert estimate_tokens("") == 1  # min 1
+    # Aufgabe 1 (#824 follow-up): leerer String → 0 (vorher: 1 wegen max(1,...))
+    assert estimate_tokens("") == 0
 
 
 def test_estimate_tokens_short():

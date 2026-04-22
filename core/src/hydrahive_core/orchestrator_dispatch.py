@@ -130,10 +130,21 @@ async def _tool_loop(
                     reason="wiederholte Tool-Signatur",
                     execution_mode=execution_mode,
                 )
-                return final.choices[0].message.content or "", workers_used
+                _content = (
+                    final.choices[0].message.content
+                    if getattr(final, "choices", None) and len(final.choices) > 0
+                    and hasattr(final.choices[0], "message")
+                    else ""
+                )
+                return _content or "", workers_used
             except Exception as e:
                 logger.error("Tool-Loop Finalisierung fehlgeschlagen: %s", e)
-                return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
+                from .llm_errors import format_llm_error
+                return (
+                    f"[Fehler] Tool-Loop {abort_reason}: "
+                    f"{format_llm_error(e)}",
+                    workers_used,
+                )
 
         # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
         if _round == max_rounds - 1:
@@ -160,10 +171,21 @@ async def _tool_loop(
                     reason=f"max_rounds={max_rounds}",
                     execution_mode=execution_mode,
                 )
-                return final.choices[0].message.content or "", workers_used
+                _content = (
+                    final.choices[0].message.content
+                    if getattr(final, "choices", None) and len(final.choices) > 0
+                    and hasattr(final.choices[0], "message")
+                    else ""
+                )
+                return _content or "", workers_used
             except Exception as e:
                 logger.error("Tool-Loop max_rounds Finalisierung fehlgeschlagen: %s", e)
-                return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
+                from .llm_errors import format_llm_error
+                return (
+                    f"[Fehler] Tool-Loop max_rounds_hit:{max_rounds}: "
+                    f"{format_llm_error(e)}",
+                    workers_used,
+                )
 
         # Assistant-Message mit Tool-Calls in History aufnehmen
         current_messages.append({

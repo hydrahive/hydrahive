@@ -1,5 +1,5 @@
 """agent-analytics — Token-Verbrauch und Kosten-Analyse."""
-import json, urllib.request
+import json, urllib.request, subprocess
 
 def _api(path):
     try:
@@ -13,10 +13,12 @@ def register(api):
         parameters={"type":"object","properties":{"agent_id":{"type":"string","description":"Agent-ID (optional, leer=alle)"}},"required":[]})
     def usage_report(agent_id:str="",**_) -> str:
         # Usage-Daten aus /admin/resources lesen
-        import subprocess
         try:
             r=subprocess.run(["journalctl","-u","hydrahive-core","--since","24 hours ago","--no-pager","-g","token-budget"],
-                capture_output=True,text=True,timeout=15)
+                capture_output=True,text=True,timeout=30)
+        except subprocess.TimeoutExpired:
+            return "Fehler: journalctl hat das Timeout von 30s überschritten — bitte später erneut versuchen."
+        try:
             lines=r.stdout.strip().splitlines()
             if agent_id:
                 lines=[l for l in lines if agent_id in l]
@@ -42,10 +44,13 @@ def register(api):
     @api.tool(tool_id="cost_estimate", description="Schätzt die monatlichen Kosten basierend auf dem aktuellen Verbrauch.",
         parameters={"type":"object","properties":{},"required":[]})
     def cost_estimate(**_) -> str:
-        import subprocess,re
+        import re
         try:
             r=subprocess.run(["journalctl","-u","hydrahive-core","--since","1 hour ago","--no-pager","-g","token-budget"],
-                capture_output=True,text=True,timeout=15)
+                capture_output=True,text=True,timeout=30)
+        except subprocess.TimeoutExpired:
+            return "Fehler: journalctl hat das Timeout von 30s überschritten — bitte später erneut versuchen."
+        try:
             totals=[]
             for l in r.stdout.strip().splitlines():
                 m=re.search(r'total≈(\d+)',l)

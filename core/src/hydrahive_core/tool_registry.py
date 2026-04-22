@@ -182,7 +182,11 @@ def _resolve_sandbox_scope(
         "--dev", "/dev",
         "--proc", "/proc",
         "--setenv", "HOME", "/tmp",
-        "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "--setenv", "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            + (f":{project_dir / '.venv' / 'bin'}"
+               if project_dir is not None and (project_dir / ".venv" / "bin").exists()
+               else ""),
     ]
     # Workspace-Root rw binden — DAS ist der gemeinsame Tree für file_*/git_*/shell
     if project_dir is not None and project_dir.exists():
@@ -1092,7 +1096,7 @@ class FileReadTool(BaseTool):
         try:
             content = safe_path.read_text(encoding="utf-8", errors="replace")
             total = len(content)
-            limit = min(max(1, limit), 32000)
+            limit = min(max(4000, limit), 32000)
             offset = max(0, offset)
             chunk = content[offset:offset + limit]
             has_more = (offset + limit) < total
@@ -1188,6 +1192,9 @@ class FileWriteTool(BaseTool):
             write_mode = "a" if mode == "append" else "w"
             with safe_path.open(write_mode, encoding="utf-8") as handle:
                 handle.write(content)
+            # #834: write → automatic read-state registration so immediate
+            # file_patch on the same file succeeds without extra file_read
+            self.__class__.mark_read(agent_id, str(safe_path.resolve()))
             logger.info("file_write: %s schreibt %s (%s)", agent_id, safe_path, mode)
             return {"written": True, "path": str(safe_path), "bytes": len(content.encode())}
         except OSError as e:
@@ -1343,7 +1350,7 @@ class FileSearchTool(BaseTool):
             "oder funktionieren nicht. Fuer Substring-Suche einfach Wort eingeben (z.B. 'estimate_tokens'). "
             "STARK EMPFOHLEN: file_pattern setzen (z.B. '*.py') sonst floodet HTML/Doku die max_results. "
             "Gibt Dateinamen (relativ zum search_dir), Zeilennummern und Kontext zurueck. "
-            "Primaer-Werkzeug fuer Wissensfragen im Projekt; vor file_read einsetzen."
+            "Primär-Werkzeug für Wissensfragen im Projekt; vor file_read einsetzen."
         )
 
     @property
@@ -1416,17 +1423,21 @@ class FileSearchTool(BaseTool):
         if r.returncode == 1:
             return {"matches": [], "count": 0, "pattern": pattern}
 
+        import re as _re
         lines = r.stdout.strip().split("\n")[:max_results]
         matches = []
+        # grep -rn format: /path/to/file:LINE:text
+        # Anchored regex — line-number is never confused with a colon
+        # in the filepath itself.  Fixes #824
+        _GREP_LINE_RE = _re.compile(r"^(.+?):(\d+):(.*)$")
         for line in lines:
-            if ":" in line:
-                parts = line.split(":", 2)
-                if len(parts) >= 3:
-                    matches.append({
-                        "file": parts[0].replace(str(search_dir) + "/", ""),
-                        "line": int(parts[1]) if parts[1].isdigit() else 0,
-                        "text": parts[2][:200].strip(),
-                    })
+            m = _GREP_LINE_RE.match(line)
+            if m:
+                matches.append({
+                    "file": m.group(1).replace(str(search_dir) + "/", ""),
+                    "line": int(m.group(2)),
+                    "text": m.group(3)[:200].strip(),
+                })
 
         return {"matches": matches, "count": len(matches), "pattern": pattern, "search_dir": str(search_dir)}
 

@@ -109,9 +109,10 @@ class GitCloneTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "repo":   {"type": "string", "description": "'owner/name' oder 'name'"},
-                "branch": {"type": "string", "description": "Optional — spezifischer Branch"},
-                "depth":  {"type": "integer", "description": "Optional — shallow clone (z.B. 1 für nur letzten Commit)"},
+                "repo":       {"type": "string", "description": "'owner/name' oder 'name'"},
+                "branch":     {"type": "string", "description": "Optional — spezifischer Branch"},
+                "depth":      {"type": "integer", "description": "Optional — shallow clone (z.B. 1 für nur letzten Commit)"},
+                "target_dir": {"type": "string", "description": "Optional — Clone-Ziel relativ zum Workspace. Default: 'repo'."},
             },
             "required": ["repo"],
         }
@@ -119,32 +120,49 @@ class GitCloneTool(_GitToolBase):
     async def execute(
         self, agent_id: str, project_id: str,
         repo: str, branch: str = "", depth: int = 0,
+        target_dir: str = "",
         **kwargs,
     ) -> dict:
         try:
             _, owner, name = _parse_remote(repo)
-            ws_path = _project_workspace(project_id)
+            ws_path = _project_workspace(project_id)  # e.g. /projects/hydrahive-coding
+
+            # --- target_dir auflösen ---
+            if target_dir:
+                target = (ws_path / target_dir).resolve()
+                # Security: Path-Traversal-Block — muss UNTER workspace liegen
+                # Nutze .parent-Vergleich (nicht startswith) da sonst
+                # /projects/hydrahive-coding-evil/repo fälschlich als "innerhalb"
+                # von /projects/hydrahive-coding erkannt wird (#828)
+                if not target.is_relative_to(ws_path.resolve()):
+                    return {
+                        "error": (
+                            f"target_dir '{target_dir}' liegt ausserhalb des Workspaces "
+                            f"'{ws_path}' — nicht erlaubt."
+                        ),
+                    }
+            else:
+                target = ws_path / "repo"  # kanonischer Default
+
             cfg = _load_config()
             clone_url = f"{cfg['url']}/{owner}/{name}.git"
 
-            # #635 Vorbedingungs-Check:
-            # - bereits .git → idempotent "bereits geklont"
-            # - leerer/nicht-existierender Workspace → klonen
-            # - non-empty ohne .git → Konflikt, NICHT überschreiben
-            if (ws_path / ".git").exists():
-                return {"ok": True, "workspace": str(ws_path), "note": "bereits geklont"}
-            if ws_path.exists():
-                non_empty = any(ws_path.iterdir())
-                if non_empty:
+            # --- Idempotenz: bereits geklont ---
+            if (target / ".git").exists():
+                return {"ok": True, "workspace": str(target), "note": "already cloned"}
+
+            # --- Precondition: target existiert → prüfen ob leer ---
+            if target.exists():
+                if any(target.iterdir()):
                     return {
                         "error": (
-                            f"Workspace '{ws_path}' ist nicht leer und enthält kein .git. "
-                            "git_clone würde existierende Dateien überschreiben — abgelehnt."
+                            f"target_dir '{target}' ist nicht leer. "
+                            "Bitte leeren Ordner angeben oder 'repo' verwenden."
                         ),
                     }
 
             # Workspace-Parent muss existieren damit git clone schreiben kann
-            ws_path.parent.mkdir(parents=True, exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
 
             args = ["clone"]
             if branch:
@@ -153,7 +171,7 @@ class GitCloneTool(_GitToolBase):
                 args += ["--branch", branch]
             if depth and int(depth) > 0:
                 args += ["--depth", str(int(depth))]
-            args += [clone_url, str(ws_path)]
+            args += [clone_url, str(target)]
 
             stdout, stderr, rc = await GiteaClient._git(
                 args, ws_path.parent,
@@ -163,7 +181,7 @@ class GitCloneTool(_GitToolBase):
                 return {"error": f"git clone rc={rc}", "stderr": stderr[:500]}
             return {
                 "ok": True,
-                "workspace": str(ws_path),
+                "workspace": str(target),
                 "repo": f"{owner}/{name}",
                 "branch": branch or "default",
             }

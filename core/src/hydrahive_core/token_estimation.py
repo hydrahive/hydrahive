@@ -13,6 +13,8 @@ def estimate_tokens(text: str) -> int:
     Genauer als chars/4 (zu optimistisch) für gemischten Content
     (Code, Deutsch, JSON, Markdown).
     """
+    if not text:
+        return 0
     return max(1, int(len(text) / 3.2))
 
 
