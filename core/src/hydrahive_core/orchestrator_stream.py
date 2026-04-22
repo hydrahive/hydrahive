@@ -1316,6 +1316,8 @@ async def _stream_litellm(
     _tools_disabled = False
     full_response = ""
     streamed_any = False
+    _hallucination_retries = 0  # #856
+    _HALLUCINATION_RETRY_LIMIT = 2  # #856
 
     for _round in range(boss_cfg.max_tool_rounds):
         # #637-Followup: echte Anthropic-litellm-Calls vor dem Send in
@@ -1454,6 +1456,33 @@ async def _stream_litellm(
                 round_text = text_without_invokes(round_text)
 
         if not accumulated_tcs:
+            # #856: Halluzinated Tool-Call im Text erkannt? Auto-Retry einmal/zweimal,
+            # damit der Orchestrator nicht aus dem Turn rausfliegt mit der Halluzination
+            # als finaler Antwort.
+            from .orchestrator_tools import is_hallucinated_tool_call as _is_hall
+            if (
+                _is_hall(round_text)
+                and _hallucination_retries < _HALLUCINATION_RETRY_LIMIT
+            ):
+                _hallucination_retries += 1
+                logger.warning(
+                    "#856 hallucinated tool-call im Text erkannt (litellm-pfad, "
+                    "retry %d/%d) — forciere formales Tool-Protokoll",
+                    _hallucination_retries, _HALLUCINATION_RETRY_LIMIT,
+                )
+                if round_text.strip():
+                    loop_messages.append({"role": "assistant", "content": round_text})
+                loop_messages.append({
+                    "role": "user",
+                    "content": (
+                        "[System] Deine letzte Antwort enthielt ein Tool-Call-Muster "
+                        "als Plaintext (z.B. `[TOOL_CALL]{tool => ...}`). Dieses Format "
+                        "wird NICHT ausgefuehrt. Wenn du ein Tool aufrufen willst, nutze "
+                        "das native Tool-Call-Protokoll deiner API (tool_calls). "
+                        "Wiederhole den Call jetzt formal."
+                    ),
+                })
+                continue
             break
 
         tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]

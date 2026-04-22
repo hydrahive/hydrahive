@@ -886,4 +886,49 @@ def check_fuzzy_loop(
 
 
 
+# =============================================================================
+# #856 — Halluzinated Tool-Call Detector
+# =============================================================================
+#
+# MiniMax (und gelegentlich andere Provider) geben manchmal ein halb-
+# strukturiertes Tool-Call-Format als Plaintext im assistant-content aus:
+#
+#     [TOOL_CALL]
+#     {tool => "shell_exec", args => {
+#       --command "..."
+#     }}
+#     [/TOOL_CALL]
+#
+# Statt einen echten tool_use/tool_call-Block zu emittieren. Der Orchestrator
+# sieht keine Tool-Calls, gibt den Text als finale Antwort zurueck — Reibung
+# fuer den User.
+#
+# Dieser Detector erkennt das Muster, damit der Orchestrator einen
+# automatischen Retry-Prompt anhaengen und den Turn wiederholen kann.
+
+import re as _re
+
+_HALLUCINATION_PATTERN = _re.compile(
+    r"\[TOOL_CALL\]"                       # [TOOL_CALL]-Marker
+    r"|\[/TOOL_CALL\]"                     # geschlossener Marker
+    r"|^\s*\{\s*[\"']?tool[\"']?\s*=>\s*"  # {tool => ... am Zeilenanfang
+    r"|^\s*\{\s*[\"']?tool[\"']?\s*:\s*[\"']\w+[\"']\s*,\s*[\"']?args[\"']?\s*:",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+
+def is_hallucinated_tool_call(content: str) -> bool:
+    """#856: True wenn der assistant-content wie ein in Text ausgegebener
+    Tool-Call aussieht (z.B. [TOOL_CALL]{tool => ...}). Nur anwenden wenn
+    KEIN echter tool_use-Block im Turn war — sonst Falschmeldung bei Boss-
+    Reports die das Muster zitieren.
+    """
+    if not content or not isinstance(content, str):
+        return False
+    # Mindestlaenge um reine "tool" Erwaehnungen in Prosa auszuschliessen
+    if len(content) < 15:
+        return False
+    return bool(_HALLUCINATION_PATTERN.search(content))
+
+
 # v2: handle_request_tools entfernt — alle 9 Core-Tools sind immer geladen.

@@ -78,12 +78,40 @@ async def _tool_loop(
     last_signature: tuple[str, ...] | None = None
     repeated_signature_count = 0
     _fuzzy_history_dispatch: list[str] = []  # #618
+    _hallucination_retries = 0  # #856
+    _HALLUCINATION_RETRY_LIMIT = 2  # #856
     max_rounds = max_rounds or boss_cfg.max_tool_rounds
 
     for _round in range(max_rounds):
         tool_calls = getattr(response.choices[0].message, "tool_calls", None)
         if not tool_calls:
-            return response.choices[0].message.content or "", workers_used
+            _content = response.choices[0].message.content or ""
+            # #856: Halluzinated Tool-Call als Text? Auto-Retry.
+            from .orchestrator_tools import is_hallucinated_tool_call as _is_hall
+            if _is_hall(_content) and _hallucination_retries < _HALLUCINATION_RETRY_LIMIT:
+                _hallucination_retries += 1
+                logger.warning(
+                    "#856 hallucinated tool-call im Text erkannt (retry %d/%d) — "
+                    "forciere formales Tool-Protokoll",
+                    _hallucination_retries, _HALLUCINATION_RETRY_LIMIT,
+                )
+                current_messages.append({
+                    "role": "assistant",
+                    "content": _content,
+                })
+                current_messages.append({
+                    "role": "user",
+                    "content": (
+                        "[System] Deine letzte Antwort enthielt ein Tool-Call-Muster als "
+                        "Plaintext (z.B. `[TOOL_CALL]{tool => ...}`). Dieses Format wird "
+                        "NICHT ausgefuehrt. Wenn du ein Tool aufrufen willst, nutze das "
+                        "native Tool-Call-Protokoll deiner API (tool_calls/tool_use). "
+                        "Wiederhole den Call jetzt formal."
+                    ),
+                })
+                response = await orch._llm_call(boss_cfg, current_messages, litellm_tools)
+                continue
+            return _content, workers_used
 
         # #512: Tool-Round Metriken
         _metrics.record_tool_round(project_id, len(tool_calls))
