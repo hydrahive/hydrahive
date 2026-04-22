@@ -543,6 +543,33 @@ async def build_system_prompt(
         except Exception:
             pass
 
+        # #823: Filesystem-Layout-Hint. Wenn ein Repo im Projekt-Filesystem
+        # vorhanden ist (in 'repo/' oder 'files/<id>/' Subdir), explizit den
+        # Pfad nennen — Boss raet sonst falsch und scheitert mit file_read /
+        # file_search auf den falschen relativen Pfaden.
+        try:
+            project_fs = Path(f"/projects/{boss_cfg.id}")
+            if project_fs.exists():
+                _layout_lines: list[str] = []
+                _candidates = [
+                    ("repo", project_fs / "repo"),
+                    (f"files/{boss_cfg.id}", project_fs / "files" / boss_cfg.id),
+                ]
+                for label, p in _candidates:
+                    if p.exists() and (p / ".git").exists():
+                        _layout_lines.append(
+                            f"- Repo unter `{label}/` (relativ zu Projekt-Root). "
+                            f"Verwende `{label}/<pfad>` in file_read / file_search / file_write."
+                        )
+                if _layout_lines:
+                    channels.repos = (channels.repos or "") + (
+                        "\n\n## Filesystem-Layout\n\n"
+                        "Dein Projekt-Filesystem ist `/projects/{boss_cfg.id}/`. Folgende Sub-Pfade enthalten Code:\n"
+                        + "\n".join(_layout_lines)
+                    ).replace("{boss_cfg.id}", boss_cfg.id)
+        except Exception:
+            pass
+
         # #584-A: Projekt-Target-Injektion mit Legacy-Fallback.
         # Bei v2-Projekt-Agents (Bridge agent_config_from_project) ist boss_cfg.id == project_id
         # und boss_cfg.project_dir ist gesetzt. Dann Projekt-Targets bevorzugen;

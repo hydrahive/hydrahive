@@ -902,22 +902,45 @@ class SessionManager:
                 logger.warning("resume_session: Fehler beim Laden von %s: %s", session_id, e)
                 return None
 
-            # #525: Resume Recovery — unvollständige Tool-Chains erkennen und reparieren
+            # #525/#826: Resume Recovery — Marker NUR wenn echt unterbrochen.
+            # Frueher: jeder resume_session-Call injizierte den Marker wenn die
+            # letzte Message ein Tool-Result war. Console ruft resume_session
+            # aber bei Page-Mount + Reconnects → Marker erschien 3x in einer
+            # aktiven Session und verwirrte den Boss.
+            #
+            # Neue Trigger-Bedingung (alle drei muessen wahr sein):
+            #  (a) letzte Message ist Tool-Result
+            #  (b) Marker noch NICHT in den letzten 3 Messages
+            #  (c) letzte Message ist mind. 60s alt (sonst ist die Session
+            #      vermutlich noch live, kein echter Restart)
             _repaired = 0
             _last_msg = session.messages[-1] if session.messages else None
             if _last_msg and _last_msg.role == MessageRole.TOOL:
-                # Session endet mit Tool-Message — wahrscheinlich unterbrochen
-                # Recovery: System-Message anhängen die den Agent informiert
-                recovery_msg = Message.create(
-                    role=MessageRole.SYSTEM,
-                    content=(
-                        "[Session Recovery] Diese Session wurde nach einer Unterbrechung fortgesetzt. "
-                        "Die letzte Aktion war ein Tool-Aufruf. Das Ergebnis könnte unvollständig sein. "
-                        "Fasse zusammen was bisher erledigt wurde und frage den User wie es weitergehen soll."
-                    ),
+                _recent = session.messages[-4:]
+                _has_marker = any(
+                    m.role == MessageRole.SYSTEM and "[Session Recovery]" in (m.content or "")
+                    for m in _recent
                 )
-                session.messages.append(recovery_msg)
-                _repaired += 1
+                _last_age_s = 0.0
+                try:
+                    from datetime import datetime, timezone
+                    _ts = _last_msg.timestamp
+                    if isinstance(_ts, str) and _ts:
+                        _dt = datetime.fromisoformat(_ts.replace("Z", "+00:00"))
+                        _last_age_s = (datetime.now(timezone.utc) - _dt).total_seconds()
+                except Exception:
+                    _last_age_s = 0.0  # konservativ: kein Marker wenn Zeit unbekannt
+                if not _has_marker and _last_age_s >= 60.0:
+                    recovery_msg = Message.create(
+                        role=MessageRole.SYSTEM,
+                        content=(
+                            "[Session Recovery] Diese Session wurde nach einer Unterbrechung fortgesetzt. "
+                            "Die letzte Aktion war ein Tool-Aufruf. Das Ergebnis könnte unvollständig sein. "
+                            "Fasse zusammen was bisher erledigt wurde und frage den User wie es weitergehen soll."
+                        ),
+                    )
+                    session.messages.append(recovery_msg)
+                    _repaired += 1
 
             # Verwaiste SYSTEM-Messages am Ende entfernen (z.B. 🔧 Tool-Detail ohne Result)
             while session.messages and session.messages[-1].role == MessageRole.SYSTEM:

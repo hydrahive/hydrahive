@@ -1338,9 +1338,12 @@ class FileSearchTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Durchsucht alle Dateien im Projektverzeichnis nach einem Text oder Pattern. "
-            "Gibt Dateinamen, Zeilennummern und Kontext zurück. "
-            "Primär-Werkzeug für Wissensfragen im Projekt; vor file_read einsetzen."
+            "Durchsucht Datei-INHALTE im Projektverzeichnis nach einem grep-Pattern (BRE — basic regex). "
+            "WICHTIG: Pattern ist KEIN PCRE/Python-Regex. '|', '+', '?' etc. brauchen Backslash-Escape "
+            "oder funktionieren nicht. Fuer Substring-Suche einfach Wort eingeben (z.B. 'estimate_tokens'). "
+            "STARK EMPFOHLEN: file_pattern setzen (z.B. '*.py') sonst floodet HTML/Doku die max_results. "
+            "Gibt Dateinamen (relativ zum search_dir), Zeilennummern und Kontext zurueck. "
+            "Primaer-Werkzeug fuer Wissensfragen im Projekt; vor file_read einsetzen."
         )
 
     @property
@@ -1348,9 +1351,28 @@ class FileSearchTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "pattern": {"type": "string", "description": "Suchtext oder Pattern"},
-                "path": {"type": "string", "description": "Verzeichnis oder Datei (optional)"},
-                "file_pattern": {"type": "string", "description": "Dateiname-Filter z.B. '*.py' (optional)"},
+                "pattern": {
+                    "type": "string",
+                    "description": (
+                        "Suchtext (grep BRE — kein PCRE). Fuer einfache Substring-Suche: "
+                        "Wort direkt eingeben, z.B. 'token_estimation'. Punkt-Stern-Quirks beachten."
+                    ),
+                },
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Verzeichnis oder Datei (optional, default = project_root). "
+                        "WICHTIG: wenn ein Repo eingebunden ist, liegt der Code unter 'repo/' — "
+                        "z.B. path='repo/core/src' um nur dort zu suchen."
+                    ),
+                },
+                "file_pattern": {
+                    "type": "string",
+                    "description": (
+                        "Dateiname-Filter, z.B. '*.py' fuer nur Python-Files. "
+                        "Ohne Filter werden auch HTML/Doku/etc durchsucht und floodet die Treffer."
+                    ),
+                },
                 "max_results": {"type": "integer", "description": "Max. Treffer (Standard: 20)"},
             },
             "required": ["pattern"],
@@ -2314,19 +2336,32 @@ class ToolSearchTool(BaseTool):
         # select:-Modus
         if q.lower().startswith("select:"):
             ids = [s.strip() for s in q[len("select:"):].split(",") if s.strip()]
-            loaded_local = registry.resolve_many(ids)
-            loaded_local = [t for t in loaded_local if not t.always_loaded]
+            resolved = registry.resolve_many(ids)
+            # #829: always_loaded Tools direkt freundlich melden, nicht in
+            # deferred-Pfad weiterreichen — sie sind ja bereits verfuegbar.
+            already_available = [t.id for t in resolved if t.always_loaded]
+            loaded_local = [t for t in resolved if not t.always_loaded]
 
             # MCP: direkte Namens-Zuordnung
             mcp_name_set = {name for name, _ in mcp_entries}
             loaded_mcp = [tid for tid in ids if tid in mcp_name_set]
 
-            if not loaded_local and not loaded_mcp:
+            if not loaded_local and not loaded_mcp and not already_available:
                 return {
                     "matches": [],
                     "message": (
                         f"Kein deferred Tool gefunden für: {ids}. "
                         "Prüfe Schreibweise im <available-deferred-tools> Block."
+                    ),
+                }
+            if already_available and not loaded_local and not loaded_mcp:
+                # Nur always_loaded matched — gar nichts zu laden
+                return {
+                    "matches": [],
+                    "already_available": already_available,
+                    "message": (
+                        f"Tool(s) {already_available} sind always_loaded und bereits verfuegbar — "
+                        "direkt aufrufen, kein tool_search noetig."
                     ),
                 }
             for t in loaded_local:
@@ -2383,6 +2418,23 @@ class ToolSearchTool(BaseTool):
         top = combined[: max(1, int(max_results))]
 
         if not top:
+            # #829: Pruefe ob die Query exakt auf ein always_loaded Tool
+            # matcht — dann freundlich Bescheid geben statt "Keine Treffer".
+            _q_low = q.lower()
+            _hit_always = next(
+                (t for t in registry.always_loaded_tools()
+                 if t.id.lower() == _q_low or t.name.lower() == _q_low),
+                None,
+            )
+            if _hit_always is not None:
+                return {
+                    "matches": [],
+                    "already_available": [_hit_always.id],
+                    "message": (
+                        f"Tool '{_hit_always.id}' ist always_loaded und bereits verfuegbar — "
+                        "direkt aufrufen, kein tool_search noetig."
+                    ),
+                }
             return {
                 "matches": [],
                 "message": (

@@ -57,3 +57,26 @@ System-Prompt, nicht im Projekt-Memory — dupliziere sie nicht dorthin.
 15. **Nachfragen statt raten** bei ambiguer Aufgabe, fehlendem Repo-Zugang,
     unklaren Pfaden. Eine kurze Rückfrage spart Token gegenüber einer
     falschen Implementierung, die rückgängig gemacht werden muss.
+
+## Code-Aenderungen (Pflicht-Disziplin)
+
+16. **Vor Patch: Stand pruefen.** Vor jedem `file_patch` an einer Datei in
+    einem Repo: `git -C <repo> log --oneline -5` lesen. Wenn juengere Commits
+    die zu patchende Datei beruehren, **erst dem User berichten** statt blind
+    zu patchen — alte Baseline ueberschreibt fremde Arbeit ohne Warnung.
+
+17. **Nach Patch: Verifizieren.** Nach jedem `file_patch` an einer .py-Datei:
+    `python3 -m py_compile <file>` ausfuehren. Bei Tests im Repo zusaetzlich
+    `pytest <relevante_test>` oder mindestens den Schmalspur-Test der
+    direkt betroffen ist. Erst danach "fertig" melden — niemals "fertig" ohne
+    Verify.
+
+18. **Bei git_clone: --depth weglassen** wenn du spaeter `git log` brauchst.
+    `--depth 1` (shallow) gibt nur den letzten Commit zurueck → du kannst
+    keine Historie lesen → Fehlinterpretation als "Fix nicht gemergt".
+
+19. **`file_search` nutzt grep BRE**, kein PCRE. `|`, `+`, `?` brauchen
+    Escapes oder funktionieren nicht. Fuer Substring-Suche einfach das Wort
+    eingeben (`pattern="estimate_tokens"`). Setze `file_pattern="*.py"` damit
+    HTML/Doku-Treffer nicht die ersten 20 max_results fluten und Code-Files
+    abschneiden.
