@@ -109,6 +109,37 @@ def _truncate_tool_result(result_str: str) -> str:
     return result_str
 
 
+def _canonicalize(obj: object) -> object:
+    """Macht ein Python-Objekt hashable und kanonisch fuer Signature-Vergleich.
+
+    #844 Gate 8: ersetzt String-basierte Normalisierung durch echtes
+    Struktur-Matching:
+    - dict → tuple of sorted (key, canonical(value)) — key-order-invariant
+    - list/tuple → tuple of canonical(items)
+    - int/float gleichwertig wenn numerisch gleich (5 == 5.0)
+    - str → NFC-normalisiert (Unicode-Composition-Form)
+    - bool/None → unveraendert
+    """
+    import unicodedata
+    if obj is None or isinstance(obj, bool):
+        return obj
+    if isinstance(obj, (int, float)):
+        # 5 und 5.0 gleich behandeln — wenn float ohne Nachkomma → int
+        if isinstance(obj, float) and obj.is_integer():
+            return int(obj)
+        return obj
+    if isinstance(obj, str):
+        return unicodedata.normalize("NFC", obj)
+    if isinstance(obj, dict):
+        return tuple(sorted(
+            (str(k), _canonicalize(v)) for k, v in obj.items()
+        ))
+    if isinstance(obj, (list, tuple)):
+        return tuple(_canonicalize(x) for x in obj)
+    # Fallback: stringify
+    return str(obj)
+
+
 def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     """Fingerprint eines Tool-Call-Sets für Endlosschleifen-Erkennung.
 
@@ -116,9 +147,9 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     zum selben Pfad sind legitim und kein Loop. max_rounds fängt echte Endlosschleifen ab.
     shell_exec: nur name, keine args (Output-abhängige Folgebefehle sind kein Loop).
 
-    #824: JSON-Args werden normalisiert (parse + re-serialisieren mit sort_keys und
-    compact separators), damit whitespace-Variationen (Trennzeichen-Spaces,
-    key-order) nicht zu unterschiedlichen Signaturen führen.
+    #844 Gate 8: Args werden via _canonicalize() in eine kanonische Python-
+    Struktur umgewandelt. Robust gegen JSON-Whitespace, key-order, int/float-
+    Equivalenz (5 == 5.0), Unicode-Form-Variationen.
     """
     import json as _j
     # Tools die vom Loop-Fingerprint ausgeschlossen werden (max_rounds schützt trotzdem)
@@ -130,15 +161,14 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
         if name in _LOOP_EXCLUDE:
             continue
         args_raw = getattr(fn, "arguments", "") or ""
-        # #824: Normalisieren damit gleiche Args mit verschiedenem whitespace
-        # (z.B. {"path":"foo"} vs {"path": "foo"} vs {"path":"foo"} ) dieselbe
-        # Signatur erzeugen.
+        # Args parsen + kanonisieren
         try:
-            _parsed = _j.loads(args_raw)
-            args_norm = _j.dumps(_parsed, sort_keys=True, separators=(",", ":"))
+            _parsed = _j.loads(args_raw) if isinstance(args_raw, str) else args_raw
+            canonical = _canonicalize(_parsed)
+            args_repr = repr(canonical)
         except Exception:
-            args_norm = args_raw
-        signature.append(f"{name}:{args_norm}")
+            args_repr = repr(args_raw)
+        signature.append(f"{name}:{args_repr}")
     return tuple(signature)
 
 

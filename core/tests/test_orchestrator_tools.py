@@ -84,8 +84,15 @@ class TestToolCallSignature:
         return tc
 
     def test_einzelner_tool_call(self):
+        # #844 Gate 8: signature ist jetzt canonical struct (repr()), nicht
+        # mehr JSON-String. Stabiles Property: gleicher Call → gleiche sig,
+        # tool-Name vorne im String.
         sig = _tool_call_signature([self._make_tc("read_file", '{"path":"x"}')])
-        assert sig == ('read_file:{"path":"x"}',)
+        assert len(sig) == 1
+        assert sig[0].startswith("read_file:")
+        # Idempotenz: gleicher Aufruf → gleiche signature
+        sig2 = _tool_call_signature([self._make_tc("read_file", '{"path":"x"}')])
+        assert sig == sig2
 
     def test_mehrere_tool_calls(self):
         sig = _tool_call_signature([
