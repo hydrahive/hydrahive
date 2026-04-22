@@ -17,6 +17,14 @@ class TokenBudgetRequest(BaseModel):
     warn_per_hour: int | None = None
 
 
+class CompactionThresholdRequest(BaseModel):
+    """#821: Body für PUT /admin/projects/{id}/compaction-threshold.
+    None / fehlt = modell-skalierter Default (40% des Context-Windows);
+    >0 = harte Schwelle in estimated Tokens."""
+    model_config = {"extra": "ignore"}
+    threshold: int | None = None
+
+
 def update_project_matrix_space(projects_dir: str, project_id: str, space_id: str, *, logger) -> None:
     import yaml as _yaml
     project_yaml = Path(projects_dir) / project_id / "project.yaml"
@@ -338,6 +346,71 @@ def register_project_lifecycle_routes(
             "hard_per_hour": body.hard_per_hour,
             "warn_per_hour": body.warn_per_hour,
         }
+
+    # ────────────────────────────────────────────────────────────────────
+    # #821: Pro-Projekt Compaction-Threshold Override
+    # ────────────────────────────────────────────────────────────────────
+
+    @admin_router.get("/projects/{project_id}/compaction-threshold")
+    async def get_project_compaction_threshold(project_id: str, _a: tuple = Depends(require_admin)):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        # Modell-skalierten Default mitliefern, damit das UI den Placeholder zeigen kann.
+        from .orchestrator_context import _context_window_for_model
+        model = getattr(getattr(cfg, "llm", None), "model", "") or ""
+        ctx_window = _context_window_for_model(model)
+        default_threshold = max(8_000, int(ctx_window * 0.40))
+        return {
+            "project_id": project_id,
+            "threshold": getattr(cfg, "compaction_threshold", None),
+            "model": model,
+            "context_window": ctx_window,
+            "default_threshold": default_threshold,
+        }
+
+    @admin_router.put("/projects/{project_id}/compaction-threshold")
+    async def set_project_compaction_threshold(
+        project_id: str,
+        body: CompactionThresholdRequest,
+        _a: tuple = Depends(require_admin),
+    ):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        # Validation: 0 macht keinen Sinn (kein "deaktiviert" sondern wuerde sofort triggern).
+        # Erlaubt: None (Default loeschen) oder >0 (echte Schwelle).
+        if body.threshold is not None and body.threshold <= 0:
+            raise HTTPException(400, "threshold muss > 0 sein (leer = modell-skalierter Default)")
+        # Sanity-Untergrenze: alles unter 4k waere absurd niedrig, oberhalb des Context-Windows
+        # auch sinnlos — aber das laesst sich modellabhaengig nicht hart cappen, also nur Floor.
+        if body.threshold is not None and body.threshold < 4_000:
+            raise HTTPException(400, "threshold sollte mindestens 4000 sein (sonst kompaktiert HydraHive bei jeder Antwort)")
+
+        config_path = Path(projects_dir) / project_id / "config.yaml"
+        if not config_path.exists():
+            raise HTTPException(404, "config.yaml nicht gefunden — kein v2-Projekt")
+        import yaml as _yaml
+        try:
+            data = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            if body.threshold is None:
+                data.pop("compaction_threshold", None)
+            else:
+                data["compaction_threshold"] = int(body.threshold)
+            tmp = config_path.with_suffix(".yaml.tmp")
+            tmp.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+            tmp.replace(config_path)
+        except Exception as e:
+            logger.error("compaction_threshold für '%s' konnte nicht geschrieben werden: %s", project_id, e)
+            raise HTTPException(500, f"Schreiben fehlgeschlagen: {e}")
+
+        try:
+            projects._register(config_path.parent)
+        except Exception as e:
+            logger.warning("ProjectLoader-Reload für '%s' nach compaction_threshold-Update fehlgeschlagen: %s", project_id, e)
+
+        audit_log("project.compaction_threshold_set", target=project_id, details={"threshold": body.threshold})
+        return {"updated": True, "project_id": project_id, "threshold": body.threshold}
 
     @admin_router.post("/projects/reprovision-all")
     async def reprovision_all_projects(_a: tuple = Depends(require_admin)):

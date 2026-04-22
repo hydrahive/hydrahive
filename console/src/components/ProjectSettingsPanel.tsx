@@ -146,6 +146,12 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [tokenWarnPerHour, setTokenWarnPerHour] = useState<string>("");
   const [tokenBudgetSaving, setTokenBudgetSaving] = useState(false);
   const [tokenBudgetMsg, setTokenBudgetMsg] = useState<string>("");
+  // #821: Pro-Projekt Compaction-Threshold Override (leer = modell-skalierter Default)
+  const [compactionThreshold, setCompactionThreshold] = useState<string>("");
+  const [compactionDefault, setCompactionDefault] = useState<number | null>(null);
+  const [compactionModel, setCompactionModel] = useState<string>("");
+  const [compactionSaving, setCompactionSaving] = useState(false);
+  const [compactionMsg, setCompactionMsg] = useState<string>("");
 
   // WhatsApp
   const [waStatus, setWaStatus] = useState<string>("unknown");
@@ -411,6 +417,13 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         setTokenHardPerHour(tb.hard_per_hour === null || tb.hard_per_hour === undefined ? "" : String(tb.hard_per_hour));
         setTokenWarnPerHour(tb.warn_per_hour === null || tb.warn_per_hour === undefined ? "" : String(tb.warn_per_hour));
       } catch { /* ignore — Endpoint kann auf älteren Cores fehlen */ }
+      // #821: Compaction-Threshold Override separat laden
+      try {
+        const ct = await api.getProjectCompactionThreshold(projectId);
+        setCompactionThreshold(ct.threshold === null || ct.threshold === undefined ? "" : String(ct.threshold));
+        setCompactionDefault(ct.default_threshold);
+        setCompactionModel(ct.model);
+      } catch { /* ignore */ }
     }
   }
 
@@ -440,6 +453,30 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setTokenBudgetMsg(`Fehler: ${e?.message || "unbekannt"}`);
     } finally {
       setTokenBudgetSaving(false);
+    }
+  }
+
+  async function saveCompactionThreshold() {
+    setCompactionSaving(true);
+    setCompactionMsg("");
+    const trimmed = compactionThreshold.trim();
+    let payload: number | null = null;
+    if (trimmed) {
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 4000) {
+        setCompactionMsg("Wert muss leer (= modell-skalierter Default) oder eine ganze Zahl >= 4000 sein.");
+        setCompactionSaving(false);
+        return;
+      }
+      payload = Math.floor(n);
+    }
+    try {
+      const r = await api.setProjectCompactionThreshold(projectId, { threshold: payload });
+      setCompactionMsg(`Gespeichert. Threshold=${r.threshold ?? "(modell-skalierter Default)"}`);
+    } catch (e: any) {
+      setCompactionMsg(`Fehler: ${e?.message || "unbekannt"}`);
+    } finally {
+      setCompactionSaving(false);
     }
   }
 
@@ -706,6 +743,51 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
                 {tokenBudgetMsg && (
                   <span className={`text-[10px] ${tokenBudgetMsg.startsWith("Fehler") ? "text-destructive" : "text-green-600"}`}>
                     {tokenBudgetMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* #821: Compaction-Threshold Override pro Projekt (Admin-only) */}
+          {isAdmin && (
+            <div className="md:col-span-2 border rounded-lg p-3 bg-muted/20">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
+                <Shield className="h-3 w-3" />
+                <span className="font-medium">Compaction-Threshold (estimated Tokens)</span>
+                <span className="text-[10px]">— ab welcher Conversation-Größe automatisch zusammengefasst wird</span>
+              </div>
+              <div>
+                <input
+                  type="number"
+                  min={4000}
+                  step={1000}
+                  placeholder={
+                    compactionDefault !== null
+                      ? `modell-skalierter Default: ${compactionDefault.toLocaleString("de-DE")}${compactionModel ? ` (${compactionModel})` : ""}`
+                      : "modell-skalierter Default"
+                  }
+                  value={compactionThreshold}
+                  onChange={e => setCompactionThreshold(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Höher = mehr History bleibt erhalten, aber höhere Kosten/Latenz pro Request.
+                  Default ist 40 % des Context-Windows. Bei MiniMax/Claude (200k) → 80 000.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={saveCompactionThreshold}
+                  disabled={compactionSaving}
+                  className="px-2 py-1 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                >
+                  {compactionSaving ? "Speichere…" : "Threshold speichern"}
+                </button>
+                {compactionMsg && (
+                  <span className={`text-[10px] ${compactionMsg.startsWith("Fehler") ? "text-destructive" : "text-green-600"}`}>
+                    {compactionMsg}
                   </span>
                 )}
               </div>

@@ -329,6 +329,11 @@ export const api = {
     api.get<{project_id:string; hard_per_hour:number|null; warn_per_hour:number|null}>(`/projects/${id}/token-budget`),
   setProjectTokenBudget: (id: string, body: {hard_per_hour:number|null; warn_per_hour:number|null}) =>
     api.put<{updated:boolean; project_id:string; hard_per_hour:number|null; warn_per_hour:number|null}>(`/projects/${id}/token-budget`, body),
+  // #821: Pro-Projekt Compaction-Threshold Override.
+  getProjectCompactionThreshold: (id: string) =>
+    api.get<{project_id:string; threshold:number|null; model:string; context_window:number; default_threshold:number}>(`/projects/${id}/compaction-threshold`),
+  setProjectCompactionThreshold: (id: string, body: {threshold:number|null}) =>
+    api.put<{updated:boolean; project_id:string; threshold:number|null}>(`/projects/${id}/compaction-threshold`, body),
   // Voice Interface (#131 + Provider-Registry #794)
   voiceStatus:    () => api.get<{
     installed: boolean;
