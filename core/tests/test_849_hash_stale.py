@@ -73,6 +73,10 @@ class TestHashStaleDetection:
 
         assert result.get("stale") is True
         assert "#849" in result.get("error", "")
+        # #854: hash fields for debugging transparency
+        assert "hash_at_read" in result
+        assert "hash_now" in result
+        assert result["hash_at_read"] != result["hash_now"]
 
     """T2: File unchanged → patch succeeds normally"""
 

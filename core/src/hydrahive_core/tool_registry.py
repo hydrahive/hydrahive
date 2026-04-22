@@ -1356,6 +1356,8 @@ class FilePatchTool(BaseTool):
                     "stale": True,
                     "error": f"#849 Stale-Detection: '{path}' wurde seit dem letzten file_read geändert.",
                     "path": resolved,
+                    "hash_at_read": stored_hash,
+                    "hash_now": current_hash,
                     "hint": "Erneut file_read aufrufen (mit force_stale=true wenn du sicher bist).",
                 }
 
