@@ -82,8 +82,18 @@ def _has_assert(func: ast.FunctionDef) -> bool:
     return False
 
 
-def _is_trivial_assert(node: ast.Assert) -> bool:
-    """assert True, assert 1 == 1, assert x == x, assert (...) == (selber-call)."""
+def _is_trivial_assert(
+    node: ast.Assert,
+    literal_bindings: dict[str, Any] | None = None,
+) -> bool:
+    """assert True, assert 1 == 1, assert x == x, assert (...) == (selber-call).
+
+    #847: mit `literal_bindings` (map var-name -> Konstantenwert, gesammelt aus
+    vorausgehenden ast.Assign-Knoten) wird auch erkannt:
+        x = 5
+        assert x == 5      # Literal-Reflektion: x bindet literal, Compare ist
+                           # exakt dieselbe Konstante.
+    """
     test = node.test
     # assert True / assert 1 / assert <constant truthy>
     if isinstance(test, ast.Constant):
@@ -96,7 +106,55 @@ def _is_trivial_assert(node: ast.Assert) -> bool:
             right = ast.dump(test.comparators[0])
             if left == right:
                 return True
+            # #847: Literal-Reflektion — Name == Constant wo Name vorher
+            # genau dieser Constant zugewiesen wurde.
+            if literal_bindings:
+                left_val = _resolve_literal_binding(test.left, literal_bindings)
+                right_val = _resolve_literal_binding(test.comparators[0], literal_bindings)
+                if (
+                    left_val is not _SENTINEL
+                    and right_val is not _SENTINEL
+                    and type(left_val) == type(right_val)
+                    and left_val == right_val
+                ):
+                    return True
     return False
+
+
+# Sentinel-Wert fuer "nicht auflösbar" — wir koennen None nicht verwenden weil
+# None selbst ein legitimer Constant-Wert ist.
+_SENTINEL = object()
+
+
+def _resolve_literal_binding(
+    expr: ast.expr,
+    literal_bindings: dict[str, Any],
+) -> Any:
+    """#847: Wenn expr ein ast.Name ist der auf einen Literal gebunden wurde,
+    gib den Literal-Wert zurueck. Wenn expr selbst ein ast.Constant ist, gib
+    dessen Wert zurueck. Sonst _SENTINEL."""
+    if isinstance(expr, ast.Constant):
+        return expr.value
+    if isinstance(expr, ast.Name) and expr.id in literal_bindings:
+        return literal_bindings[expr.id]
+    return _SENTINEL
+
+
+def _collect_literal_bindings(func: ast.FunctionDef) -> dict[str, Any]:
+    """#847: Sammelt einfache `name = <Constant>`-Bindungen innerhalb einer
+    Funktion. Re-Bindungen ueberschreiben. Konservativ: nur direktes
+    `x = 42`, keine Tupel-Assigns, keine Attribute, keine Subscripts.
+    """
+    bindings: dict[str, Any] = {}
+    for node in ast.walk(func):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant)
+        ):
+            bindings[node.targets[0].id] = node.value.value
+    return bindings
 
 
 def _self_validating_assert(func: ast.FunctionDef) -> tuple[bool, str]:
@@ -207,14 +265,15 @@ def lint_test_file(content: str, path: Path | None = None) -> list[dict[str, Any
                 "match": f"def {func.name}(...) hat kein assert/raises",
             })
             continue  # weitere Checks irrelevant ohne assert
-        # 3. trivial assert
+        # 3. trivial assert (#847: inkl. Literal-Reflektion x=5; assert x==5)
+        _lit_bindings = _collect_literal_bindings(func)
         for node in ast.walk(func):
-            if isinstance(node, ast.Assert) and _is_trivial_assert(node):
+            if isinstance(node, ast.Assert) and _is_trivial_assert(node, _lit_bindings):
                 violations.append({
                     "rule": "trivial_assert",
                     "line": node.lineno,
                     "function": func.name,
-                    "match": "assert True / x == x / aehnlich",
+                    "match": "assert True / x == x / x=5; assert x==5 / aehnlich",
                 })
                 break
         # 4. self-validating

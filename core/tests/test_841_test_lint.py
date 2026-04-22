@@ -188,3 +188,92 @@ def test_lint_no_bypass_kwarg():
     sig = inspect.signature(lint_test_file)
     for p in sig.parameters:
         assert p not in ("skip", "bypass", "force"), f"bypass-Param '{p}'"
+
+
+# =============================================================================
+# #847 — Literal-Reflektion: x = 5; assert x == 5
+# =============================================================================
+
+def test_lint_rejects_literal_reflection_int():
+    """#847: `x = 5; assert x == 5` testet effektiv nichts und muss als
+    trivial_assert gemeldet werden."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    x = 5
+    assert x == 5
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert any(e["rule"] == "trivial_assert" for e in v), f"erwartet trivial_assert in {v}"
+
+
+def test_lint_rejects_literal_reflection_string():
+    """#847: gleiches Pattern fuer String-Literal."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    name = "foo"
+    assert name == "foo"
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert any(e["rule"] == "trivial_assert" for e in v), f"erwartet trivial_assert in {v}"
+
+
+def test_lint_rejects_literal_reflection_reversed():
+    """#847: assert 5 == x wo x = 5 vorher — auch mit Konstante auf der
+    linken Seite."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    x = 5
+    assert 5 == x
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert any(e["rule"] == "trivial_assert" for e in v), f"erwartet trivial_assert in {v}"
+
+
+def test_lint_accepts_literal_vs_computed():
+    """#847 Gegenprobe: Computed-Value == Literal ist legitim."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    result = 2 + 2
+    assert result == 4
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert not any(e["rule"] == "trivial_assert" for e in v), (
+        f"Computed result vs. Literal darf nicht trivial sein: {v}"
+    )
+
+
+def test_lint_accepts_different_literals():
+    """#847 Gegenprobe: Literal-Binding mit UNTERSCHIEDLICHEM Compare-Literal
+    (Tippfehler-Test) ist kein trivial_assert sondern ein legitimer (falsche)
+    assert, der zur Laufzeit scheitern wuerde."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    x = 5
+    assert x == 6
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert not any(e["rule"] == "trivial_assert" for e in v), (
+        f"Literal-Mismatch darf nicht trivial sein: {v}"
+    )
+
+
+def test_lint_literal_reflection_respects_rebinding():
+    """#847: Wenn x mehrfach neu gebunden wird, gilt der letzte Wert. Gegen-
+    beispiel: x=5; x=10; assert x == 10 — das ist Literal-Reflection (x
+    bindet zuletzt literal 10, Compare gegen 10)."""
+    from hydrahive_core.test_lint import lint_test_file
+    code = """
+def test_x():
+    x = 5
+    x = 10
+    assert x == 10
+"""
+    v = lint_test_file(code, Path("test_x.py"))
+    assert any(e["rule"] == "trivial_assert" for e in v), (
+        f"Re-Binding auf letzten Literal gleich Compare-Literal ist trivial: {v}"
+    )
