@@ -761,7 +761,10 @@ class Orchestrator:
         # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
-        await self._compact_if_needed(project_id, boss_cfg)
+        _project_compaction = getattr(project_cfg, "compaction_threshold", None)
+        await self._compact_if_needed(
+            project_id, boss_cfg, threshold_override=_project_compaction,
+        )
         messages = [{"role": "system", "content": system_prompt}]
         _sys_prompt_tokens = _estimate_tokens(system_prompt)
         _hist_budget = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens)
@@ -915,7 +918,10 @@ class Orchestrator:
                     project_id, str(e)[:120],
                 )
                 try:
-                    await self._compact_if_needed(project_id, boss_cfg, keep_last=4)
+                    await self._compact_if_needed(
+                        project_id, boss_cfg, keep_last=4,
+                        threshold_override=_project_compaction,
+                    )
                     # Context neu aufbauen mit kompaktierter Session
                     _compacted_history = self._sessions.get_context(
                         project_id, max_history_tokens=_hist_budget,
@@ -1042,8 +1048,18 @@ class Orchestrator:
 
     # ----------------------------------------------------------------- Delegiert an Sub-Module
 
-    async def _compact_if_needed(self, project_id: str, boss_cfg, keep_last: int = 6) -> None:
-        return await _compact_if_needed_fn(self._sessions, project_id, boss_cfg, keep_last=keep_last)
+    async def _compact_if_needed(
+        self,
+        project_id: str,
+        boss_cfg,
+        keep_last: int = 6,
+        *,
+        threshold_override: int | None = None,
+    ) -> None:
+        return await _compact_if_needed_fn(
+            self._sessions, project_id, boss_cfg,
+            keep_last=keep_last, threshold_override=threshold_override,
+        )
 
     @staticmethod
     def _context_mode(user_text: str) -> str:

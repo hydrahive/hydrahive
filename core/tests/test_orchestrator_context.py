@@ -166,10 +166,10 @@ class TestCompactIfNeeded:
         sessions.new_session.assert_not_called()
 
     async def test_lokales_modell_niedrigerer_schwellwert(self):
+        # Unbekanntes Modell → ctx_window-Fallback 8k → threshold = max(8k, 8k*0.4) = 8k
+        # 10k > 8k → kompaktieren.
         sessions = self._make_sessions(estimated_tokens=10_000)
-        boss_cfg = self._make_boss_cfg(model="llama3.2")
-        # lokales Modell: threshold=8000, 10000 > 8000 → kompaktieren
-        # #416: Full-Compaction bei 80% (6400) wird auch ausgelöst → 2 compact-Calls
+        boss_cfg = self._make_boss_cfg(model="some-unknown-tiny-model")
         with patch("hydrahive_core.orchestrator_llm._llm_with_retry", new_callable=AsyncMock) as mock_retry:
             mock_resp = MagicMock()
             mock_resp.choices[0].message.content = "Zusammenfassung"

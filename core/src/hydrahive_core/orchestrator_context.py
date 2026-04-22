@@ -165,7 +165,7 @@ _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     # Meta Llama 3.3 — 128k.
     "llama":    128_000,
 }
-_MAX_HISTORY_SHARE = 0.30  # max 30% des Kontextfensters für History (OpenClaw-Stil)
+_MAX_HISTORY_SHARE = 0.50  # max 50% des Kontextfensters für History (#820/Folge: 0.30 war zu eng)
 _RESERVE_TOKENS_FLOOR = 20_000  # Immer 20k frei für Response (OpenClaw: reserveTokensFloor)
 
 
@@ -1280,6 +1280,7 @@ async def _compact_if_needed(
     *,
     keep_last: int = 10,
     keep_last_rounds: int = 3,
+    threshold_override: int | None = None,
 ) -> None:
     """
     Mehrstufige Context-Kompaktierung (#47, #349 OpenClaw-Qualität).
@@ -1298,19 +1299,19 @@ async def _compact_if_needed(
     """
     from .session_manager import MessageRole
 
-    # Agent-spezifischer Override oder Model-basierter Default
-    if getattr(boss_cfg, "compaction_threshold", None):
-        token_threshold = boss_cfg.compaction_threshold
-    else:
-        model = boss_cfg.llm.model.lower()
-        if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5", "minimax")):
-            token_threshold = 40_000  # 40k estimated ≈ 100k real — Claude hat 200k, viel Spielraum
-        else:
-            token_threshold = 8_000
-
     # #416: Full-Compaction bei 80% des Context-Windows
     ctx_window = _context_window_for_model(boss_cfg.llm.model)
     full_compaction_threshold = int(ctx_window * 0.80)
+
+    # Threshold-Resolution: Projekt-Override > Agent-Override > modell-skalierter Default.
+    # Modell-Skalierung: 40% des Context-Windows (estimated). Bei MiniMax/Claude 200k → 80k,
+    # Qwen 262k → 104k, GPT-4o/Gemini 128k → 51k. Floor 8k für kleine/unbekannte Modelle.
+    if isinstance(threshold_override, int) and threshold_override > 0:
+        token_threshold = threshold_override
+    elif isinstance(getattr(boss_cfg, "compaction_threshold", None), int):
+        token_threshold = boss_cfg.compaction_threshold
+    else:
+        token_threshold = max(8_000, int(ctx_window * 0.40))
 
     # openai-codex/ ist ein Custom-Provider — litellm kennt ihn nicht.
     # Für Kompaktierung auf Claude Haiku fallbacken.

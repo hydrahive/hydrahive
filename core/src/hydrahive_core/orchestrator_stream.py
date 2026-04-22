@@ -285,7 +285,10 @@ async def handle_message_stream(
     _journal.append(_sid, project_id, _JE.USER_MESSAGE, {"length": len(_save_content)})
 
     # Context-Kompaktierung vor dem LLM-Aufruf
-    await orch._compact_if_needed(project_id, boss_cfg)
+    _project_compaction_s = getattr(project_cfg, "compaction_threshold", None)
+    await orch._compact_if_needed(
+        project_id, boss_cfg, threshold_override=_project_compaction_s,
+    )
 
     _content_str = _text_content if isinstance(_text_content, str) else str(_text_content)
     _refresh = _content_str.strip().startswith("!refresh")
@@ -573,7 +576,10 @@ async def handle_message_stream(
             )
             try:
                 from .orchestrator_context import _compact_if_needed as _compact_fn
-                await _compact_fn(orch._sessions, project_id, boss_cfg, keep_last=4)
+                await _compact_fn(
+                    orch._sessions, project_id, boss_cfg, keep_last=4,
+                    threshold_override=_project_compaction_s,
+                )
                 yield f"data: {_json.dumps({'text': '[Kontext wurde automatisch kompaktiert — fahre fort…]\\n\\n'})}\n\n"
                 # Kompaktierten Context neu aufbauen und zweiten Streaming-Versuch starten.
                 # #636: derselbe einheitliche Builder wie im Hauptpfad.

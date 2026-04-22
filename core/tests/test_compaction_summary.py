@@ -305,7 +305,8 @@ async def test_auto_compaction_uses_structured_builder(monkeypatch, tmp_path):
     session = _make_session(msgs * 30, working_state=ws)  # inflate für Threshold
 
     sessions = MagicMock()
-    sessions.estimated_tokens = MagicMock(return_value=50_000)
+    # Claude 200k Window * 0.40 = 80_000 Default-Threshold → 90k triggert.
+    sessions.estimated_tokens = MagicMock(return_value=90_000)
     sessions.get_active = MagicMock(return_value=session)
     sessions.compact = AsyncMock()
     sessions.new_session = AsyncMock()
@@ -373,7 +374,8 @@ async def test_auto_compaction_redacts_llm_response(monkeypatch, tmp_path):
         working_state=_make_ws(current_goal=""),
     )
     sessions = MagicMock()
-    sessions.estimated_tokens = MagicMock(return_value=50_000)
+    # Claude 200k Window * 0.40 = 80_000 Default-Threshold → 90k triggert.
+    sessions.estimated_tokens = MagicMock(return_value=90_000)
     sessions.get_active = MagicMock(return_value=session)
     sessions.compact = AsyncMock()
     sessions.new_session = AsyncMock()

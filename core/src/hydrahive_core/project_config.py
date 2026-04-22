@@ -175,6 +175,12 @@ class ProjectConfig(BaseModel):
     # v2: Max Tool-Runden pro Chat-Nachricht (#613)
     max_tool_rounds: int = 50
 
+    # Compaction-Threshold-Override pro Projekt (estimated Tokens). None =
+    # modell-skalierter Default (40% des Context-Windows). Hoeher setzen
+    # heisst spaeter kompaktieren = mehr History bleibt erhalten; sinnvoll
+    # bei grossen Modellen wenn die Standard-40% noch zu konservativ wirken.
+    compaction_threshold: int | None = None
+
     # #820: Token-Budget Override pro Projekt. Überschreibt den globalen
     # Default (RateLimitSettings.agent_token_*_per_hour bzw. Env
     # HYDRAHIVE_TOKEN_HARD_PER_HOUR). Beide Werte sind optional:
