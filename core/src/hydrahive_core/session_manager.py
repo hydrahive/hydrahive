@@ -579,24 +579,52 @@ class SessionManager:
     # ------------------------------------------------------------------ public
 
     def start(self) -> None:
-        """DB initialisieren und aktive Sessions wiederherstellen."""
+        """DB initialisieren und aktive Sessions wiederherstellen.
+
+        #846: Pro project_id nur die **neueste** noch nicht beendete Session
+        als aktiv übernehmen. Ältere Geister-Sessions (mehrere ended_at IS NULL
+        für dasselbe Projekt, z.B. durch Core-Crash vor sauberem Shutdown)
+        werden automatisch beendet, damit beim nächsten send_message keine
+        falsche Session-ID zurückkommt.
+        """
         self._db = self._init_db()
 
-        restored = 0
+        # Sortiert nach started_at DESC — die erste Row pro project_id ist die neueste.
         rows = self._db.execute(
-            "SELECT id, project_id, started_at, ended_at FROM sessions WHERE ended_at IS NULL"
+            "SELECT id, project_id, started_at, ended_at FROM sessions "
+            "WHERE ended_at IS NULL ORDER BY started_at DESC"
         ).fetchall()
+
+        ghosts_ended = 0
+        restored = 0
+        seen_projects: set[str] = set()
+        now_iso = datetime.now(timezone.utc).isoformat()
         for row in rows:
+            pid = row["project_id"]
+            if pid in seen_projects:
+                # Geist: aeltere NULL-Session fuer project_id, bereits neuere aktiv.
+                self._db.execute(
+                    "UPDATE sessions SET ended_at = ? WHERE id = ?",
+                    (now_iso, row["id"]),
+                )
+                ghosts_ended += 1
+                continue
             session = Session(
                 id=row["id"],
-                project_id=row["project_id"],
+                project_id=pid,
                 started_at=row["started_at"],
                 ended_at=None,
                 messages=self._load_messages(row["id"]),
             )
-            self._active[session.project_id] = session
+            self._active[pid] = session
+            seen_projects.add(pid)
             restored += 1
-        logger.info("SessionManager gestartet (SQLite) — %d aktive Sessions wiederhergestellt", restored)
+        if ghosts_ended:
+            self._db.commit()
+        logger.info(
+            "SessionManager gestartet (SQLite) — %d aktive Sessions wiederhergestellt, %d Geister beendet",
+            restored, ghosts_ended,
+        )
 
     def get_or_create(self, project_id: str) -> Session:
         """Gibt aktive Session zurück oder startet eine neue (synchron, ohne Lock)."""
@@ -643,6 +671,35 @@ class SessionManager:
         except Exception as e:
             logger.warning("Session-Memory konnte nicht gespeichert werden: %s", e)
 
+    def _db_end_all_unended_for_project(self, project_id: str, *, except_id: str | None = None) -> int:
+        """#846: alle noch nicht beendeten Sessions fuer project_id in der DB
+        beenden (ended_at = jetzt). Nicht-persistente Seiteneffekte (memory,
+        in-memory pop) bleiben der aufrufenden Stelle ueberlassen.
+
+        Gibt Anzahl der gecleanten Geister zurueck. except_id wird uebersprungen
+        (z.B. die frisch erstellte Session).
+        """
+        if self._db is None:
+            return 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if except_id:
+            cur = self._db.execute(
+                "UPDATE sessions SET ended_at = ? "
+                "WHERE project_id = ? AND ended_at IS NULL AND id <> ?",
+                (now_iso, project_id, except_id),
+            )
+        else:
+            cur = self._db.execute(
+                "UPDATE sessions SET ended_at = ? "
+                "WHERE project_id = ? AND ended_at IS NULL",
+                (now_iso, project_id),
+            )
+        n = cur.rowcount or 0
+        if n:
+            self._db.commit()
+            logger.info("#846: %d DB-Geister fuer Projekt '%s' beendet", n, project_id)
+        return n
+
     async def new_session(self, project_id: str) -> Session:
         """Neue Session starten — alte wird automatisch beendet und gespeichert."""
         async with self._get_lock(project_id):
@@ -657,6 +714,9 @@ class SessionManager:
             session = Session.new(project_id)
             self._active[project_id] = session
             self._db_insert_session(session)
+            # #846: defensive — falls durch Crash-/Shutdown-Race DB-Geister existieren,
+            # jetzt aufraeumen. Die gerade erstellte Session ausnehmen.
+            self._db_end_all_unended_for_project(project_id, except_id=session.id)
             logger.info("Neue Session: %s (Projekt: %s)", session.id[:8], project_id)
             return session
 
@@ -669,6 +729,9 @@ class SessionManager:
                 self._db_end_session(session)
                 self._write_session_memory(project_id, session)
                 logger.info("Session %s beendet", session.id[:8])
+            # #846: DB-Geister fuer project_id aufraeumen, auch wenn keine
+            # in-memory Session existiert (Szenario: Server-Restart mitten im QA-Flow).
+            self._db_end_all_unended_for_project(project_id)
             if project_id in self._locks:
                 del self._locks[project_id]
             return session

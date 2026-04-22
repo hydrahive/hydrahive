@@ -284,3 +284,97 @@ def test_merge_consecutive_roles_still_merges_plain_text():
     assert len(out) == 1
     assert "Erste Antwort" in out[0]["content"]
     assert "Zweite Antwort" in out[0]["content"]
+
+
+# =============================================================================
+# #846 — DB-Geister-Sessions (mehrere ended_at IS NULL pro project_id)
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_start_cleans_up_ghost_sessions(tmp_path):
+    """#846: Nach Core-Crash koennen mehrere Sessions pro project_id mit
+    ended_at=None in der DB liegen. start() darf nur die neueste als
+    aktiv uebernehmen, alle aelteren Geister muessen automatisch beendet
+    werden."""
+    import sqlite3
+
+    # SessionManager 1: erstelle 3 Geister-Sessions fuer gleichen project_id
+    mgr1 = SessionManager(projects_dir=tmp_path)
+    mgr1.start()
+    s1 = await mgr1.new_session("proj-x")
+    # Zweite: simuliere Crash — ended_at bleibt NULL in DB
+    s2 = await mgr1.new_session("proj-x")
+    s3 = await mgr1.new_session("proj-x")
+    # Durch new_session wurden s1,s2 sauber beendet. Simuliere Crash:
+    # manuell NULL-ended_at wieder eintragen fuer s1 und s2 — ueber mgr1's
+    # eigenes DB-Handle, dann close damit mgr2 einen frischen Reload macht.
+    mgr1._db.execute("UPDATE sessions SET ended_at = NULL WHERE id IN (?, ?)", (s1.id, s2.id))
+    mgr1._db.commit()
+    mgr1._db.close()
+    mgr1._db = None
+
+    # SessionManager 2: neuer Start, liest DB neu
+    mgr2 = SessionManager(projects_dir=tmp_path)
+    mgr2.start()
+
+    # Nur s3 (neueste) sollte als aktive geladen sein
+    active = mgr2.get_active("proj-x")
+    assert active is not None
+    assert active.id == s3.id, (
+        f"Erwartet neueste Session {s3.id}, got {active.id if active else None}"
+    )
+
+    # s1 und s2 muessen in DB als ended markiert sein
+    row1 = mgr2._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (s1.id,)).fetchone()
+    row2 = mgr2._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (s2.id,)).fetchone()
+    assert row1["ended_at"] is not None, "Geister-Session s1 muss beendet sein"
+    assert row2["ended_at"] is not None, "Geister-Session s2 muss beendet sein"
+
+
+@pytest.mark.asyncio
+async def test_end_session_cleans_db_ghosts(sm, tmp_path):
+    """#846: end_session raeumt DB-Geister fuer project_id auf, auch wenn
+    die in-memory Session bereits weg ist (Szenario: Client DELETE nach
+    Core-Restart ohne vorherigen send_message)."""
+    import sqlite3
+
+    # Manuell einen Geist in die DB einfuegen (simuliert abgestorbene Session
+    # aus vorherigem Core-Run).
+    ghost_id = "ghost-deadbeef-0000-0000-0000-000000000000"
+    sm._db.execute(
+        "INSERT INTO sessions (id, project_id, started_at, ended_at) VALUES (?, ?, ?, NULL)",
+        (ghost_id, "proj-y", "2026-04-22T10:00:00+00:00"),
+    )
+    sm._db.commit()
+
+    # Keine in-memory Session fuer proj-y
+    assert sm.get_active("proj-y") is None
+
+    # DELETE-Call auf Projekt ohne aktive Session
+    result = await sm.end_session("proj-y")
+    assert result is None, "end_session ohne aktive Session gibt None zurueck"
+
+    # DB-Geist muss trotzdem beendet sein
+    row = sm._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (ghost_id,)).fetchone()
+    assert row["ended_at"] is not None, "Geist muss durch end_session beendet worden sein"
+
+
+@pytest.mark.asyncio
+async def test_new_session_cleans_db_ghosts(sm):
+    """#846: new_session raeumt DB-Geister fuer project_id auf (ausser der
+    frisch erstellten), damit bei naechstem Reload kein Geist wiederkommt."""
+    ghost_id = "ghost-aaaaaaaa-0000-0000-0000-000000000000"
+    sm._db.execute(
+        "INSERT INTO sessions (id, project_id, started_at, ended_at) VALUES (?, ?, ?, NULL)",
+        (ghost_id, "proj-z", "2026-04-22T10:00:00+00:00"),
+    )
+    sm._db.commit()
+
+    # Neue Session fuer proj-z starten
+    fresh = await sm.new_session("proj-z")
+
+    # Geist muss beendet sein, fresh noch aktiv (NULL)
+    row_ghost = sm._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (ghost_id,)).fetchone()
+    row_fresh = sm._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (fresh.id,)).fetchone()
+    assert row_ghost["ended_at"] is not None, "Geist muss beendet sein"
+    assert row_fresh["ended_at"] is None, "Frische Session muss noch aktiv sein"
