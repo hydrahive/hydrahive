@@ -198,7 +198,9 @@ main() {
 
     # --- 3. Python-Dependencies ---
     info "Installiere Python-Dependencies..."
-    "${VENV}/bin/pip" install -e "${HYDRAHIVE_DIR}/core/" -q \
+    # #848: extras=hf zieht transformers mit (HuggingFace-Tokenizer fuer MiniMax/Kimi).
+    # Ohne hf faellt Gate #843 auf chars/3.2-Heuristik zurueck.
+    "${VENV}/bin/pip" install -e "${HYDRAHIVE_DIR}/core/[hf]" -q \
         || error "pip install fehlgeschlagen"
     success "Python-Dependencies aktualisiert"
 

@@ -48,7 +48,9 @@ $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
 
 echo ""
 echo "==> [3/5] pip install auf VM"
-$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e '${INSTALL_DIR}/core[dev]' -q"
+# #848: extras=hf zieht transformers mit (HuggingFace-Tokenizer fuer MiniMax/Kimi).
+# Ohne hf wuerde Gate #843 auf chars/3.2-Heuristik zurueckfallen.
+$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e '${INSTALL_DIR}/core[dev,hf]' -q"
 # Playwright-Browser einmalig installieren (ohne --with-deps, da apt an unsigned Repos scheitert)
 $SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/playwright install chromium 2>&1 | tail -3 || true"
 
