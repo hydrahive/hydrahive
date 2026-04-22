@@ -1126,6 +1126,8 @@ class FileReadTool(BaseTool):
     ) -> dict:
         # #840 Gate 4: Runtime-Floor zusaetzlich zum Schema, falls Provider
         # den Schema-Check nicht durchsetzt (defensive).
+        # #850: Merke Original-Wert fuer Clamp-Hinweis.
+        original_limit = limit
         if limit < 4000:
             limit = 4000
         if limit > 32000:
@@ -1153,6 +1155,8 @@ class FileReadTool(BaseTool):
             FileWriteTool.mark_read(agent_id, str(safe_path))
             FileWriteTool.mark_read_hash(str(safe_path))
             result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
+            if original_limit != limit:
+                result["note"] = f"limit {original_limit} clamped to {limit} (min 4000, max 32000)"
             if has_more:
                 result["has_more"] = True
                 result["next_offset"] = offset + limit
