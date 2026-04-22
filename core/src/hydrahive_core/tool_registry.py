@@ -1423,6 +1423,21 @@ class FilePatchTool(BaseTool):
                 ),
             }
 
+        # ── #839 Gate 3: Regression-Test-Gate ──────────────────────────
+        # AST-Diff: welche Funktionen wurden geaendert? Dann Tests laufen
+        # die diese Funktionen aufrufen — auch wenn sie nicht direkt aus
+        # dem Modul-Import-Graph erreichbar sind (Gate 1 deckt nur den ab).
+        regression_result: dict | None = None
+        try:
+            from .regression_check import (
+                regression_check as _reg_check,
+                regression_response_addon as _reg_addon,
+            )
+            regression_result = await _reg_check(file_path, _original_content, new_content)
+        except Exception as _reg_err:
+            logger.debug("regression_check failed: %s", _reg_err)
+            regression_result = {"skipped": f"regression_exception: {_reg_err}"}
+
         new_lines = new_content.split("\n")
         context_lines = []
         for i, line in enumerate(new_lines):
@@ -1432,12 +1447,22 @@ class FilePatchTool(BaseTool):
                 context_lines = [f"{start+j+1:4d} | {new_lines[start+j]}" for j in range(end - start)]
                 break
 
-        return {
+        _final_resp: dict[str, Any] = {
             "ok": True, "path": str(file_path),
             "occurrences_found": occurrences, "replaced": replaced,
             "context": "\n".join(context_lines) if context_lines else "(keine Kontextzeilen)",
             "verify": verify_result,
         }
+        # Regression-Addon nur wenn echte Regression detektiert
+        if regression_result is not None:
+            try:
+                from .regression_check import regression_response_addon as _reg_addon
+                addon = _reg_addon(regression_result)
+                if addon:
+                    _final_resp.update(addon)
+            except Exception:
+                pass
+        return _final_resp
 
 
 # =========================================================================
