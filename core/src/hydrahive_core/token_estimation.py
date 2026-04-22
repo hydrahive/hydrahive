@@ -27,6 +27,36 @@ _tokenizer_cache: dict[str, Any] = {}
 _cache_lock = threading.Lock()
 _warned_models: set[str] = set()
 
+# ─── HuggingFace Tokenizer Mapping ─────────────────────────────────────
+# MiniMax/Kimi/Qwen teilen denselben SentencePiece-basierten Tokenizer.
+# Kleinstes Repo mit gleichem Vocab nehmen (kein 7B-Modellgewichte laden).
+_HF_TOKENIZER_MAP = {
+    "minimax": "Qwen/Qwen2.5-0.5B-Instruct",
+    "kimi": "Qwen/Qwen2.5-0.5B-Instruct",
+    "qwen": "Qwen/Qwen2.5-0.5B-Instruct",
+    "moonshot": "Qwen/Qwen2.5-0.5B-Instruct",
+}
+
+
+def _try_hf_tokenizer(model_norm: str):
+    """Versucht HuggingFace-Tokenizer zu laden. Returned callable oder None."""
+    prefix = next((p for p in _HF_TOKENIZER_MAP if model_norm.startswith(p)), None)
+    if prefix is None:
+        return None
+    repo_id = _HF_TOKENIZER_MAP[prefix]
+    try:
+        from transformers import AutoTokenizer
+        tok = AutoTokenizer.from_pretrained(repo_id, use_fast=False)
+        return lambda text: len(tok.encode(text or ""))
+    except Exception as e:
+        if model_norm not in _warned_models:
+            logger.warning(
+                "HuggingFace tokenizer unavailable for model %s (repo=%s): %s — fallback to heuristic",
+                model_norm, repo_id, e,
+            )
+            _warned_models.add(model_norm)
+        return None
+
 
 def _normalize_model(model: str) -> str:
     """Normalisiert Modell-Namen (lowercase, ohne Provider-Prefix)."""
@@ -72,8 +102,9 @@ def _get_tokenizer(model: str):
                 )
                 _warned_models.add(norm)
             tokenizer = None
-    # Andere Modelle (minimax/qwen/etc) → kein Versuch, direkt Fallback.
-    # HuggingFace-Tokenizer-Integration waere optional dep, fuer Phase-2.
+    # Andere Modelle (minimax/qwen/etc) → HuggingFace-Tokenizer wenn moeglich.
+    if tokenizer is None:
+        tokenizer = _try_hf_tokenizer(norm)
     with _cache_lock:
         _tokenizer_cache[norm] = tokenizer
     return tokenizer
