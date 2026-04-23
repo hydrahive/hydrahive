@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import json as _json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import litellm
+from pydantic import BaseModel, ValidationError
 
 # #845: Anthropic erfordert tools= wenn die History tool_use-Blöcke enthält.
 # Der Tool-Loop-Abort-Pfad (_finalize_tool_loop_response) ruft _llm_call mit
@@ -961,12 +964,112 @@ def _track_anthropic_cache_usage(resp, model: str, agent_cfg) -> None:
     }
 
 
+# =============================================================================
+# Pydantic Response Models — #785: Schema-Validierung externer LLM-APIs
+# =============================================================================
+
+class ToolCallInput(BaseModel):
+    """Validiert ein tool_call arguments-Objekt (beliebige Schema-Shape)."""
+    model_config = {"extra": "allow"}
+
+class ToolCall(BaseModel):
+    id: str
+    type: str = "function"
+    function: Any  # {name: str, arguments: str | dict}
+
+class MessageContent(BaseModel):
+    type: str
+    text: str | None = None
+    id: str | None = None
+    name: str | None = None
+    input: Any | None = None
+    tool_use_id: str | None = None
+    model_config = {"extra": "allow"}
+
+class LLMResponseUsage(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+class LLMResponseMessage(BaseModel):
+    role: str = "assistant"
+    content: str | list[Any] = ""
+    tool_calls: list[Any] | None = None
+
+class LLMResponseChoice(BaseModel):
+    message: LLMResponseMessage
+    finish_reason: str | None = None
+
+class LLMResponse(BaseModel):
+    """Pydantic-Schema für LLM-API-Responses aller Provider.
+    
+    #785: Wird nach jedem API-Call aufgerufen um malformed data
+    zu erkennen BEVOR tool_calls/content verarbeitet werden.
+    """
+    model: str | None = None
+    choices: list[LLMResponseChoice] = []
+    usage: LLMResponseUsage | None = None
+    # Extra-Felder werden akzeptiert (provider-spezifische Felder)
+    model_config = {"extra": "allow"}
+
+def _validate_llm_response(resp_data: Any, provider: str) -> None:
+    """Validiert eine LLM-Response auf strukturelle Integrität (#785).
+
+    Prüft dass tool_calls gültige name/arguments haben BEVOR sie
+    weiterverarbeitet werden. Bei Fehlern: klare RuntimeError statt
+    malformed data weitergeben.
+
+    Wird gerufen:
+      - Auf dem SimpleNamespace-Ergebnis von _parse_anthropic_response_to_simplenamespace
+      - Auf dem SimpleNamespace-Ergebnis von _parse_codex_response_to_simplenamespace
+      - Auf rohen dicts von LiteLLM/native SDK Calls (optional, via direct SDK parse)
+    """
+    try:
+        # SimpleNamespace (post-conversion): check choices[].message.tool_calls
+        if hasattr(resp_data, "choices") and hasattr(resp_data, "model"):
+            for choice in resp_data.choices:
+                msg = choice.message if hasattr(choice, "message") else choice
+                tc_list = getattr(msg, "tool_calls", None)
+                if tc_list:
+                    for tc in tc_list:
+                        fn = tc.function if hasattr(tc, "function") else tc
+                        name = getattr(fn, "name", None) if hasattr(fn, "name") else None
+                        args = getattr(fn, "arguments", None) if hasattr(fn, "arguments") else None
+                        if not isinstance(name, str) or not name:
+                            raise ValueError(f"#785 [{provider}] Invalid tool_call: name={name}")
+                        if args is not None and not isinstance(args, (str, dict)):
+                            raise ValueError(
+                                f"#785 [{provider}] Invalid tool_call.arguments "
+                                f"type={type(args).__name__}"
+                            )
+            return
+
+        # Raw dict: validate via Pydantic
+        if isinstance(resp_data, dict):
+            LLMResponse.model_validate(resp_data)
+
+    except (ValueError, AttributeError, TypeError, ValidationError) as exc:
+        logger.error(
+            "#785 [%s] Response-Validierung fehlgeschlagen: %s — "
+            "Response wird zurückgewiesen, kein Tool-Call wird ausgeführt.",
+            provider, exc,
+        )
+        raise RuntimeError(f"#785 [{provider}] Malformed LLM-Response: {exc}") from exc
+
+
+# =============================================================================
+
 def _parse_anthropic_response_to_simplenamespace(resp, model: str):
     """Wandelt eine Anthropic-Message-Response in ein litellm-kompatibles
     SimpleNamespace-Objekt (``.choices[0].message.content`` / ``.tool_calls``).
 
     Nutzt der Rest der Codebase (orchestrator_tools, session_manager etc.)
     einheitlich für Anthropic- und litellm-Pfade.
+
+    #785: Nach der Konvertierung wird das Ergebnis gegen LLMResponse-Schema
+    validiert. Bei Validierungsfehler: klare Fehlermeldung statt malformed
+    data weitergeben.
     """
     import json as _json_local
     from types import SimpleNamespace
@@ -1005,7 +1108,11 @@ def _parse_anthropic_response_to_simplenamespace(resp, model: str):
             cache_read_input_tokens     = getattr(u, "cache_read_input_tokens", 0) or 0,
         )
 
-    return SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
+    result = SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
+
+    # #785: Validate converted output before returning
+    _validate_llm_response(result, provider="anthropic")
+    return result
 
 
 async def _anthropic_oauth_call(

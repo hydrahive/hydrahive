@@ -47,6 +47,13 @@ class RateLimitSettings:
     max_login_keys: int = 10000
     max_message_keys: int = 50000
     redis_retry_after_s: int = 30
+    # #783: Progressive Backoff Schwellen (Anzahl Fehlversuche → Wartezeit)
+    login_failures_to_admin_notify: int = 10   # Admin-Benachrichtigung nach X Fehlversuchen
+    login_backoff_tiers: tuple[tuple[int, int], ...] = (  # (failures, cooldown_s)
+        (5,  300),    # 5 Fehler → 5 min Sperre
+        (10, 3600),   # 10 Fehler → 1h Sperre
+        (20, 86400),  # 20 Fehler → 24h Sperre
+    )
 
 
 class TokenBudgetExceeded(RuntimeError):
@@ -220,11 +227,70 @@ class RateLimiter:
         return True
 
     def check_login(self, ip: str) -> None:
+        """Prüft Login-Versuch mit progressivem Backoff (#783).
+
+        Backoff-Tiers (per IP):
+          5  Fehlversuche in Fenstern →  5 min Sperre
+          10 Fehlversuche             →  1h Sperre
+          20 Fehlversuche             → 24h Sperre
+
+        Nach ``login_failures_to_admin_notify`` Fehlversuchen wird der Admin
+        über HYDRAHIVE_MATRIX_WEBHOOK benachrichtigt (falls gesetzt).
+        """
+        import json as _json
+        # Track failed attempts for progressive backoff
+        failures_key = f"hydrahive:rate:login_failures:{ip}"
+        failures_count = 0
+        now = time.time()
+
+        # Load existing failure count from Redis or local fallback
+        def _load_failures() -> list[float]:
+            if self._redis_client:
+                try:
+                    raw = self._redis_client.get(failures_key)
+                    if raw:
+                        return [float(t) for t in _json.loads(raw)]
+                except Exception:
+                    pass
+            return []
+
+        def _save_failures(failures: list[float]) -> None:
+            # Prune entries older than 24h
+            cutoff = now - 86400
+            failures = [t for t in failures if t > cutoff]
+            if self._redis_client:
+                try:
+                    self._redis_client.setex(failures_key, 86400, _json.dumps(failures))
+                except Exception:
+                    pass
+            else:
+                # Store in local dict as ip → [timestamps]
+                self._login_failures = getattr(self, "_login_failures", {})
+                self._login_failures[ip] = failures
+
+        failures = _load_failures()
+        if failures:
+            cutoff = now - 86400
+            failures = [t for t in failures if t > cutoff]
+            failures_count = len(failures)
+
+        # Determine backoff tier
+        backoff_s = 0
+        for threshold, cooldown_s in self.settings.login_backoff_tiers:
+            if failures_count >= threshold:
+                backoff_s = cooldown_s
+
+        # Check rate limit first
         key = f"hydrahive:rate:login:{ip}"
         redis_allowed = self._redis_check(key, self.settings.login_max, self.settings.login_window_s)
         if redis_allowed is not None:
             if not redis_allowed:
-                raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
+                # Add failure timestamp for progressive backoff tracking
+                failures.append(now)
+                _save_failures(failures)
+                # Notify admin if threshold exceeded
+                self._notify_admin_brute_force(ip, failures_count + 1)
+                raise HTTPException(429, "Zu viele Login-Versuche — bitte warten")
             return
 
         if not self._check_local(
@@ -233,7 +299,62 @@ class RateLimiter:
             limit=self.settings.login_max,
             window_s=self.settings.login_window_s,
         ):
-            raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
+            # Record failure for progressive backoff
+            failures.append(now)
+            _save_failures(failures)
+            self._notify_admin_brute_force(ip, failures_count + 1)
+            msg = "Zu viele Login-Versuche"
+            if backoff_s >= 3600:
+                msg += f" — Kontotyp gesperrt für {backoff_s // 3600}h"
+            elif backoff_s >= 60:
+                msg += f" — gesperrt für {backoff_s // 60} min"
+            raise HTTPException(429, msg)
+
+        # If we passed the check but have an active backoff, enforce it
+        if backoff_s > 0:
+            # Check if last failure is still within backoff window
+            if failures and (now - failures[-1]) < backoff_s:
+                remaining = int(backoff_s - (now - failures[-1]))
+                msg = f"Zu viele Login-Versuche — gesperrt für {remaining}s"
+                raise HTTPException(429, msg)
+
+    def _notify_admin_brute_force(self, ip: str, failures_count: int) -> None:
+        """Sendet Admin-Notification bei Brute-Force-Verdacht (#783)."""
+        if failures_count < self.settings.login_failures_to_admin_notify:
+            return
+        webhook_url = os.environ.get("HYDRAHIVE_MATRIX_WEBHOOK", "").strip()
+        if not webhook_url:
+            webhook_url = os.environ.get("HYDRAHIVE_DISCORD_WEBHOOK", "").strip()
+        if not webhook_url:
+            return
+        import asyncio
+        try:
+            import httpx
+        except ImportError:
+            return
+        body = {
+            "content": (
+                f"🚨 **HydraHive Brute-Force Alarm**\n"
+                f"IP: `{ip}`\n"
+                f"Fehlversuche: {failures_count}\n"
+                f"Zeit: <t:int>{int(time.time())}</t:int>"
+            )
+        }
+        async def _send():
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(webhook_url, json=body)
+            except Exception:
+                pass
+        # Fire-and-forget; don't block the login check
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(_send())
+            else:
+                loop.run_until_complete(_send())
+        except Exception:
+            pass
 
     def check_message(self, user_id: str, project_id: str) -> None:
         key = (user_id, project_id)
