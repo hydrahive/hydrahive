@@ -199,3 +199,58 @@ DEEPSEEK_CONFIG: dict = {
         "deepseek-r1": 64_000,
     },
 }
+
+
+# =========================================================================
+# MiniMax Anthropic-Endpoint — Hostname-Klärung (#865)
+# =========================================================================
+# Kanonischer Host: api.minimax.io (Global Platform, Token-Plan-Keys).
+# api.minimaxi.com ist die China-Platform — separater Account, Keys NICHT
+# kreuzkompatibel. Die Mini-Agent-Referenz (MiniMax-AI/Mini-Agent) hat
+# api.minimaxi.com als Hardcoded-Default, die README dort zeigt aber
+# explizit api.minimax.io für Global — der Hardcode ist ein Bug.
+# Quelle: https://github.com/MiniMax-AI/Mini-Agent (README-Setup-Config).
+# DNS-Check: api.minimax.io → lb-ali.minimax.io (Alibaba-Cloud-LB, globale
+# Infra). api.minimaxi.com → open-platform-sg.xaminim.com (Singapur, China-
+# Parent). Beide existieren, beide antworten, aber getrennte Accounts.
+# Unser Default in MINIMAX_DEFAULT_BASE_URL (orchestrator_llm.py) nutzt
+# minimax.io und bleibt damit korrekt. Via providers.minimax.base_url
+# kann jeder User auf minimaxi.com wechseln.
+
+def get_plain_system_blocks(system_prompt: str) -> list[dict]:
+    """System-Blöcke für direkten Anthropic-SDK-Call ohne OAuth-Identity.
+
+    Genutzt vom MiniMax-Anthropic-Pfad (#864/#866). Analog zu
+    :func:`get_oauth_system_blocks`, aber ohne den Identity-Block, weil
+    MiniMax den nicht erwartet und ein Hardcoded-"You are Claude Code"
+    den Agent-Kontext verfälschen würde.
+
+    #629-Analog: Wenn der System-Prompt den <memory_dynamic>-Marker enthält,
+    wird er in zwei Blöcke gesplittet — statischer Vorlauf cacheable,
+    dynamischer Memory-Block ohne cache_control. Stabilisiert den Cache
+    über Memory-Wechsel hinweg.
+    """
+    if not system_prompt:
+        return []
+
+    from .context_channels import MEMORY_OPEN
+    if MEMORY_OPEN in system_prompt:
+        static_part, _, dynamic_part = system_prompt.partition(MEMORY_OPEN)
+        static_part = static_part.rstrip()
+        dynamic_part = (MEMORY_OPEN + dynamic_part).strip()
+        blocks: list[dict] = []
+        if static_part:
+            blocks.append({
+                "type": "text",
+                "text": static_part,
+                "cache_control": {"type": "ephemeral"},
+            })
+        if dynamic_part:
+            blocks.append({"type": "text", "text": dynamic_part})
+        return blocks
+
+    return [{
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral"},
+    }]

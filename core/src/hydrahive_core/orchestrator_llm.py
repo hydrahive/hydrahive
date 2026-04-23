@@ -860,6 +860,154 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
 
 # ---------------------------------------------------------------- OAuth Calls
 
+# --------------------------------------------- #865: Shared Anthropic-SDK helpers
+# Gemeinsame Logik-Bausteine für direkte Anthropic-SDK-Calls (OAuth + MiniMax).
+# Bewusst KEIN to_anthropic_format-Call hier — das soll in jeder Caller-Site
+# explizit sichtbar bleiben (Invariant 7b in test_architecture_invariants.py).
+
+def _apply_anthropic_history_cache_breakpoints(
+    filtered: list[dict],
+    max_breakpoints: int = 3,
+) -> list[dict]:
+    """Setzt ephemeral cache_control auf ältere History-Messages.
+
+    Modifiziert die Liste in-place und gibt sie zurück (für Chaining).
+    Maximal ``max_breakpoints`` Messages bekommen einen Breakpoint — Anthropic
+    erlaubt insgesamt 4 Breakpoints (1 System + 3 History).
+
+    Geschont werden die letzten 4 User/Assistant-Turns — dort ist die
+    dynamische Schicht, ein Breakpoint dort wäre konstant invalidiert.
+    """
+    cache_cutoff = max(0, len(filtered) - 4)
+    count = 0
+    for idx, fm in enumerate(filtered):
+        if count >= max_breakpoints:
+            break
+        if idx < cache_cutoff and fm.get("role") in ("user", "assistant"):
+            content = fm.get("content", "")
+            if isinstance(content, str) and content:
+                filtered[idx] = {**fm, "content": [
+                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+                ]}
+                count += 1
+            elif isinstance(content, list) and content and not content[-1].get("cache_control"):
+                new_c = list(content)
+                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+                filtered[idx] = {**fm, "content": new_c}
+                count += 1
+    return filtered
+
+
+def _convert_openai_tools_to_anthropic(tools: list[dict] | None) -> list[dict] | None:
+    """Wandelt OpenAI-Tool-Schemas in Anthropic-Format um.
+
+    OpenAI: ``{"function": {"name", "description", "parameters"}}``
+    Anthropic: ``{"name", "description", "input_schema"}``
+
+    Return ``None`` wenn Input leer/None — so bleibt die kwargs-Konstruktion
+    bei den Callern schlank (``if anth_tools: kwargs["tools"] = anth_tools``).
+    """
+    if not tools:
+        return None
+    return [
+        {
+            "name":         t["function"]["name"],
+            "description":  t["function"].get("description", ""),
+            "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+        }
+        for t in tools
+    ]
+
+
+def _track_anthropic_cache_usage(resp, model: str, agent_cfg) -> None:
+    """Cache-Usage loggen + Cache-Break-Detection + Fingerprint-Update.
+
+    Reiner Side-Effekt: schreibt in ``_CACHE_FINGERPRINTS`` und ggf. in
+    ``session_metrics``. Keine Rückgabe.
+    """
+    if not (hasattr(resp, "usage") and resp.usage):
+        return
+    u = resp.usage
+    cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+    cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
+    input_tok   = getattr(u, "input_tokens", 0) or 0
+    pct = 100 * cache_read / max(input_tok, 1)
+    logger.info(
+        "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
+        model, input_tok, cache_write, cache_read, pct,
+    )
+    _agent_id = getattr(agent_cfg, "id", "unknown")
+    _prev = _CACHE_FINGERPRINTS.get(_agent_id)
+    if _prev and _prev["had_write"] and cache_read == 0 and input_tok > 1000:
+        _pid = _current_project_id.get()
+        logger.warning(
+            "CACHE-BREAK [%s]: Vorheriger Call hatte %d cache_write, jetzt 0 cache_read (%d input). "
+            "System-Prompt oder Tool-Schema hat sich geändert.",
+            _agent_id, _prev["last_write"], input_tok,
+        )
+        if _pid:
+            from .session_metrics import metrics as _m
+            from .orchestrator_context import _diagnose_cache_break
+            _reason = "unknown"
+            if hasattr(agent_cfg, "agent_dir") and agent_cfg.agent_dir:
+                _break = _diagnose_cache_break(_agent_id, agent_cfg.agent_dir, "normal")
+                if _break:
+                    _reason = _break
+            _m.record_cache_break(_pid, f"{_reason} (write={_prev['last_write']} → read=0)")
+    _CACHE_FINGERPRINTS[_agent_id] = {
+        "had_write": cache_write > 0,
+        "last_write": cache_write,
+        "last_read": cache_read,
+    }
+
+
+def _parse_anthropic_response_to_simplenamespace(resp, model: str):
+    """Wandelt eine Anthropic-Message-Response in ein litellm-kompatibles
+    SimpleNamespace-Objekt (``.choices[0].message.content`` / ``.tool_calls``).
+
+    Nutzt der Rest der Codebase (orchestrator_tools, session_manager etc.)
+    einheitlich für Anthropic- und litellm-Pfade.
+    """
+    import json as _json_local
+    from types import SimpleNamespace
+
+    text = ""
+    tool_calls_out = []
+    for block in resp.content:
+        if block.type == "text":
+            text = block.text
+        elif block.type == "tool_use":
+            tool_calls_out.append(SimpleNamespace(
+                id=block.id,
+                type="function",
+                function=SimpleNamespace(
+                    name=block.name,
+                    arguments=_json_local.dumps(block.input),
+                ),
+            ))
+
+    message = SimpleNamespace(
+        role="assistant",
+        content=text,
+        tool_calls=tool_calls_out if tool_calls_out else None,
+    )
+    choice = SimpleNamespace(message=message, finish_reason=resp.stop_reason)
+
+    usage_ns = None
+    if hasattr(resp, "usage") and resp.usage:
+        u = resp.usage
+        usage_ns = SimpleNamespace(
+            input_tokens                = getattr(u, "input_tokens", 0) or 0,
+            output_tokens               = getattr(u, "output_tokens", 0) or 0,
+            prompt_tokens               = getattr(u, "input_tokens", 0) or 0,
+            completion_tokens           = getattr(u, "output_tokens", 0) or 0,
+            cache_creation_input_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0,
+            cache_read_input_tokens     = getattr(u, "cache_read_input_tokens", 0) or 0,
+        )
+
+    return SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
+
+
 async def _anthropic_oauth_call(
     agent_cfg,
     messages:       list[dict],
@@ -873,8 +1021,6 @@ async def _anthropic_oauth_call(
     Gibt ein litellm-kompatibles Response-Objekt zurück.
     """
     import anthropic as _anthropic
-    import json as _json
-    from types import SimpleNamespace
 
     # #628: Message-Normalisierung VOR Format-Konvertierung
     from .message_normalization import normalize_messages_for_call
@@ -906,25 +1052,9 @@ async def _anthropic_oauth_call(
     from .provider_config import get_oauth_system_blocks
     oauth_system = get_oauth_system_blocks(system_msg)
 
-    # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
-    # Max 3 History-Blöcke (+ 1 System-Block = 4 total, Anthropic-Limit)
-    cache_cutoff = max(0, len(filtered) - 4)
-    history_cache_count = 0
-    for idx, fm in enumerate(filtered):
-        if history_cache_count >= 3:
-            break
-        if idx < cache_cutoff and fm.get("role") in ("user", "assistant"):
-            content = fm.get("content", "")
-            if isinstance(content, str) and content:
-                filtered[idx] = {**fm, "content": [
-                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
-                ]}
-                history_cache_count += 1
-            elif isinstance(content, list) and content and not content[-1].get("cache_control"):
-                new_c = list(content)
-                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
-                filtered[idx] = {**fm, "content": new_c}
-                history_cache_count += 1
+    # #865: geteilter Helper — setzt ephemeral cache_control auf bis zu
+    # 3 ältere Messages (Anthropic-Limit: 1 System + 3 History = 4 Breakpoints).
+    filtered = _apply_anthropic_history_cache_breakpoints(filtered, max_breakpoints=3)
 
     # #515: Model-spezifische max_tokens — neuere Modelle können mehr Output
     _configured_max = agent_cfg.llm.max_tokens
@@ -956,15 +1086,10 @@ async def _anthropic_oauth_call(
         kwargs["temperature"] = 1
         logger.info("Extended Thinking aktiviert: budget=%d model=%s", _thinking_budget, model)
 
-    if tools:
-        kwargs["tools"] = [
-            {
-                "name":         t["function"]["name"],
-                "description":  t["function"].get("description", ""),
-                "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
-            }
-            for t in tools
-        ]
+    # #865: geteilter Tool-Konverter.
+    _anth_tools = _convert_openai_tools_to_anthropic(tools)
+    if _anth_tools:
+        kwargs["tools"] = _anth_tools
 
     raw_resp = await _llm_with_retry(lambda: client.messages.with_raw_response.create(**kwargs))
     resp = raw_resp.parse()
@@ -972,80 +1097,11 @@ async def _anthropic_oauth_call(
     # OAuth Rate-Limit Headers auslesen → globaler State
     _extract_rate_limit_headers(raw_resp.headers)
 
-    # #501: Cache-Break-Detection + Usage loggen
-    if hasattr(resp, "usage") and resp.usage:
-        u = resp.usage
-        cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
-        cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
-        input_tok   = getattr(u, "input_tokens", 0) or 0
-        pct = 100 * cache_read / max(input_tok, 1)
-        logger.info(
-            "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
-            model, input_tok, cache_write, cache_read, pct,
-        )
-        # Cache-Break-Detection: wenn wir vorher geschrieben haben aber jetzt 0 lesen
-        _agent_id = getattr(agent_cfg, "id", "unknown")
-        _prev = _CACHE_FINGERPRINTS.get(_agent_id)
-        if _prev and _prev["had_write"] and cache_read == 0 and input_tok > 1000:
-            # Unerwarteter Cache-Break!
-            _pid = _current_project_id.get()
-            logger.warning(
-                "CACHE-BREAK [%s]: Vorheriger Call hatte %d cache_write, jetzt 0 cache_read (%d input). "
-                "System-Prompt oder Tool-Schema hat sich geändert.",
-                _agent_id, _prev["last_write"], input_tok,
-            )
-            if _pid:
-                from .session_metrics import metrics as _m
-                from .orchestrator_context import _diagnose_cache_break
-                _reason = "unknown"
-                if hasattr(agent_cfg, "agent_dir") and agent_cfg.agent_dir:
-                    _break = _diagnose_cache_break(_agent_id, agent_cfg.agent_dir, "normal")
-                    if _break:
-                        _reason = _break
-                _m.record_cache_break(_pid, f"{_reason} (write={_prev['last_write']} → read=0)")
-        _CACHE_FINGERPRINTS[_agent_id] = {
-            "had_write": cache_write > 0,
-            "last_write": cache_write,
-            "last_read": cache_read,
-        }
+    # #865: Cache-Break-Detection + Usage loggen via geteiltem Helper.
+    _track_anthropic_cache_usage(resp, model, agent_cfg)
 
-    # Anthropic Response → litellm-kompatibles SimpleNamespace
-    text = ""
-    tool_calls_out = []
-    for block in resp.content:
-        if block.type == "text":
-            text = block.text
-        elif block.type == "tool_use":
-            tool_calls_out.append(SimpleNamespace(
-                id=block.id,
-                type="function",
-                function=SimpleNamespace(
-                    name=block.name,
-                    arguments=_json.dumps(block.input),
-                )
-            ))
-
-    message = SimpleNamespace(
-        role="assistant",
-        content=text,
-        tool_calls=tool_calls_out if tool_calls_out else None,
-    )
-    choice  = SimpleNamespace(message=message, finish_reason=resp.stop_reason)
-
-    # Usage-Daten weiterreichen (für Usage-Seite und Rate-Limiter)
-    usage_ns = None
-    if hasattr(resp, "usage") and resp.usage:
-        u = resp.usage
-        usage_ns = SimpleNamespace(
-            input_tokens          = getattr(u, "input_tokens", 0) or 0,
-            output_tokens         = getattr(u, "output_tokens", 0) or 0,
-            prompt_tokens         = getattr(u, "input_tokens", 0) or 0,
-            completion_tokens     = getattr(u, "output_tokens", 0) or 0,
-            cache_creation_input_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0,
-            cache_read_input_tokens     = getattr(u, "cache_read_input_tokens", 0) or 0,
-        )
-
-    return SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
+    # #865: Response → litellm-kompatibles SimpleNamespace via geteiltem Helper.
+    return _parse_anthropic_response_to_simplenamespace(resp, model)
 
 
 # ─────────────────────────────────────────────────── Codex Usage-Parser (#700)
