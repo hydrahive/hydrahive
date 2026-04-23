@@ -40,6 +40,20 @@ else
     info "Node.js $(node --version) bereits vorhanden"
 fi
 
+# --- mmx CLI (MiniMax official CLI) ---
+if ! command -v mmx &>/dev/null; then
+    info "Installiere mmx-cli (MiniMax CLI)..."
+    npm install -g mmx-cli --silent
+    success "mmx $(mmx --version 2>/dev/null || echo 'installiert')"
+else
+    info "mmx bereits vorhanden"
+fi
+if [ -n "${MINIMAX_API_KEY:-}" ]; then
+    mmx auth login --api-key "${MINIMAX_API_KEY}" --non-interactive &>/dev/null && info "mmx auth OK" || warn "mmx auth fehlgeschlagen (Key pruefen)"
+else
+    warn "MINIMAX_API_KEY nicht gesetzt — mmx auth login manuell ausfuehren"
+fi
+
 # --- nginx pruefen ---
 if ! command -v nginx &>/dev/null; then
     info "Installiere nginx..."
