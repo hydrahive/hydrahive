@@ -100,6 +100,7 @@ class UpdateProjectSettingsRequest(BaseModel):
     max_tool_rounds: int | None = None  # Max Tool-Aufrufe pro Nachricht (#613)
     messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
     risk_policy: str | None = None  # interactive | trusted — trusted nur durch Admin setzbar
+    github_repo: str | None = None  # #859: nachträglich änderbar
 
 
 # #641-Fix: ToolConfirmRequest MUSS Module-Scope sein, damit FastAPI mit
@@ -531,6 +532,7 @@ def register_project_routes(
             "plugins": getattr(cfg, "plugins", []),
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
+            "github_repo": getattr(cfg, "github_repo", ""),
             "messenger": _load_messenger_config(project_dir),
         }
 
@@ -626,6 +628,10 @@ def register_project_routes(
                     "risk_policy='trusted' darf nur durch Admins gesetzt werden.",
                 )
             config_data["risk_policy"] = req.risk_policy
+
+        # #859: github_repo nachträglich ändern
+        if req.github_repo is not None:
+            config_data["github_repo"] = req.github_repo
 
         config_data["version"] = "2.0.0"
 

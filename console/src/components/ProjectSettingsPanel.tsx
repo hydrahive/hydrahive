@@ -52,6 +52,7 @@ interface SettingsData {
   execution_mode: string;
   max_tool_rounds?: number;
   risk_policy?: "interactive" | "trusted";
+  github_repo?: string;  // #859
   messenger: {
     whatsapp?: { session_ids?: string[]; enabled?: boolean };
     discord?: { channels?: string[]; bot_token_env?: string };
@@ -140,6 +141,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [executionMode, setExecutionMode] = useState("safe");
   const [maxToolRounds, setMaxToolRounds] = useState(50);
   const [riskPolicy, setRiskPolicy] = useState<"interactive" | "trusted">("interactive");
+  const [githubRepo, setGithubRepo] = useState("");  // #859
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
   // #820: Pro-Projekt Token-Budget Override (leer = globaler Default)
   const [tokenHardPerHour, setTokenHardPerHour] = useState<string>("");
@@ -398,6 +400,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setExecutionMode(d.execution_mode || "safe");
       setMaxToolRounds(d.max_tool_rounds ?? 50);
       setRiskPolicy(d.risk_policy === "trusted" ? "trusted" : "interactive");
+      setGithubRepo(d.github_repo || "");
       setMembers(d.members || []);
       // Messenger-Config laden (#569)
       const m = d.messenger || {};
@@ -542,6 +545,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         max_tool_rounds: maxToolRounds,
         risk_policy: riskPolicy,
         members,
+        github_repo: githubRepo,
       };
       if (canUseComposer) body.agent_md = agentMd;
       await api.put(`/projects/${projectId}/settings`, body);
@@ -773,7 +777,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
                 />
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Höher = mehr History bleibt erhalten, aber höhere Kosten/Latenz pro Request.
-                  Default ist 40 % des Context-Windows. Bei MiniMax/Claude (200k) → 80 000.
+                  Default ist 40 % des Context-Windows{compactionModel ? `. Aktuelles Modell: ${compactionModel} (${(compactionDefault ?? 0).toLocaleString("de-DE")} Tokens)` : "."}.
                   Niedriger setzen → kompaktiert früher, aber dafür wird die
                   Notfall-Compaction (Stage 3, kürzt aggressiv) nie erreicht.
                 </p>
@@ -813,6 +817,23 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               {riskPolicy === "trusted"
                 ? t("projectSettings.risk.descTrusted", { defaultValue: "⚠ Der Projekt-Boss führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approves landen im Server-Log. Nur Admins dürfen diesen Modus setzen — Speichern als Nicht-Admin schlägt mit 403 fehl." })
                 : t("projectSettings.risk.descInteractive", { defaultValue: "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)." })}
+            </p>
+          </div>
+
+          {/* GitHub Repo (#859) */}
+          <div>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <ExternalLink className="h-3 w-3" /> {t("projectSettings.githubRepo.label", { defaultValue: "GitHub Repo" })}
+            </label>
+            <input
+              type="text"
+              value={githubRepo}
+              onChange={e => setGithubRepo(e.target.value)}
+              placeholder="owner/repo oder https://github.com/owner/repo"
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+            />
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {t("projectSettings.githubRepo.hint", { defaultValue: "Wird von den GitHub-Tools genutzt (owner/repo). Leer lassen = kein Repo." })}
             </p>
           </div>
         </div>
