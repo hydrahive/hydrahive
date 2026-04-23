@@ -206,12 +206,12 @@ async def test_minimax_anthropic_uses_bearer_auth_not_oauth(monkeypatch):
 # ---------------------------------------------------- routing with flag
 
 @pytest.mark.asyncio
-async def test_minimax_routes_to_anthropic_sdk_when_flag_on(monkeypatch):
-    """Mit HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=1 und MiniMax-Model + Key wird
-    _minimax_anthropic_call aufgerufen, litellm NICHT."""
+async def test_minimax_routes_to_anthropic_sdk_by_default(monkeypatch):
+    """Default (Flag ungesetzt, #870): MiniMax-Model + Key → neuer Pfad,
+    litellm NICHT."""
     from hydrahive_core import orchestrator_llm as mod
 
-    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "1")
+    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-mm-test")
 
     called = {"minimax_anthropic": 0, "litellm": 0}
@@ -235,11 +235,12 @@ async def test_minimax_routes_to_anthropic_sdk_when_flag_on(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_minimax_routes_to_litellm_when_flag_off(monkeypatch):
-    """Mit Flag=0 (Default) bleibt MiniMax auf dem litellm-Pfad — Regressions-Schutz."""
+async def test_minimax_routes_to_litellm_when_explicit_opt_out(monkeypatch):
+    """#870: Explizites Opt-Out via HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=0 → Fall-
+    back auf litellm-Pfad. Nur für Debugging/Rollback."""
     from hydrahive_core import orchestrator_llm as mod
 
-    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
+    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "0")
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-mm-test")
 
     called = {"minimax_anthropic": 0, "litellm": 0}
@@ -264,20 +265,24 @@ async def test_minimax_routes_to_litellm_when_flag_off(monkeypatch):
 
 # ---------------------------------------------------- flag helper
 
-def test_flag_helper_truthy_values(monkeypatch):
+def test_flag_helper_default_on(monkeypatch):
+    """#870: Default ist ON — ENV-Var ungesetzt oder Truthy → True."""
     from hydrahive_core.orchestrator_llm import _minimax_anthropic_sdk_enabled
 
+    # Default (ENV ungesetzt) → ON
+    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
+    assert _minimax_anthropic_sdk_enabled() is True, "Default-OFF waere Regression von #870"
+
+    # Explizite Truthy-Werte → ON
     for v in ("1", "true", "TRUE", "yes", "on", " 1 "):
         monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", v)
-        assert _minimax_anthropic_sdk_enabled() is True, f"Sollte truthy für '{v}'"
+        assert _minimax_anthropic_sdk_enabled() is True, f"Sollte True für '{v}'"
 
 
-def test_flag_helper_falsy_values(monkeypatch):
+def test_flag_helper_explicit_opt_out(monkeypatch):
+    """#870: Opt-Out nur mit expliziten Falsy-Werten (0/false/no/off)."""
     from hydrahive_core.orchestrator_llm import _minimax_anthropic_sdk_enabled
 
-    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
-    assert _minimax_anthropic_sdk_enabled() is False
-
-    for v in ("0", "false", "no", "off", ""):
+    for v in ("0", "false", "FALSE", "no", "off", " 0 "):
         monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", v)
-        assert _minimax_anthropic_sdk_enabled() is False, f"Sollte falsy für '{v}'"
+        assert _minimax_anthropic_sdk_enabled() is False, f"Sollte False für '{v}'"

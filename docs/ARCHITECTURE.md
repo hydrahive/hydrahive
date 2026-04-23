@@ -405,12 +405,13 @@ HYDRAHIVE_BOSS_POLICY_ENABLED=true
 # Git-Worktrees statt im Haupt-Repository.
 HYDRAHIVE_WORKTREE_ISOLATION=true
 
-# MiniMax via direkten Anthropic-SDK (#864). Default OFF — bei aktivem
-# Flag laufen MiniMax-Modelle ueber client.messages.create mit base_url=
-# api.minimax.io/anthropic, statt ueber litellm+/v1/chat/completions.
-# Loest Halluzinations-Familie (#792/#856/#862), weil MiniMax das
-# Anthropic-Wire-Protokoll nativ spricht. Rollback via Flag=0 + Restart.
-HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=0
+# MiniMax via direkten Anthropic-SDK (#864/#870). Default ON seit Live-
+# Verify auf .177 (2026-04-23). MiniMax-Modelle laufen ueber
+# client.messages.create mit base_url=api.minimax.io/anthropic statt
+# ueber litellm+/v1/chat/completions. Loest Halluzinations-Familie
+# (#792/#856/#862), weil MiniMax das Anthropic-Wire-Protokoll nativ
+# spricht. Opt-Out nur fuer Debugging/Rollback via =0.
+# HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=0
 ```
 
 Weitere ueberschreibbare Settings (alle mit `HYDRAHIVE_`-Praefix):

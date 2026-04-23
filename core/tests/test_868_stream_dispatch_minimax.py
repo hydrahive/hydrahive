@@ -30,11 +30,12 @@ def _make_agent_cfg(model: str = "MiniMax-M2.7", api_key_env: str = "MINIMAX_API
 
 # -------------------------------------------- pure predicate tests
 
-def test_dispatch_routes_minimax_when_flag_on_and_key_set(monkeypatch):
-    """MiniMax-Model + Flag=1 + Key + kein OAuth → should_use=True."""
+def test_dispatch_routes_minimax_by_default(monkeypatch):
+    """#870: Default (Flag ungesetzt) + MiniMax-Model + Key + kein OAuth
+    → should_use=True."""
     from hydrahive_core.orchestrator_stream import _should_use_minimax_anthropic_stream
 
-    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "1")
+    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-mm-test")
 
     cfg = _make_agent_cfg()
@@ -43,11 +44,12 @@ def test_dispatch_routes_minimax_when_flag_on_and_key_set(monkeypatch):
     assert key == "sk-mm-test"
 
 
-def test_dispatch_falls_through_when_flag_off(monkeypatch):
-    """Flag=0 → should_use=False, key leer. Regressions-Schutz für Live-Boss."""
+def test_dispatch_falls_through_on_explicit_opt_out(monkeypatch):
+    """#870: Explizites Opt-Out mit HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=0 →
+    should_use=False. Nur fuer Rollback/Debugging."""
     from hydrahive_core.orchestrator_stream import _should_use_minimax_anthropic_stream
 
-    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
+    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "0")
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-mm-test")
 
     cfg = _make_agent_cfg()
@@ -70,10 +72,10 @@ def test_dispatch_falls_through_when_no_key(monkeypatch):
 
 
 def test_dispatch_falls_through_for_non_minimax_model(monkeypatch):
-    """claude-*-Modell → should_use=False, auch wenn Flag=1."""
+    """claude-*-Modell → should_use=False, auch wenn Flag=Default-ON."""
     from hydrahive_core.orchestrator_stream import _should_use_minimax_anthropic_stream
 
-    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "1")
+    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
 
     cfg = _make_agent_cfg(model="claude-sonnet-4-6")
     use, key = _should_use_minimax_anthropic_stream("claude-sonnet-4-6", cfg, oauth_token_present=False)
@@ -86,7 +88,7 @@ def test_dispatch_yields_to_oauth_when_token_present(monkeypatch):
     wird nicht genommen (auch nicht wenn Modell+Flag+Key stimmen)."""
     from hydrahive_core.orchestrator_stream import _should_use_minimax_anthropic_stream
 
-    monkeypatch.setenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "1")
+    monkeypatch.delenv("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", raising=False)
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-mm-test")
 
     cfg = _make_agent_cfg()

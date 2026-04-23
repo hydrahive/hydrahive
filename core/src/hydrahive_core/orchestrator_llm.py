@@ -1107,14 +1107,18 @@ async def _anthropic_oauth_call(
 # ───────────────────────────────── MiniMax via direkten Anthropic-SDK (#864/#866)
 
 def _minimax_anthropic_sdk_enabled() -> bool:
-    """#864: Kill-Switch für den MiniMax-Anthropic-SDK-Pfad.
+    """#864/#870: Default-ON-Switch für den MiniMax-Anthropic-SDK-Pfad.
 
-    Default OFF — muss explizit via ENV aktiviert werden. Der bestehende
-    litellm-Pfad bleibt bei Flag=0 unverändert. Bei Problemen auf .177/
-    .227 kann das Flag sofort auf 0 gestellt + Service restart → Rollback.
+    Nach erfolgreichem Live-Verify auf .177 (#869, 2026-04-23) ist der
+    direkte Anthropic-SDK-Pfad der Standard für alle MiniMax-Modelle —
+    löst die Halluzinations-Familie (#792/#856/#862) an der Wurzel.
+
+    Opt-Out via ``HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=0`` (oder
+    ``false``/``no``/``off``). Nur für Debugging/Rollback — nicht
+    empfohlen.
     """
-    return os.environ.get("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "").strip().lower() in (
-        "1", "true", "yes", "on"
+    return os.environ.get("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "1").strip().lower() not in (
+        "0", "false", "no", "off"
     )
 
 
