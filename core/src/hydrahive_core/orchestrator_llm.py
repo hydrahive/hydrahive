@@ -1104,6 +1104,110 @@ async def _anthropic_oauth_call(
     return _parse_anthropic_response_to_simplenamespace(resp, model)
 
 
+# ───────────────────────────────── MiniMax via direkten Anthropic-SDK (#864/#866)
+
+def _minimax_anthropic_sdk_enabled() -> bool:
+    """#864: Kill-Switch für den MiniMax-Anthropic-SDK-Pfad.
+
+    Default OFF — muss explizit via ENV aktiviert werden. Der bestehende
+    litellm-Pfad bleibt bei Flag=0 unverändert. Bei Problemen auf .177/
+    .227 kann das Flag sofort auf 0 gestellt + Service restart → Rollback.
+    """
+    return os.environ.get("HYDRAHIVE_MINIMAX_ANTHROPIC_SDK", "").strip().lower() in (
+        "1", "true", "yes", "on"
+    )
+
+
+async def _minimax_anthropic_call(
+    agent_cfg,
+    messages:   list[dict],
+    tools:      list[dict] | None,
+    api_key:    str,
+    model_name: str,
+):
+    """Direkter Anthropic-SDK-Call gegen den MiniMax-/anthropic-Endpoint.
+
+    #864: Löst die Halluzinations-Familie (#792 `<invoke>`, #856 `[TOOL_CALL]`,
+    #862 `<minimax:tool_call>`) durch native ``type=tool_use``-Blöcke. Der
+    litellm-Pfad konvertiert OpenAI↔Anthropic-Wire-Formate mehrmals hin und
+    her — MiniMax halluziniert dann gern Tool-Calls als Plaintext. Der
+    direkte SDK-Call spricht das Anthropic-Protokoll nativ.
+
+    Unterschiede zu :func:`_anthropic_oauth_call`:
+
+    - ``base_url`` = :func:`_minimax_base_url` (kein Anthropic-Default)
+    - ``api_key`` direkt (kein OAuth-Token)
+    - ``Authorization: Bearer``-Header manuell (MiniMax-Konvention)
+    - System-Prompt via :func:`get_plain_system_blocks` (kein Identity-Wrap)
+    - keine Claude-spezifischen max_tokens-/Extended-Thinking-Bumps
+    - keine anthropic-ratelimit-*-Headers (MiniMax setzt sie nicht)
+    """
+    import anthropic as _anthropic
+
+    # #628: Message-Normalisierung vor Format-Konvertierung.
+    from .message_normalization import normalize_messages_for_call
+    messages = normalize_messages_for_call(messages)
+
+    client = _anthropic.AsyncAnthropic(
+        base_url=_minimax_base_url(),
+        api_key=api_key,
+        timeout=300.0,
+        default_headers={"Authorization": f"Bearer {api_key}"},
+    )
+
+    # Invariant 7b: to_anthropic_format direkt am Caller, nicht im Helper.
+    from .message_normalization import to_anthropic_format
+    system_msg, filtered = to_anthropic_format(messages)
+
+    # Modell-ID: MiniMax erwartet den nackten Namen (z.B. "MiniMax-M2.7"),
+    # unser _resolve_model prefixed mit "anthropic/" — hier rückwärts strippen.
+    model = model_name
+    for prefix in ("anthropic/", "minimax/"):
+        if model.startswith(prefix):
+            model = model[len(prefix):]
+            break
+
+    from .provider_config import get_plain_system_blocks
+    system_blocks = get_plain_system_blocks(system_msg)
+
+    # #865-Helper: ephemeral cache_control auf ältere History-Messages.
+    # MiniMax akzeptiert cache_control genauso wie Claude (Anthropic-Protokoll).
+    filtered = _apply_anthropic_history_cache_breakpoints(filtered, max_breakpoints=3)
+
+    # Safety: mindestens eine Message.
+    if not filtered:
+        filtered = [{"role": "user", "content": "(leere Nachricht)"}]
+        logger.warning("MiniMax-Anthropic-Call: messages war leer — Dummy eingefügt")
+
+    kwargs: dict = {
+        "model":       model,
+        "max_tokens":  agent_cfg.llm.max_tokens,
+        "messages":    filtered,
+        "temperature": agent_cfg.llm.temperature,
+    }
+    if system_blocks:
+        kwargs["system"] = system_blocks
+
+    # #865-Helper: OpenAI-Schema → Anthropic input_schema.
+    _anth_tools = _convert_openai_tools_to_anthropic(tools)
+    if _anth_tools:
+        kwargs["tools"] = _anth_tools
+
+    raw_resp = await _llm_with_retry(
+        lambda: client.messages.with_raw_response.create(**kwargs)
+    )
+    resp = raw_resp.parse()
+
+    # Rate-Limit-Header sind bei MiniMax üblicherweise leer — der Extractor
+    # guardet intern (``if len(data) > 1``), also safe no-op. Kein globaler
+    # State-Overwrite des OAuth-Zustands.
+    _extract_rate_limit_headers(raw_resp.headers)
+
+    _track_anthropic_cache_usage(resp, model, agent_cfg)
+
+    return _parse_anthropic_response_to_simplenamespace(resp, model)
+
+
 # ─────────────────────────────────────────────────── Codex Usage-Parser (#700)
 
 def _parse_codex_usage(usage: dict | None):
@@ -1451,6 +1555,22 @@ async def _llm_call_single(
                 return await _anthropic_oauth_call(agent_cfg, messages, tools, oauth_token, model_name)
 
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
+
+    # #864/#866: MiniMax via direkten Anthropic-SDK-Pfad. Feature-Flag-gated
+    # (HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=1), Default OFF → bestehender litellm-
+    # Pfad bleibt aktiv bis Live-Verify (#869) grün ist. Greift nur wenn ein
+    # MiniMax-Key resolvebar ist; sonst Fall-Through zu litellm.
+    if _is_direct_minimax_model(model_name, model) and _minimax_anthropic_sdk_enabled():
+        _mm_prov_kw = _provider_call_kwargs(model_name, agent_cfg)
+        _mm_key = _mm_prov_kw.get("api_key", "")
+        if _mm_key:
+            logger.info("MiniMax-Anthropic-SDK-Pfad aktiv (non-streaming) für %s", model_name)
+            return await _minimax_anthropic_call(agent_cfg, messages, tools, _mm_key, model_name)
+        logger.warning(
+            "MiniMax-Anthropic-SDK-Flag gesetzt aber kein Key gefunden für %s — "
+            "Fall-Through zu litellm",
+            model_name,
+        )
     is_anthropic = model.startswith(("anthropic/", "claude-"))
     use_anthropic_wire_format = is_anthropic and not _is_direct_minimax_model(model_name, model)
     # #628: Message-Normalisierung vor Cache-Control + LLM-Call (kanonische Form)
