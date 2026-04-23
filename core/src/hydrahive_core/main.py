@@ -137,7 +137,7 @@ CRED_FILE        = str(settings.admin_credentials)
 MCP_SERVERS_FILE = str(settings.mcp_servers_config)
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
-JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
+JWT_EXPIRE_H = 1    # Token-Gültigkeit in Stunden  # #782: 24h → 1h (Security Hardening)
 APP_VERSION  = "0.1.0"
 
 rate_limiter = RateLimiter.from_env(logger)

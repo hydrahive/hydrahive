@@ -199,9 +199,14 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       awareness: provider.awareness,
       connected,
       clearText: () => {
+        // #769 fix: origin="client-clear" damit der y-websocket die Änderung
+        // als Broadcasting erkennt und nicht als echo der eigenen Mutation.
+        // Ohne expliziten Origin verwirft pycrdt die Nachricht auf Senderseite
+        // (sie kommt nicht im Awareness-Update an → andere Clients sehen
+        // das geleerte Feld nicht).
         ydoc.transact(() => {
           ytext.delete(0, ytext.length);
-        });
+        }, "client-clear");
       },
     };
   }, [docAndProvider, connected]);
