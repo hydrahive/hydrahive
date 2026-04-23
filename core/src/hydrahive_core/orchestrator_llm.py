@@ -726,6 +726,44 @@ def _minimax_media_base_url() -> str:
     return MINIMAX_DEFAULT_MEDIA_BASE_URL
 
 
+
+def _minimax_api_key() -> str | None:
+    """Zentraler MiniMax-Key-Lookup. Präzedenz:
+
+    1. Env ``MINIMAX_API_KEY``
+    2. ``providers.minimax.api_key`` in llm_config.json
+    3. ``MINIMAX_API_KEY=`` in llm_env
+
+    Returnt ``None`` wenn kein Key gesetzt ist.
+    """
+    import os as _os
+    env_key = (_os.environ.get("MINIMAX_API_KEY") or "").strip()
+    if env_key:
+        return env_key
+
+    try:
+        from .router_llm import _cached_json_load
+        cfg = _cached_json_load(str(settings.llm_config), {"providers": {}})
+        cfg_key = (cfg.get("providers", {}).get("minimax", {}).get("api_key") or "").strip()
+        if cfg_key:
+            return cfg_key
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("minimax_api_key: llm_config lookup failed: %s", exc)
+
+    try:
+        env_file = settings.llm_env
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.startswith("MINIMAX_API_KEY="):
+                    v = line.split("=", 1)[1].strip()
+                    if v:
+                        return v
+    except OSError:  # pragma: no cover — defensive
+        pass
+
+    return None
+
+
 def _nvidia_base_url() -> str:
     """Liefert den aktuellen NVIDIA NIM-Endpoint aus llm_config, sonst Default."""
     try:

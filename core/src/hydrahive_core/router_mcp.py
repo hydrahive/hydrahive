@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -13,6 +14,11 @@ class McpServerEntry(BaseModel):
     url: str
     headers: dict = {}
     meta: dict = {}
+
+
+class MiniMaxMcpSetup(BaseModel):
+    """Body für POST /admin/mcp/servers/minimax — optionaler Prefix."""
+    prefix: str = ""
 
 
 def _load_mcp_servers(mcp_servers_file: str) -> list[dict]:
@@ -45,7 +51,6 @@ def register_mcp_routes(
     @auth_router.get("/mcp/servers")
     def list_mcp_servers():
         return {"servers": _load_mcp_servers(mcp_servers_file)}
-
     @admin_router.post("/mcp/servers", status_code=201)
     def create_mcp_server(req: McpServerEntry):
         import re as _re
@@ -82,3 +87,44 @@ def register_mcp_routes(
         _save_mcp_servers(mcp_servers_file, new_servers)
         audit_log("mcp.delete", target=server_id)
         return {"deleted": True, "server_id": server_id}
+
+    # ---------------------------------------------------------------- MiniMax MCP
+    @admin_router.post("/mcp/servers/minimax", status_code=201)
+    def setup_minimax_mcp(req: MiniMaxMcpSetup = MiniMaxMcpSetup()):
+        """Richtet den MiniMax MCP-Server ein (stdio, uvx).
+
+        Der API-Key wird aus ``MINIMAX_API_KEY`` in der Prozesumgebung
+        gelesen — NICHT in der Config-Datei gespeichert. Das ist korrekt,
+        weil der MCP-Server ``minimax-coding-plan-mcp`` den Key als
+        ``MINIMAX_API_KEY``-Env an seinen Subprocess durchreicht.
+
+        Das Dict wird direkt in die mcp_servers.json geschrieben —
+        Transport ``stdio`` mit ``command=uvx``, ``args=['minimax-coding-plan-mcp']``
+        und dem Env-Passthrough.
+        """
+        server_id = "minimax"
+        servers = _load_mcp_servers(mcp_servers_file)
+
+        # Wenn bereits vorhanden: erst löschen (Upsert-Semantik)
+        new_servers = [s for s in servers if s["id"] != server_id]
+
+        api_key = os.environ.get("MINIMAX_API_KEY", "").strip()
+        if not api_key:
+            raise HTTPException(409, "MINIMAX_API_KEY ist nicht in der Prozess-Umgebung gesetzt")
+
+        prefix = req.prefix.strip()
+        entry = {
+            "id": server_id,
+            "name": "MiniMax MCP (web_search + understand_image)",
+            "transport": "stdio",
+            "command": "uvx",
+            "args": ["minimax-coding-plan-mcp"],
+            "env": {"MINIMAX_API_KEY": api_key},
+            "cwd": None,
+            "headers": {},
+            "meta": {"prefix": prefix} if prefix else {},
+        }
+        new_servers.append(entry)
+        _save_mcp_servers(mcp_servers_file, new_servers)
+        audit_log("mcp.create", target=server_id, details={"transport": "stdio"})
+        return {"created": True, "server": entry}

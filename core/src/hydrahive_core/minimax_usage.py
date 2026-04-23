@@ -24,35 +24,9 @@ _CACHE_TTL = 30.0
 # ────────────────────────────────────────────── Key-Lookup
 
 def _minimax_api_key() -> str | None:
-    """Env > providers.minimax.api_key > llm_env — analog zu minimax_music."""
-    import os
-    env_key = (os.environ.get("MINIMAX_API_KEY") or "").strip()
-    if env_key:
-        return env_key
-
-    try:
-        from .router_llm import _cached_json_load
-        from .settings import settings as _settings
-        cfg = _cached_json_load(str(_settings.llm_config), {"providers": {}})
-        cfg_key = (cfg.get("providers", {}).get("minimax", {}).get("api_key") or "").strip()
-        if cfg_key:
-            return cfg_key
-    except Exception as exc:  # pragma: no cover
-        logger.debug("minimax_usage: llm_config lookup failed: %s", exc)
-
-    try:
-        from .settings import settings as _settings
-        env_file = _settings.llm_env
-        if env_file.exists():
-            for line in env_file.read_text().splitlines():
-                if line.startswith("MINIMAX_API_KEY="):
-                    v = line.split("=", 1)[1].strip()
-                    if v:
-                        return v
-    except OSError:  # pragma: no cover
-        pass
-
-    return None
+    """Delegiert an :func:`orchestrator_llm._minimax_api_key`."""
+    from .orchestrator_llm import _minimax_api_key
+    return _minimax_api_key()
 
 
 # ────────────────────────────────────────────── Model-Name-Mapping

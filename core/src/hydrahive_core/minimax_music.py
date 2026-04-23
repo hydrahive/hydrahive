@@ -87,32 +87,9 @@ _BASE_RESP_MESSAGES: dict[int, str] = {
 
 
 def _minimax_music_api_key() -> str | None:
-    """Identisch zum LLM-/Image-/Video-Lookup."""
-    env_key = (os.environ.get("MINIMAX_API_KEY") or "").strip()
-    if env_key:
-        return env_key
-
-    try:
-        from .router_llm import _cached_json_load
-        cfg = _cached_json_load(str(settings.llm_config), {"providers": {}})
-        cfg_key = (cfg.get("providers", {}).get("minimax", {}).get("api_key") or "").strip()
-        if cfg_key:
-            return cfg_key
-    except Exception as exc:  # pragma: no cover
-        logger.debug("minimax_music: llm_config lookup failed: %s", exc)
-
-    try:
-        env_file = settings.llm_env
-        if env_file.exists():
-            for line in env_file.read_text().splitlines():
-                if line.startswith("MINIMAX_API_KEY="):
-                    v = line.split("=", 1)[1].strip()
-                    if v:
-                        return v
-    except OSError:  # pragma: no cover
-        pass
-
-    return None
+    """Delegiert an :func:`orchestrator_llm._minimax_api_key`."""
+    from .orchestrator_llm import _minimax_api_key
+    return _minimax_api_key()
 
 
 def _minimax_music_base_url() -> str:
