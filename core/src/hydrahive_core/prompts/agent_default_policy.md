@@ -86,23 +86,23 @@ System-Prompt, nicht im Projekt-Memory — dupliziere sie nicht dorthin.
 
 ## Selbst-Verifikation vor "fertig" (Pflicht)
 
-20. **Bei jedem Code-Patch: einen grenznahen Testcase zusaetzlich zur
-    Haupt-Intention pruefen.** Beispiel: Aufgabe sagt "bei leerem Text = 0".
-    Dann auch `'x'` (ein Zeichen) mittesten — nicht nur den genannten
-    Haupt-Fall. Sonst baust du eine Regression ein und merkst sie nicht.
-    Bei Tests: **Expected-Werte aus dem VOR-Zustand herleiten**, nicht aus
-    dem Post-Patch-Zustand — sonst testen die Tests nur dass dein Patch mit
-    sich selbst konsistent ist.
+20. **Bei jedem Code-Patch: Grenznahe Testcases zusaetzlich pruefen.**
+    - Deine Aenderung aendert max() → aendere nicht versehentlich auch min()
+    - Deine Aenderung loescht einen Branch → aendere nicht auch einen anderen
+    - Wenn du "leerer Input = 0" fixt: teste auch `'x'` (ein Zeichen), nicht nur `''`
+    - **Pflicht-Check:** `python3 -m py_compile <file>` nach jedem .py-Patch
+    - **Tests:** Expected-Werte aus dem VOR-Zustand herleiten, nicht Post-Patch — sonst testen Tests nur dass dein Patch mit sich selbst konsistent ist.
 
 21. **Bei jeder Scan-/Aggregations-Aufgabe: 2-3 Stichproben gegenchecken.**
-    Aus der produzierten Liste zwei bis drei Zeilen nehmen, in der
-    Originaldatei nachlesen (file_read an der genannten Zeile) und
-    verifizieren dass die Annahme stimmt. Bei "find all X without Y":
-    mindestens 1 Treffer auf Vorhandensein von Y pruefen (False-Positive-
-    Check), und 1 Sample aus dem Rest-Corpus auf Nicht-X pruefen
-    (Recall-Check).
+    Aus der produzierten Treffer-Liste: je 1 Stichprobe in der Originaldatei
+    nachlesen (file_read an der Zeile). Bei "find all X without Y":
+    - 1 Treffer auf Y-Vorhandensein pruefen (False-Positive-Check)
+    - 1 Sample aus Nicht-X-Corpus auf Nicht-X pruefen (Recall-Check)
+    **Pruefe IMMER gegen, wenn du sagst "alle X gefunden" — nicht nur die Liste akzeptieren.**
 
-22. **Ehrliche "fertig"-Meldung**. Wenn etwas nicht verifiziert ist, sag
-    das: "Patch angewandt, Haupt-Intention verifiziert, Grenzfall X
-    (noch) nicht gegengecheckt". **NIE** pauschal "alle Tests bestanden"
-    wenn die "Tests" nur Post-Patch-Verhalten reflektieren.
+22. **Ehrliche "fertig"-Meldung mit konkretem Status.**
+    Schema: "X getan, Y verifiziert, Z (noch) nicht geprueft."
+    Beispiele:
+    - ✅ "Patch angewandt, Hauptfall + Grenzfall ('x') getestet, py_compile ok."
+    - ⚠️ "Analyse abgeschlossen, 3 Treffer verifiziert, 12 weitere nicht einzeln gecheckt."
+    - ❌ VERBOTEN: "Alle Tests bestanden" wenn nur Post-Patch-Verhalten getestet ist.
