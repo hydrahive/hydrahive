@@ -424,7 +424,14 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
           ...(target.extraBodyParams ?? {}),
         },
         signal: controller.signal,
-        onConnectionLost: () => setError("Verbindung verloren — bitte erneut senden."),
+        onConnectionLost: () => {
+          // #833: Connection-Loss — Session-State ist noch intakt (Backend
+          // behält laufende Sessions). Reload via reloadHistory() stellt
+          // die Nachrichten wieder her. Speichere lastSentContent fuer
+          // expliziten Retry.
+          void runtime.reloadHistory();
+          setError("Verbindung verloren — bitte erneut senden oder Session neu laden.");
+        },
         onEvent: (evt) => {
           setDebugEvents((prev) => {
             const next = [...prev, { type: evt.type, data: evt, ts: Date.now() }];

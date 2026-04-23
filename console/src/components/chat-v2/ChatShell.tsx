@@ -865,7 +865,19 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                 <h1 className="text-lg font-semibold text-foreground">{label}</h1>
               </div>
               <div className="flex items-center gap-2">
-                {runtime.error ? <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div> : null}
+                {runtime.error ? (
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div>
+                    <button
+                      type="button"
+                      onClick={() => void runtime.reloadHistory()}
+                      className="rounded-full bg-destructive/20 px-2 py-1 text-xs text-destructive hover:bg-destructive/30 transition-colors"
+                      title="Session neu laden"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={runtime.toggleHistory}
