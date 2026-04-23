@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -93,14 +94,11 @@ def register_mcp_routes(
     def setup_minimax_mcp(req: MiniMaxMcpSetup = MiniMaxMcpSetup()):
         """Richtet den MiniMax MCP-Server ein (stdio, uvx).
 
-        Der API-Key wird aus ``MINIMAX_API_KEY`` in der Prozesumgebung
-        gelesen — NICHT in der Config-Datei gespeichert. Das ist korrekt,
-        weil der MCP-Server ``minimax-coding-plan-mcp`` den Key als
-        ``MINIMAX_API_KEY``-Env an seinen Subprocess durchreicht.
-
-        Das Dict wird direkt in die mcp_servers.json geschrieben —
-        Transport ``stdio`` mit ``command=uvx``, ``args=['minimax-coding-plan-mcp']``
-        und dem Env-Passthrough.
+        Der API-Key wird aus ``MINIMAX_API_KEY`` in der Prozessumgebung
+        gelesen. In mcp_servers.json wird nur der Placeholder
+        ``${MINIMAX_API_KEY}`` gespeichert. Der echte Key wird in
+        ``mcp_client._stdio_params()`` beim Subprocess-Start aus
+        ``os.environ`` aufgelöst (Security #800).
         """
         server_id = "minimax"
         servers = _load_mcp_servers(mcp_servers_file)
@@ -119,12 +117,16 @@ def register_mcp_routes(
             "transport": "stdio",
             "command": "uvx",
             "args": ["minimax-coding-plan-mcp"],
-            "env": {"MINIMAX_API_KEY": api_key},
+            "env": {"MINIMAX_API_KEY": "${MINIMAX_API_KEY}"},
             "cwd": None,
             "headers": {},
             "meta": {"prefix": prefix} if prefix else {},
         }
         new_servers.append(entry)
         _save_mcp_servers(mcp_servers_file, new_servers)
-        audit_log("mcp.create", target=server_id, details={"transport": "stdio"})
-        return {"created": True, "server": entry}
+        audit_log("mcp.create", target=server_id, details={"transport": "stdio", "key_stored": False})
+
+        # Security #800: Key in der Response maskieren
+        entry_response = dict(entry)
+        entry_response.setdefault("env", {})["MINIMAX_API_KEY"] = "***"
+        return {"created": True, "server": entry_response}

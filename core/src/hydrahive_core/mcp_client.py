@@ -186,15 +186,27 @@ async def _http_call_tool(url: str, headers: dict, tool_name: str, arguments: di
 # aber für den ersten Wurf halten wir es einfach.
 
 def _stdio_params(server_cfg: dict):
-    """Baut StdioServerParameters aus server_cfg."""
+    """Baut StdioServerParameters aus server_cfg.
+
+    Env-Werte mit dem Pattern ``${VAR}`` werden zu Startzeit aus
+    ``os.environ`` aufgelöst (Security #800).
+    """
     from mcp import StdioServerParameters
+    import os as _os
+
     cmd = server_cfg.get("command")
     if not cmd:
         raise ValueError("stdio-MCP: 'command' fehlt in Config")
     args = list(server_cfg.get("args") or [])
-    env = dict(server_cfg.get("env") or {})
-    # PATH durchreichen, sonst findet Subprocess nichts (npx etc.)
-    import os as _os
+    raw_env = dict(server_cfg.get("env") or {})
+    env = {}
+    for k, v in raw_env.items():
+        # Security #800: ${VAR}-Placeholder → echter Wert aus Umgebung
+        if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
+            var = v[2:-1]
+            env[k] = _os.environ.get(var, "")
+        else:
+            env[k] = v
     if "PATH" not in env:
         env["PATH"] = _os.environ.get("PATH", "")
     cwd = server_cfg.get("cwd")
