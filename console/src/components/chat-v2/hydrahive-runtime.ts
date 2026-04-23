@@ -429,7 +429,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
           // behält laufende Sessions). Reload via reloadHistory() stellt
           // die Nachrichten wieder her. Speichere lastSentContent fuer
           // expliziten Retry.
-          void runtime.reloadHistory();
+          void reloadHistory();
           setError("Verbindung verloren — bitte erneut senden oder Session neu laden.");
         },
         onEvent: (evt) => {
