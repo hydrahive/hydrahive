@@ -1266,6 +1266,392 @@ async def _stream_anthropic_oauth(
     yield {"_full_response": full_response, "_streamed_any": streamed_any}
 
 
+async def _stream_minimax_anthropic(
+    orch, boss_cfg, boss_id, project_id, content,
+    messages, litellm_tools, api_key, model_name,
+    execution_mode, _usage,
+    *, request_user: str | None = None,
+    static_prompt: str = "", dynamic_prompt: str = "",
+):
+    """MiniMax Streaming via direkten Anthropic-SDK-Call (#864/#867).
+
+    Strukturell identisch zu :func:`_stream_anthropic_oauth`, aber:
+    - ``base_url`` = MiniMax-Anthropic-Endpoint (kein Claude-Default)
+    - ``api_key`` direkt + ``Authorization: Bearer``-Header (kein OAuth-Token)
+    - Keine ``anthropic-beta``/OAuth-Header
+    - System-Prompt ohne Identity-Wrap (kein "You are Claude Code")
+    - Modell-Fallback bleibt MiniMax-M2.7 (nicht claude-haiku)
+
+    Der Tool-Loop, die Parallel/Sequential-Dispatch, Fuzzy-/Signature-Abort,
+    History-Cache-Breakpoints, Session-Persistenz etc. bleiben identisch.
+    #792-XML-Fallback bleibt defensiv drin — sollte nie feuern wenn die
+    SDK nativ tool_use-Blöcke liefert, aber kostet nichts als Safety-Net.
+
+    Dispatch-Anbindung kommt in #868 (`stream_boss`-Switch).
+    """
+    import anthropic as _anthropic
+    from .orchestrator_llm import _minimax_base_url
+
+    # #628: Message-Normalisierung vor Format-Konvertierung.
+    from .message_normalization import normalize_messages_for_call
+    messages = normalize_messages_for_call(messages)
+
+    client = _anthropic.AsyncAnthropic(
+        base_url=_minimax_base_url(),
+        api_key=api_key,
+        default_headers={"Authorization": f"Bearer {api_key}"},
+    )
+
+    # #637-Followup: OpenAI↔Anthropic-Konvertierung via geteiltem Helper.
+    from .message_normalization import to_anthropic_format
+    system_msg, filtered = to_anthropic_format(messages)
+
+    # Modell-ID: MiniMax erwartet nackten Namen (z.B. "MiniMax-M2.7"). Unsere
+    # Resolver-Kette kann "anthropic/MiniMax-..." liefern — rückwärts strippen.
+    model = model_name
+    for prefix in ("anthropic/", "minimax/"):
+        if model.startswith(prefix):
+            model = model[len(prefix):]
+            break
+    if not model.startswith("MiniMax-"):
+        model = "MiniMax-M2.7"
+
+    # #867: System-Blöcke ohne Identity-Wrap. Analog zu OAuth-Struktur:
+    # static_prompt bekommt cache_control, dynamic_prompt nicht (Cache-
+    # Stabilität über Memory-Wechsel). Wenn weder static noch dynamic
+    # separat gesetzt sind, fällt es auf system_msg aus to_anthropic_format
+    # zurück.
+    mm_system: list[dict] = []
+    if static_prompt:
+        mm_system.append({"type": "text", "text": static_prompt,
+                          "cache_control": {"type": "ephemeral"}})
+    if dynamic_prompt:
+        mm_system.append({"type": "text", "text": dynamic_prompt})
+    elif system_msg and not static_prompt:
+        mm_system.append({"type": "text", "text": system_msg,
+                          "cache_control": {"type": "ephemeral"}})
+
+    # #865-Helper: ephemeral cache_control auf ältere History-Messages.
+    from .orchestrator_llm import _apply_anthropic_history_cache_breakpoints
+    filtered = _apply_anthropic_history_cache_breakpoints(filtered, max_breakpoints=3)
+
+    # Safety: mindestens eine Message, erste muss role:user sein.
+    if not filtered:
+        filtered = [{"role": "user", "content": content or "Hallo"}]
+    if filtered[0].get("role") != "user":
+        filtered.insert(0, {"role": "user", "content": content or "Hallo"})
+
+    kwargs: dict = {
+        "model":      model,
+        "max_tokens": boss_cfg.llm.max_tokens,
+        "messages":   filtered,
+    }
+    if mm_system:
+        kwargs["system"] = mm_system
+
+    # #865-Helper: OpenAI-Schema → Anthropic input_schema.
+    from .orchestrator_llm import _convert_openai_tools_to_anthropic
+    _anth_tools = _convert_openai_tools_to_anthropic(litellm_tools)
+    if _anth_tools:
+        kwargs["tools"] = _anth_tools
+
+    full_response = ""
+    streamed_any = False
+
+    # Agentic Tool-Loop — identisch zum OAuth-Pfad (signature+fuzzy-abort etc.)
+    last_tool_signature: tuple[str, ...] | None = None
+    repeated_tool_signature_count = 0
+    _fuzzy_history: list[str] = []  # #618
+    _mm_file_read_cache: dict[str, str] = {}
+
+    for _round in range(boss_cfg.max_tool_rounds):
+        _round_text = ""
+        # #620 Phase 4: Tools pro Runde aktualisieren (ToolSearch kann deferred
+        # Tools geladen haben). Identisch zum OAuth-Pfad.
+        if _round > 0:
+            try:
+                from .orchestrator_mcp import filter_mcp_schemas_by_loaded
+                from .orchestrator import _dedup_tools
+                from .tool_registry import loaded_deferred_ids as _loaded_ids, session_key as _skey_fn
+                extra = orch._allowed_tool_map(
+                    boss_cfg, execution_mode, user_text="", project_id=project_id,
+                )
+                _new_litellm = orch._reg.as_litellm_tools(list(extra.values())) if extra else []
+                _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
+                if _mcp_s:
+                    _loaded = _loaded_ids(_skey_fn(project_id, boss_cfg.id))
+                    _new_litellm = _new_litellm + filter_mcp_schemas_by_loaded(_mcp_s, _loaded)
+                _new_litellm = _dedup_tools(_new_litellm) if _new_litellm else None
+                _conv = _convert_openai_tools_to_anthropic(_new_litellm)
+                if _conv:
+                    kwargs["tools"] = _conv
+                else:
+                    kwargs.pop("tools", None)
+            except Exception as _rebuild_err:
+                logger.warning("Tool-Rebuild fehlgeschlagen (minimax), nutze Vorrunden-Set: %s", _rebuild_err)
+
+        async with client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                full_response += text
+                _round_text   += text
+                streamed_any   = True
+                yield f"data: {_json.dumps({'text': text})}\n\n"
+            final_msg = await stream.get_final_message()
+
+        _usage["rounds"] += 1
+        if hasattr(final_msg, "usage"):
+            _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)
+            _usage["output"]      += getattr(final_msg.usage, "output_tokens", 0)
+            _usage["cache_write"] += getattr(final_msg.usage, "cache_creation_input_tokens", 0)
+            _usage["cache_read"]  += getattr(final_msg.usage, "cache_read_input_tokens", 0)
+
+        tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
+
+        # #792-Defensive: XML-invoke Fallback bleibt drin. Sollte mit direktem
+        # SDK nie feuern, weil MiniMax native tool_use-Blöcke liefert — aber
+        # falls doch mal was halluziniert wird, haben wir Safety-Net.
+        if not tool_use_blocks and "<invoke" in (_round_text or ""):
+            _synthetic = parse_invoke_markup(_round_text)
+            if _synthetic:
+                logger.warning(
+                    "MiniMax XML-invoke gefangen (minimax-anthropic-pfad — "
+                    "unerwartet da direkter SDK): %d synthetische Blöcke",
+                    len(_synthetic),
+                )
+                tool_use_blocks = _synthetic  # type: ignore[assignment]
+                _round_text = text_without_invokes(_round_text)
+
+        if not tool_use_blocks:
+            break
+        if _round_text.strip():
+            await orch._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
+
+        _LOOP_EXCLUDE_MM = {"file_write"}
+        signature = tuple(
+            f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
+            for block in tool_use_blocks
+            if block.name not in _LOOP_EXCLUDE_MM
+        )
+        from .orchestrator_tools import _fuzzy_fingerprint, check_fuzzy_loop
+        for block in tool_use_blocks:
+            if block.name in _LOOP_EXCLUDE_MM:
+                continue
+            _args_json = _json.dumps(block.input, ensure_ascii=False, sort_keys=True)
+            _fuzzy_history.append(_fuzzy_fingerprint(block.name, _args_json))
+        last_tool_signature, repeated_tool_signature_count, should_abort = check_repeated_signature(
+            signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
+        )
+        abort_reason = "signature_abort"
+        if not should_abort:
+            _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history)
+            if _fuzzy_abort:
+                logger.warning(
+                    "Fuzzy-Loop erkannt (minimax-anthropic): Pattern '%s' dominiert — Abbruch",
+                    (_fuzzy_fp or "")[:120],
+                )
+                should_abort = True
+                abort_reason = "fuzzy_loop_abort"
+
+        if should_abort:
+            await orch._write_forced_abort_handoff(
+                boss_cfg,
+                filtered,
+                reason=abort_reason,
+                execution_mode=execution_mode,
+            )
+            kwargs_final = dict(kwargs)
+            kwargs_final.pop("tools", None)
+            kwargs_final["messages"] = filtered + [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
+                        }
+                    ],
+                }
+            ]
+            async with client.messages.stream(**kwargs_final) as stream:
+                async for text in stream.text_stream:
+                    full_response += text
+                    streamed_any = True
+                    yield f"data: {_json.dumps({'text': text})}\n\n"
+                _fm = await stream.get_final_message()
+            _usage["rounds"] += 1
+            if hasattr(_fm, "usage"):
+                _usage["input"]       += getattr(_fm.usage, "input_tokens", 0)
+                _usage["output"]      += getattr(_fm.usage, "output_tokens", 0)
+                _usage["cache_write"] += getattr(_fm.usage, "cache_creation_input_tokens", 0)
+                _usage["cache_read"]  += getattr(_fm.usage, "cache_read_input_tokens", 0)
+            break
+
+        if _round == boss_cfg.max_tool_rounds - 2:
+            filtered.append({"role": "user", "content": [{"type": "text", "text": "[System: Letzte Tool-Runde — fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]})
+            kwargs["messages"] = filtered
+
+        tool_results = []
+        any_tool_error = False
+
+        _mm_parallel = []
+        _mm_sequential = []
+        _mm_block_results: dict[str, Any] = {}
+        for block in tool_use_blocks:
+            _tc_input = block.input or {}
+            _tc_detail = format_tool_detail(block.name, _tc_input)
+            yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
+            _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+            if _is_parallel is None and tool_obj:
+                from .context_lifecycle import get_tool_policy
+                _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+            if _is_parallel:
+                _mm_parallel.append(block)
+            else:
+                _mm_sequential.append(block)
+
+        _mm_pending_sse: list[dict] = []
+        _mm_confirm_signal = lambda ev: _mm_pending_sse.append(ev)
+
+        if _mm_parallel:
+            _par_tasks = [
+                _asyncio.create_task(execute_tool_call(
+                    orch, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=b.name, tool_input=b.input or {},
+                    execution_mode=execution_mode, user_text=content,
+                    request_user=request_user,
+                    file_read_cache=_mm_file_read_cache,
+                    tool_call_id=b.id,
+                    confirm_signal=_mm_confirm_signal,
+                ))
+                for b in _mm_parallel
+            ]
+            _par_wait = 0.0
+            while not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(0.2)
+                _par_wait += 0.2
+                while _mm_pending_sse:
+                    yield f"data: {_json.dumps(_mm_pending_sse.pop(0))}\n\n"
+                if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
+                    yield ": keepalive\n\n"
+                    _par_wait = 0.0
+            for block, task in zip(_mm_parallel, _par_tasks):
+                result, is_error = task.result()
+                if is_error:
+                    any_tool_error = True
+                _mm_block_results[block.id] = (result, is_error)
+            if len(_mm_parallel) > 1:
+                logger.info("Streaming parallel (minimax-anthropic): %d Tools (%s)",
+                            len(_mm_parallel), ", ".join(b.name for b in _mm_parallel))
+
+        for block in _mm_sequential:
+            _tc_input = block.input or {}
+            _tool_task_mm = _asyncio.create_task(execute_tool_call(
+                orch, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=block.name, tool_input=_tc_input,
+                execution_mode=execution_mode, user_text=content,
+                request_user=request_user,
+                file_read_cache=_mm_file_read_cache,
+                tool_call_id=block.id,
+                confirm_signal=_mm_confirm_signal,
+            ))
+            _mm_wait = 0.0
+            while not _tool_task_mm.done():
+                await _asyncio.sleep(0.2)
+                _mm_wait += 0.2
+                while _mm_pending_sse:
+                    yield f"data: {_json.dumps(_mm_pending_sse.pop(0))}\n\n"
+                if not _tool_task_mm.done() and _mm_wait >= _KEEPALIVE_INTERVAL:
+                    yield ": keepalive\n\n"
+                    _mm_wait = 0.0
+            result, is_error = _tool_task_mm.result()
+            if is_error:
+                any_tool_error = True
+            _mm_block_results[block.id] = (result, is_error)
+
+        for block in tool_use_blocks:
+            result, _is_err = _mm_block_results[block.id]
+            _img_evt = _extract_tool_image(
+                result, block.name, request_user, _artifact_signer
+            )
+            if _img_evt:
+                yield f"data: {_img_evt}\n\n"
+            _audio_evt = _extract_tool_audio(
+                result, block.name, request_user, _artifact_signer
+            )
+            if _audio_evt:
+                yield f"data: {_audio_evt}\n\n"
+            _video_evt = _extract_tool_video(
+                result, block.name, request_user, _artifact_signer
+            )
+            if _video_evt:
+                yield f"data: {_video_evt}\n\n"
+            result_str = format_tool_result(result)
+            tool_results.append({
+                "type":        "tool_result",
+                "tool_use_id": block.id,
+                "content":     result_str,
+            })
+        if any_tool_error:
+            repeated_tool_signature_count = 0
+
+        _mm_tc_list = [
+            {"id": block.id, "type": "function",
+             "function": {"name": block.name, "arguments": _json.dumps(block.input) if block.input else "{}"}}
+            for block in tool_use_blocks
+        ]
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT, "",
+            agent_id=boss_id, tool_calls=_mm_tc_list,
+        )
+        for block in tool_use_blocks:
+            _result, _ = _mm_block_results[block.id]
+            _result_str = format_tool_result(_result)
+            await orch._sessions.append(
+                project_id, MessageRole.TOOL, _result_str,
+                agent_id=boss_id, tool_call_id=block.id,
+                tool_name=block.name,
+            )
+
+        asst_content = []
+        for b in final_msg.content:
+            if b.type == "thinking":
+                asst_content.append({"type": "thinking", "thinking": getattr(b, "thinking", "[redacted]")})
+            elif b.type == "text":
+                asst_content.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                asst_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+        filtered.append({"role": "assistant", "content": asst_content})
+        filtered.append({"role": "user",      "content": tool_results})
+        from .session_manager import redact_thinking_blocks
+        kwargs["messages"] = redact_thinking_blocks(filtered)
+    else:
+        # Loop normal beendet (kein break) — Max-Rounds erreicht.
+        await orch._write_forced_abort_handoff(
+            boss_cfg,
+            filtered,
+            reason=f"max_rounds_hit:{boss_cfg.max_tool_rounds}",
+            execution_mode=execution_mode,
+        )
+        kwargs_final = dict(kwargs)
+        kwargs_final.pop("tools", None)
+        kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Tool-Limit erreicht. Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum. WICHTIG: Du hast KEINE Tools mehr — schreibe KEINE Tool-Aufrufe als Text.]"}]}]
+        async with client.messages.stream(**kwargs_final) as stream:
+            async for text in stream.text_stream:
+                full_response += text
+                streamed_any   = True
+                yield f"data: {_json.dumps({'text': text})}\n\n"
+            _fm2 = await stream.get_final_message()
+        _usage["rounds"] += 1
+        if hasattr(_fm2, "usage"):
+            _usage["input"]       += getattr(_fm2.usage, "input_tokens", 0)
+            _usage["output"]      += getattr(_fm2.usage, "output_tokens", 0)
+            _usage["cache_write"] += getattr(_fm2.usage, "cache_creation_input_tokens", 0)
+            _usage["cache_read"]  += getattr(_fm2.usage, "cache_read_input_tokens", 0)
+
+    yield {"_full_response": full_response, "_streamed_any": streamed_any}
+
+
 async def _stream_litellm(
     orch, boss_cfg, boss_id, project_id, content,
     messages, litellm_tools, model_name,
