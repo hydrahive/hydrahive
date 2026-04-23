@@ -55,8 +55,8 @@ class MinimaxTTSProvider(TTSProvider):
     # ── Key + Base-URL-Lookup (delegiert an den bestehenden Resolver) ──
 
     def _api_key(self) -> str | None:
-        from ..minimax_image import _minimax_image_api_key
-        return _minimax_image_api_key()
+        import os as _os
+        return (_os.environ.get("MINIMAX_API_KEY") or "").strip() or None
 
     def _base_url(self) -> str:
         from ..orchestrator_llm import _minimax_media_base_url
