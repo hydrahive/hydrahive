@@ -230,6 +230,35 @@ async def _tool_loop(
 
         tool_results: dict[str, str] = {}
 
+        # #820: ToolSword Sequence Guard — prüft gefährliche Sequenzen
+        # VOR dem Split in parallel/sequential, damit die gesamte Round als
+        # Einheit betrachtet wird. Auch trusted-Agents müssen bei erkannten
+        # ToolSword-Sequenzen bestätigen (risk_policy gilt nicht für Sequenzen).
+        try:
+            from .tool_sequence_guard import check_sequence_guard as _seq_guard
+            _seq_tc_list = [
+                {"name": tc.function.name, "input": json.loads(tc.function.arguments)}
+                for tc in tool_calls
+            ]
+            _seq_match = _seq_guard(_seq_tc_list)
+            if _seq_match.detected:
+                logger.warning(
+                    "ToolSword sequence detected: %s [%s] — forcing CONFIRM",
+                    _seq_match.sequence_name or "sequence",
+                    _seq_match.reason[:120],
+                )
+                # Sequence-CONFIRM erzwingt User-Confirm, auch für trusted Agents.
+                # Wir setzen ein Flag das execute_tool_call auswertet.
+                _force_confirm = True
+                _seq_confirm_args = (_seq_match, _seq_tc_list)
+            else:
+                _force_confirm = False
+                _seq_confirm_args = None
+        except Exception as _seq_err:
+            logger.debug("Sequence guard unavailable: %s", _seq_err)
+            _force_confirm = False
+            _seq_confirm_args = None
+
         # #418: parallel-safe Tools via asyncio.gather, Rest sequentiell
         parallel_tcs = []
         sequential_tcs = []
@@ -251,6 +280,8 @@ async def _tool_loop(
                     request_user=request_user,
                     file_read_cache=_file_read_cache,
                     tool_call_id=tc.id,
+                    force_sequence_confirm=_force_confirm,
+                    sequence_confirm_info=_seq_confirm_args,
                 )
                 if is_error:
                     logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))
@@ -273,6 +304,8 @@ async def _tool_loop(
                 request_user=request_user,
                 file_read_cache=_file_read_cache,
                 tool_call_id=tc.id,
+                force_sequence_confirm=_force_confirm,
+                sequence_confirm_info=_seq_confirm_args,
             )
             if is_error:
                 logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))

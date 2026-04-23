@@ -424,7 +424,11 @@ def format_tool_result(result, *, ensure_str: bool = True) -> str:
     # #775: Closing-Tag-Escape — verhindert dass Content den Wrapper
     # vorzeitig schliessen und Instruktionen einschmuggeln kann.
     sanitized = sanitized.replace(_TOOL_OUTPUT_CLOSE, _TOOL_OUTPUT_CLOSE_ESCAPED)
-    return f"{_TOOL_OUTPUT_OPEN}{sanitized}{_TOOL_OUTPUT_CLOSE}"
+    # #818: Indirect Prompt-Injection-Filter — nach Sanitize, vor Wrap.
+    # Erkannte Injection-Trigger werden mit Warning-Banner umrahmt.
+    from .prompt_injection_filter import filter_injection
+    wrapped = f"{_TOOL_OUTPUT_OPEN}{sanitized}{_TOOL_OUTPUT_CLOSE}"
+    return filter_injection(wrapped)
 
 
 async def execute_tool_call(
@@ -440,6 +444,9 @@ async def execute_tool_call(
     file_read_cache: dict[str, str] | None = None,
     tool_call_id: str = "",
     confirm_signal=None,
+    # #820: Sequence-Guard overrides — von orchestrator_dispatch injiziert
+    force_sequence_confirm: bool = False,
+    sequence_confirm_info: tuple | None = None,  # (SequenceMatch, tool_list) — nur wenn force_sequence_confirm=True
 ) -> tuple[object, bool]:
     """
     Einheitlicher Tool-Execution-Pfad für alle 4 Loops.
@@ -611,10 +618,28 @@ async def execute_tool_call(
                 "hint": "Diese Aktion wurde aus Sicherheitsgründen verhindert.",
             }, True
         if risk == RiskLevel.CONFIRM:
+            # #820: ToolSword-Sequenz erzwingt CONFIRM — auch trusted-Agents
+            # müssen bei erkannten Sequenzen bestätigen. risk_policy gilt nur
+            # für normale CONFIRM-Patterns, nicht für Cross-Tool-Sequenzen.
+            if force_sequence_confirm and sequence_confirm_info:
+                _seq_match, _seq_tc_list = sequence_confirm_info
+                logger.warning(
+                    "ToolSword sequence guard: agent=%s tool=%s — forcing confirm for sequence '%s'",
+                    boss_cfg.id, tool_name, _seq_match.sequence_name or "unknown",
+                )
+                _force_for_seq = True
+            else:
+                _force_for_seq = False
+
             # Trusted-Agent: CONFIRM wird automatisch genehmigt — kein
             # Banner, keine Pause, kein SSE-Event. DENY (oben) ist davon
             # nicht betroffen. Bewusste Admin-Entscheidung pro Agent.
-            if getattr(boss_cfg, "risk_policy", "interactive") == "trusted":
+            # #820: Bei erkannter ToolSword-Sequenz gilt risk_policy nicht —
+            # auch trusted-Agents müssen bestätigen.
+            if (
+                not _force_for_seq
+                and getattr(boss_cfg, "risk_policy", "interactive") == "trusted"
+            ):
                 _tcid_auto = tool_call_id or f"auto-{tool_name}-{int(_time.time() * 1000)}"
                 logger.info(
                     "tool-confirm auto-approve (trusted): agent=%s tool=%s tcid=%s",
