@@ -1529,10 +1529,13 @@ class FileSearchTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Durchsucht Datei-INHALTE im Projektverzeichnis nach einem grep-Pattern (BRE — basic regex). "
-            "WICHTIG: Pattern ist KEIN PCRE/Python-Regex. '|', '+', '?' etc. brauchen Backslash-Escape "
-            "oder funktionieren nicht. Fuer Substring-Suche einfach Wort eingeben (z.B. 'estimate_tokens'). "
+            "Durchsucht Datei-INHALTE im Projektverzeichnis nach einem grep-Pattern (BRE — Basic Regular Expressions, NICHT PCRE/Python-Regex). "
+            "Pattern-Syntax (BRE): Wort direkt eingeben = Substring-Suche (einfachster Fall, z.B. 'estimate_tokens' findet die Datei token_estimation.py). "
+            "'.' = ein Zeichen, '.*' = beliebig viele, '^' = Zeilenanfang, '$' = Zeilenende, '\\' = Escape. "
+            "Wichtig: '+', '?', '|' sind KEINE Quantoren in BRE — fuer ODER muss '\\|' verwendet werden (z.B. 'foo\\|bar'), "
+            " fuer 'ein oder mehr' '\\+' (z.B. 'def\\+'), fuer 'optional' '\\?'. "
             "STARK EMPFOHLEN: file_pattern setzen (z.B. '*.py') sonst floodet HTML/Doku die max_results. "
+            "Code in Repos liegt unter 'repo/' — also path='repo/core/src' nutzen. "
             "Gibt Dateinamen (relativ zum search_dir), Zeilennummern und Kontext zurueck. "
             "Primär-Werkzeug für Wissensfragen im Projekt; vor file_read einsetzen."
         )
@@ -1545,8 +1548,11 @@ class FileSearchTool(BaseTool):
                 "pattern": {
                     "type": "string",
                     "description": (
-                        "Suchtext (grep BRE — kein PCRE). Fuer einfache Substring-Suche: "
-                        "Wort direkt eingeben, z.B. 'token_estimation'. Punkt-Stern-Quirks beachten."
+                        "Suchtext (grep BRE). Einfachster Fall: Wort direkt eingeben = Substring-Suche, "
+                        "z.B. 'estimate_tokens' findet 'estimate_tokens' und 'token_estimation'. "
+                        "BRE-Syntax: '.' = ein Zeichen, '.*' = beliebig viele, '^' = Zeilenanfang, '$' = Zeilenende. "
+                        "'|', '+', '?' sind KEINE Quantoren — fuer ODER '\\|' (foo\\|bar), fuer 'ein oder mehr' '\\+' (def\\+), fuer 'optional' '\\?'. "
+                        "Escape: '\\.' = Punkt, '\\*' = Stern."
                     ),
                 },
                 "path": {
