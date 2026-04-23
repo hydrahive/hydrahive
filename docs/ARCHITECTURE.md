@@ -456,7 +456,7 @@ Vor jeder Compaction wird ein Pre-Compact Memory Flush durchgefuehrt, der wichti
 
 Jede Tool-Ausfuehrung durchlaeuft den Permission Classifier:
 
-1. **Static Rules** -- bekannte Tools werden fest klassifiziert (file_write = MUTATION, file_read = READ)
+1. **Static Rules** -- bekannte Tools werden fest klassifiziert (`file_write` = MUTATION, `file_read` = READ). `file_patch` gilt ebenfalls als MUTATION.
 2. **LLM-Fallback** -- unbekannte Tools (MCP, Plugins) werden per LLM eingestuft
 3. Bei MUTATION-Tools: optionale Bestaetigung (`destructive_warning.py`)
 4. Bei aktivierter `boss_policy`: automatische Verification nach Mutation
