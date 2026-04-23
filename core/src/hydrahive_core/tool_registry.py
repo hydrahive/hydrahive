@@ -1157,6 +1157,7 @@ class FileReadTool(BaseTool):
             result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
             if original_limit != limit:
                 result["note"] = f"limit {original_limit} clamped to {limit} (min 4000, max 32000)"
+                logger.warning("file_read: limit %s too small, clamped to %d (minimum 4000)", original_limit, limit)
             if has_more:
                 result["has_more"] = True
                 result["next_offset"] = offset + limit
@@ -1591,7 +1592,7 @@ class FileSearchTool(BaseTool):
         import subprocess
 
         # #597: Path-Validation — niemals ausserhalb des Projekt-Roots suchen
-        project_root = Path(f"/projects/{project_id}").resolve()
+        project_root = workspace_root(project_id)
         if path and Path(path).is_absolute():
             requested = Path(path).resolve()
             try:
@@ -1641,7 +1642,7 @@ class FileSearchTool(BaseTool):
                 matches.append({
                     "file": m.group(1).replace(str(search_dir) + "/", ""),
                     "line": int(m.group(2)),
-                    "text": m.group(3),  # Volle Zeile, kein [:200]-Limit
+                    "text": m.group(3)[:200].strip(),
                 })
 
         return {"matches": matches, "count": len(matches), "pattern": pattern, "search_dir": str(search_dir)}

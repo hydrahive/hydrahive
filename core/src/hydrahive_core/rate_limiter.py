@@ -376,24 +376,22 @@ class RateLimiter:
     def check_agent_call(self, agent_id: str) -> None:
         """Rate-Limit für interne Agent-Calls (ask_agent, delegate_agent, spawn_agent).
         Verhindert unkontrollierte Agent-Kaskaden und Kostenexplosionen.
+        Für distributed Setup wird Redis benötigt — kein lokaler Fallback mehr.
         """
         redis_key = f"hydrahive:rate:agent_call:{agent_id}"
-        redis_allowed = self._redis_check(redis_key, self.settings.agent_call_max, self.settings.agent_call_window_s)
-        if redis_allowed is not None:
-            if not redis_allowed:
-                raise RuntimeError(
-                    f"Agent '{agent_id}' hat das Call-Limit überschritten "
-                    f"({self.settings.agent_call_max} interne Calls/Minute). "
-                    f"Möglicher Agent-Loop oder Kostenexplosion — wird blockiert."
-                )
+        redis_allowed = self._redis_check(
+            redis_key, self.settings.agent_call_max, self.settings.agent_call_window_s
+        )
+
+        if redis_allowed is None:
+            self.logger.warning(
+                "Redis nicht erreichbar für Rate-Check von Agent '%s' — "
+                "skippe Rate-Limit für diesen Call (distributed Setup benötigt Redis).",
+                agent_id,
+            )
             return
 
-        if not self._check_local(
-            self._agent_call_attempts,
-            agent_id,
-            limit=self.settings.agent_call_max,
-            window_s=self.settings.agent_call_window_s,
-        ):
+        if not redis_allowed:
             raise RuntimeError(
                 f"Agent '{agent_id}' hat das Call-Limit überschritten "
                 f"({self.settings.agent_call_max} interne Calls/Minute). "
