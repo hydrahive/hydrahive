@@ -497,8 +497,16 @@ async def handle_message_stream(
                 # zurück (wie vor #864). Bei Flag=1 + MiniMax-Model + resolvebarem
                 # Key wird der direkte SDK-Pfad verwendet — native tool_use-Blöcke
                 # statt XML-Halluzinationen.
+                logger.info(
+                    "DISPATCH-DEBUG #869: _model_name=%r is_claude=%s oauth_token_present=%s",
+                    _model_name, _is_claude, bool(oauth_token),
+                )
                 _mm_should_use, _mm_key_stream = _should_use_minimax_anthropic_stream(
                     _model_name, boss_cfg, oauth_token_present=bool(oauth_token),
+                )
+                logger.info(
+                    "DISPATCH-DEBUG #869: mm_should_use=%s mm_key_present=%s",
+                    _mm_should_use, bool(_mm_key_stream),
                 )
                 _mm_routed = False
                 if _mm_should_use:
