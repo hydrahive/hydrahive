@@ -142,6 +142,19 @@ if [[ "${INSTALL_SEARXNG,,}" == "y" ]]; then
     source "${MODULES_DIR}/14_searxng.sh"
 fi
 
+# --- Modul 18: Voice Interface (optional) ---
+# Wyoming (Docker) oder MiniMax (Cloud) für STT + TTS.
+# Legt /etc/hydrahive/voice.json an (nicht überschreiben wenn bereits vorhanden).
+echo ""
+if [ -t 0 ]; then
+    read -rp "Voice Interface (STT + TTS) installieren? (y/N) " INSTALL_VOICE
+else
+    INSTALL_VOICE="n"
+fi
+if [[ "${INSTALL_VOICE,,}" == "y" ]]; then
+    source "${MODULES_DIR}/18_voice.sh"
+fi
+
 echo ""
 echo -e "${BLUE}--- Phase 7: Code Editor ---${NC}"
 source "${MODULES_DIR}/15_codeserver.sh"
