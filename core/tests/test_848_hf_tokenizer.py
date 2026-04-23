@@ -26,6 +26,27 @@ def _reset_caches():
     te._warned_models.clear()
 
 
+# ─── Test: tiktoken-Pfad für Claude/GPT — OHNE transformers-Abhaengigkeit ─
+
+def test_claude_tiktoken_no_transformers(monkeypatch):
+    """tiktoken-Pfad für claude/gpt muss funktionieren, auch wenn transformers fehlt.
+
+    Dieser Test verifiziert dass der claude-tiktoken-Fallback funktioniert,
+    ohne dass transformers installiert ist. Er wird NIEMALS übersprungen.
+    """
+    _reset_caches()
+    # Simuliere: transformers existiert nicht
+    import sys
+    mods = {k: v for k, v in sys.modules.items() if k == "transformers"}
+    for k in mods:
+        del sys.modules[k]
+    monkeypatch.delitem(sys.modules, "transformers", raising=False)
+    from hydrahive_core.token_estimation import estimate_tokens
+
+    result = estimate_tokens("hello claude", "claude-sonnet-4")
+    assert result > 0, "tiktoken sollte Tokens zaehlen"
+
+
 # ─── Test: HF-Tokenizer wird für minimax verwendet ──────────────────────
 
 def test_minimax_uses_qwen_tokenizer(monkeypatch):
@@ -57,7 +78,6 @@ def test_minimax_uses_qwen_tokenizer(monkeypatch):
 def test_hf_import_error_falls_back(monkeypatch, caplog):
     """Kein transformers installiert → tokenizer=None → Heuristik greift."""
     _reset_caches()
-
     # Simuliere: transformers existiert nicht
     import sys
     mods = {k: v for k, v in sys.modules.items() if k == "transformers"}
@@ -70,7 +90,6 @@ def test_hf_import_error_falls_back(monkeypatch, caplog):
 
     tok = _get_tokenizer("minimax-chat")
     assert tok is None  # kein Tokenizer → None
-
     # estimate_tokens nutzt den Fallback
     result = estimate_tokens("hello world", "minimax-chat")
     assert result == max(1, int(len("hello world") / 3.2))
@@ -82,7 +101,6 @@ def test_hf_load_failure_falls_back(monkeypatch, caplog):
     """from_pretrained wirft Exception → tokenizer=None → Heuristik."""
     transformers = pytest.importorskip("transformers")
     _reset_caches()
-
     original_from_pretrained = transformers.AutoTokenizer.from_pretrained
 
     def bad_from_pretrained(repo_id, **kwargs):
@@ -98,7 +116,6 @@ def test_hf_load_failure_falls_back(monkeypatch, caplog):
 
     result = estimate_tokens("some text", "minimax")
     assert result == max(1, int(len("some text") / 3.2))
-
     # Warning wurde geloggt (einmalig)
     assert any("fallback to heuristic" in r.message for r in caplog.records)
 
@@ -109,7 +126,6 @@ def test_cache_hit_on_second_call(monkeypatch):
     """Zwei Aufrufe mit gleichem Model → nur 1x from_pretrained."""
     transformers = pytest.importorskip("transformers")
     _reset_caches()
-
     class FakeTokenizer:
         encode_count = 0
 
