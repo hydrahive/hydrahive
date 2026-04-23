@@ -1320,6 +1320,7 @@ class FilePatchTool(BaseTool):
                 "replace": {"type": "string", "description": "Ersetzungstext"},
                 "count": {"type": "integer", "description": "Max. Ersetzungen (0=alle, Standard: 1)"},
                 "force_stale": {"type": "boolean", "description": "#849: Local modification between read→patch tolerieren. Default false."},
+                "strict": {"type": "boolean", "description": "Strict mode (ETag-Hash check, Backup). Default true. Lax mode only with explicit strict=false."},
             },
             "required": ["path", "search", "replace"],
         }
@@ -1348,6 +1349,10 @@ class FilePatchTool(BaseTool):
         # Vor Patch: wenn aktueller SHA256 ≠ gespeicherter SHA256 →
         # Datei wurde zwischen read→patch geändert → stale.
         force_stale = kwargs.get("force_stale", False)
+        strict_mode = kwargs.get("strict", True)
+        if not strict_mode:
+            logger.warning("file_patch [%s] LAХ MODE: %s — ETag/Hash-Check und Backup deaktiviert", agent_id, path)
+
         stored_hash = FileWriteTool.get_read_hash(resolved)
         if stored_hash and not force_stale:
             current_hash = hashlib.sha256(file_path.resolve().read_bytes()).hexdigest()
