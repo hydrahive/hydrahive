@@ -106,3 +106,16 @@ def test_ignores_normal_assistant_response():
         "erst einen Plan entwerfen?"
     )
     assert is_hallucinated_tool_call(content) is False
+
+
+# #862: minimax:tool_call XML-Varianten
+def test_detects_minimax_xml_closing_tag():
+    assert is_hallucinated_tool_call("Der Patch ist fertig.\n</minimax:tool_call>") is True
+
+
+def test_detects_minimax_xml_opening_tag():
+    assert is_hallucinated_tool_call('<minimax:tool_call name="file_write">') is True
+
+
+def test_detects_generic_ns_tool_call_tag():
+    assert is_hallucinated_tool_call("erledigt\n</foo:tool_call>") is True

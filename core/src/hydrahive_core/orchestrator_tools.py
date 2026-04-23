@@ -937,7 +937,9 @@ _HALLUCINATION_PATTERN = _re.compile(
     r"\[TOOL_CALL\]"                       # [TOOL_CALL]-Marker
     r"|\[/TOOL_CALL\]"                     # geschlossener Marker
     r"|^\s*\{\s*[\"']?tool[\"']?\s*=>\s*"  # {tool => ... am Zeilenanfang
-    r"|^\s*\{\s*[\"']?tool[\"']?\s*:\s*[\"']\w+[\"']\s*,\s*[\"']?args[\"']?\s*:",
+    r"|^\s*\{\s*[\"']?tool[\"']?\s*:\s*[\"']\w+[\"']\s*,\s*[\"']?args[\"']?\s*:"
+    r"|</?\w+:tool_call\b"                 # #862: <minimax:tool_call> / </minimax:tool_call>
+    r"|<\w+:tool_call>",                   # #862: <ns:tool_call> ohne Attribute
     _re.IGNORECASE | _re.MULTILINE,
 )
 
