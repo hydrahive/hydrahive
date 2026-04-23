@@ -45,6 +45,8 @@ _FORBIDDEN_PATH_PREFIXES = (
 
 # HTTP-Methoden fuer Whitelist in _hardcoded_paths (#857)
 HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "request"})
+# Modules whose path-manipulation calls are whitelisted (#863)
+_SYS_PATH_MODULE_NAMES = frozenset({"sys"})
 
 
 def _is_test_file(path: Path) -> bool:
@@ -219,6 +221,27 @@ def _is_http_call_arg(node: ast.Constant, parent_map: dict[ast.AST, ast.AST]) ->
     return False
 
 
+def _is_path_insert_arg(node: ast.Constant, parent_map: dict[ast.AST, ast.AST]) -> bool:
+    """#863: True wenn node ein String-Argument zu sys.path.insert / sys.path.append
+    ist. Solche Aufrufe sind legitimes Fixture-Setup, keine hardcoded Systempfade.
+    """
+    parent = parent_map.get(node)
+    if not isinstance(parent, ast.Call):
+        return False
+    func = parent.func
+    # sys.path.insert(0, "/some/path") or sys.path.append("/some/path")
+    if isinstance(func, ast.Attribute) and func.attr in ("insert", "append", "extend"):
+        # func is the Attribute node for 'insert'/'append'/'extend'
+        # func.value is the Attribute node for 'path'
+        # func.value.value is the Name node for 'sys'
+        path_attr = func.value
+        if isinstance(path_attr, ast.Attribute) and path_attr.attr == "path":
+            sys_name = path_attr.value
+            if isinstance(sys_name, ast.Name) and sys_name.id in _SYS_PATH_MODULE_NAMES:
+                return True
+    return False
+
+
 def _hardcoded_paths(tree: ast.Module) -> list[tuple[int, str]]:
     """Findet String-Literale die auf absolute Pfade zeigen.
     Whitelist: HTTP-Client-Aufrufe mit /projects/- URLs (API-Endpunkte, #857)
@@ -234,6 +257,9 @@ def _hardcoded_paths(tree: ast.Module) -> list[tuple[int, str]]:
                 continue
             # Whitelist: HTTP-Client-URLs (#857)
             if _is_http_call_arg(node, parent_map):
+                continue
+            # Whitelist: sys.path.insert/append calls (#863)
+            if _is_path_insert_arg(node, parent_map):
                 continue
             for prefix in _FORBIDDEN_PATH_PREFIXES:
                 if v.startswith(prefix):
