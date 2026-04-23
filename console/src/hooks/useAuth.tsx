@@ -17,23 +17,42 @@ const ALL_PERMS: GroupPermissions = { pages: ["*"], tools: ["*"], plugins: ["*"]
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const t = localStorage.getItem("hydrahive_token");
-    const u = localStorage.getItem("hydrahive_user");
-    const r = localStorage.getItem("hydrahive_role") ?? "user";
-    const g = localStorage.getItem("hydrahive_group") ?? "standard";
-    let p: GroupPermissions = ALL_PERMS;
-    try { p = JSON.parse(localStorage.getItem("hydrahive_permissions") || "null") ?? ALL_PERMS; } catch { /* */ }
-    return t && u ? { token: t, username: u, role: r, group: g, permissions: p } : null;
-  });
+  // #770: Kein localStorage fuer Token mehr. Auth-State kommt nach Mount
+  // von GET /auth/me (Cookie-auth) — kein Bearer noetig.
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  // Nach Mount: Cookie-basierte /auth/me-Abfrage fuer Wiederherstellung
+  // des Auth-State nach Page-Reload (F5).
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        // Token nicht mehr aus /auth/me — wir speichern ihn nur in React-State.
+        // login() setzt den Cookie, danach holt restore() den State.
+        // Fuer die Session brauchen wir keinen persistenten Token mehr.
+        setUser({
+          username: data.username,
+          token: "",  // nicht mehr persistent
+          role: data.role,
+          group: data.group ?? "standard",
+          permissions: data.permissions ?? ALL_PERMS,
+        });
+      } catch { /* offline / not logged in */ }
+    }
+    restore();
+    return () => { cancelled = true; };
+  }, []);
 
   async function login(username: string, password: string) {
-    // Clear stale token before login so pending requests with old token
-    // won't trigger logout after we receive a fresh token
-    localStorage.removeItem("hydrahive_token");
+    // #770: Cookie-Pfad + Body-Token fuer CLI/MCP. Browser nutzt Cookie.
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     });
     if (!res.ok) {
@@ -41,27 +60,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(e.detail || "Login fehlgeschlagen");
     }
     const data  = await res.json();
-    const token = data.access_token;
     const role  = data.role  ?? "user";
     const group = data.group ?? "standard";
-
     const permissions = data.permissions ?? ALL_PERMS;
-    setUser({ username: data.username ?? username, token, role, group, permissions });
-    localStorage.setItem("hydrahive_token", token);
-    localStorage.setItem("hydrahive_user",  username);
-    localStorage.setItem("hydrahive_role",  role);
-    localStorage.setItem("hydrahive_group", group);
-    localStorage.setItem("hydrahive_permissions", JSON.stringify(permissions));
+
+    // #770: Token NICHT mehr in localStorage. Nur React-State + httpOnly-Cookie.
+    setUser({ username: data.username ?? username, token: data.access_token ?? "", role, group, permissions });
   }
 
   function logout() {
     setUser(null);
+    // localStorage fuer Token/User/Role/Group/Permissions aufraeumen — aber
+    // since #770 werden die nicht mehr geschrieben, nur noch alte Eintraege
+    // cleanern (Migration fuer bestehende Browser-Sessions).
     localStorage.removeItem("hydrahive_token");
     localStorage.removeItem("hydrahive_user");
     localStorage.removeItem("hydrahive_role");
     localStorage.removeItem("hydrahive_group");
     localStorage.removeItem("hydrahive_permissions");
     sessionStorage.removeItem("hh_wizard_done");
+    // Cookie-Logout: Backend + Cookie loeschen
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
   }
 
   useEffect(() => {

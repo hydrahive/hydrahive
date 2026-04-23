@@ -722,8 +722,13 @@ from .token_blacklist import TokenBlacklist as _TokenBlacklist
 _token_blacklist = _TokenBlacklist(settings.token_blacklist_db)
 
 
-def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str:
-    """JWT-Token für den angegebenen User erstellen."""
+def _make_jwt(username: str, role: str = "user", group: str = "standard", aud: str | None = None) -> str:
+    """JWT-Token für den angegebenen User erstellen.
+
+    Args:
+        aud: Optional audience claim. Used for WS-tickets (aud="websocket").
+             When set, _verify_jwt enforces that exact claim.
+    """
     import uuid
     from jose import jwt as jose_jwt
     payload = {
@@ -734,11 +739,18 @@ def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str
         "iat":   datetime.now(timezone.utc),
         "jti":   str(uuid.uuid4()),
     }
+    if aud:
+        payload["aud"] = aud
     return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 
-def _verify_jwt(token: str) -> tuple[str, str]:
-    """Token verifizieren — gibt (username, role) zurück oder wirft HTTPException 401."""
+def _verify_jwt(token: str, *, required_aud: str | None = None) -> tuple[str, str]:
+    """Token verifizieren — gibt (username, role) zurück oder wirft HTTPException 401.
+
+    Args:
+        required_aud: Wenn gesetzt, muss der Token diesen audience-Claim haben.
+                      Für WS-Tickets (aud="websocket") wird das geprüft.
+    """
     if not JWT_SECRET:
         raise HTTPException(503, "Server noch nicht bereit — JWT-Secret fehlt")
     from jose import JWTError, jwt as jose_jwt
@@ -747,11 +759,32 @@ def _verify_jwt(token: str) -> tuple[str, str]:
         jti = payload.get("jti")
         if jti and jti in _token_blacklist:
             raise HTTPException(401, "Token revoked (Logout)")
+        if required_aud:
+            if payload.get("aud") != required_aud:
+                raise HTTPException(401, "Token audience mismatch")
         return payload["sub"], payload.get("role", "user")
     except HTTPException:
         raise
     except (JWTError, KeyError):
         raise HTTPException(401, "Ungültiger oder abgelaufener Token")
+
+
+WS_TOKEN_EXPIRE_S = 120   # Kurzlebiges Ticket fuer WebSocket-Connect (#770)
+
+
+def _make_ws_token(username: str, role: str = "user") -> str:
+    """Kurzlebiges WS-Ticket mit aud=\"websocket\" Claim. #770"""
+    import uuid
+    from jose import jwt as jose_jwt
+    payload = {
+        "sub": username,
+        "role": role,
+        "aud": "websocket",
+        "exp": datetime.now(timezone.utc) + timedelta(seconds=WS_TOKEN_EXPIRE_S),
+        "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
+    }
+    return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 
 _bearer = HTTPBearer(auto_error=False)

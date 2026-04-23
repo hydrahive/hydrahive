@@ -1322,9 +1322,10 @@ def register_project_routes(
 
         # Auth vor accept — sonst gehen Yjs-Initial-Messages verloren.
         # _verify_jwt kommt aus main.py; Lazy-Import gegen Zirkularität.
+        # #770: WS-Ticket muss aud="websocket" haben (kurzlebiges Ticket, kein Session-JWT).
         from .main import _verify_jwt, _load_users as _lu
         try:
-            username, role = _verify_jwt(token)
+            username, role = _verify_jwt(token, required_aud="websocket")
         except HTTPException:
             await websocket.close(code=4401, reason="Auth fehlgeschlagen")
             return

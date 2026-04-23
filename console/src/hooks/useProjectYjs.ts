@@ -80,14 +80,6 @@ export type ProjectYjs = {
   clearText: () => void;
 };
 
-function getAuthToken(): string {
-  try {
-    return localStorage.getItem("hydrahive_token") || "";
-  } catch {
-    return "";
-  }
-}
-
 function buildServerUrl(projectId: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const base = origin.replace(/^http/, "ws");
@@ -96,12 +88,27 @@ function buildServerUrl(projectId: string): string {
 
 export function useProjectYjs(projectId: string | undefined, username: string | undefined): ProjectYjs | null {
   const [connected, setConnected] = useState(false);
-  // Token-Version: beim Logout leert LoginPage localStorage, dann wechselt
-  // diese Variable → useMemo reißt den alten Provider ab + baut ihn NICHT
-  // neu (weil token=""). Kein Re-Connect mit totem Token mehr.
-  const token = getAuthToken();
+
+  // #770: Token kommt aus dem kurzlebigen WS-Ticket-Endpoint. Kein
+  // localStorage-JWT-Persistence mehr — das Ticket (120s gültig) wird
+  // per Cookie-Auth von /auth/ws-token geholt. Bei Logout bleibt der
+  // Cookie invalide → wsToken="" → useMemo gibt null → kein Connect.
+  const [wsToken, setWsToken] = useState<string>("");
+
+  useEffect(() => {
+    if (!projectId || !username) return;
+    let cancelled = false;
+    fetch("/auth/ws-token", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: { ticket?: string }) => {
+        if (!cancelled && data.ticket) setWsToken(data.ticket);
+      })
+      .catch(() => { /* fetch-Fehler -> leerer String, useMemo gibt null */ });
+    return () => { cancelled = true; };
+  }, [projectId, username]);
+
   const docAndProvider = useMemo(() => {
-    if (!projectId || !username || !token) return null;
+    if (!projectId || !username || !wsToken) return null;
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("composer");
     // y-websocket bildet die URL als `${serverUrl}/${roomname}?${params}`.
@@ -117,13 +124,9 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       ydoc,
       {
         connect: true,
-        // #766-Partial-Rollback: Browser-Cookie-Auth für WebSocket-Handshake
-        // funktionierte nicht zuverlässig (Collab-Sync brach — keine
-        // WS-Connects auf Backend-Seite nach Deploy). Query-Param-Token
-        // ist der funktionierende Pfad. Backend akzeptiert weiterhin
-        // Cookie als Fallback (für CLI/Tool-Clients ohne Query-Token).
-        // Cookie-WS-Debug wird separat angegangen.
-        params: { token },
+        // #770: Token ist jetzt ein kurzlebiges WS-Ticket (aud="websocket").
+        // Cookie-Auth allein reichte für WS-Connect nicht zuverlässig (#766).
+        params: { token: wsToken },
         // #554: Cross-Browser-Sync muss über den HydraHive/pycrdt-Server
         // laufen. y-websocket nutzt sonst im selben Browser zusätzlich
         // BroadcastChannel und kann Backend-Probleme verdecken.
@@ -153,9 +156,9 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       console.debug(`[collab/${projectId}] ydoc update origin=`, origin);
     });
     return { ydoc, ytext, provider };
-    // token + username in deps: bei Logout wird alles abgerissen, Re-Login
-    // mit neuem Token baut einen frischen Provider auf.
-  }, [projectId, username, token]);
+    // wsToken in deps: bei Logout wird alles abgerissen, Re-Login mit
+    // neuem Token baut einen frischen Provider auf.
+  }, [projectId, username, wsToken]);
 
   useEffect(() => {
     if (!docAndProvider) return;

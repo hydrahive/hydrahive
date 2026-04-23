@@ -472,6 +472,28 @@ def register_core_misc_routes(
         username, role = auth
         return {"username": username, "role": role}
 
+    # #770: GET /auth/me — Cookie-authenticated User-State (kein Bearer noetig).
+    # Ersetzt localStorage-reads in useAuth.tsx. Liefert username, role, group,
+    # permissions — alles was die App nach Reload braucht.
+    @auth_router.get("/auth/me")
+    def get_me(auth: tuple[str, str] = Depends(require_auth)):
+        username, role = auth
+        users = load_users()
+        user_data = users.get(username, {}) if users else {}
+        group = user_data.get("group", "standard")
+        perms = group_service.get_permissions(username) if group_service else {}
+        return {"username": username, "role": role, "group": group, "permissions": perms}
+
+    # #770: POST /auth/ws-token — Cookie-authenticated, liefert kurzlebiges
+    # WS-Ticket mit aud="websocket". Nutzbar fuer Collab-WS-Connect.
+    # Ticket-Laeuftzeit: 120s (WS_TOKEN_EXPIRE_S aus main.py).
+    @auth_router.post("/auth/ws-token")
+    def create_ws_token(auth: tuple[str, str] = Depends(require_auth)):
+        from .main import _make_jwt as _mj, WS_TOKEN_EXPIRE_S as _ws_exp
+        username, role = auth
+        token = _mj(username, role, aud="websocket")
+        return {"ticket": token, "expires_in": _ws_exp}
+
     @public_router.get("/health")
     def health():
         return {"status": "ok", "service": "hydrahive-core"}

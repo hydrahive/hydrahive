@@ -94,9 +94,7 @@ export function useProjectSubscribe(projectId: string | undefined, onBroadcast?:
     let cancelled = false;
 
     async function connect() {
-      // #766: localStorage-Check als "skip wenn nicht eingeloggt"-Heuristik.
-      // Auth selbst läuft über Cookie (credentials:'include').
-      if (!localStorage.getItem("hydrahive_token") || cancelled) return;
+      if (!projectId || cancelled) return;
 
       const controller = new AbortController();
       abortRef.current = controller;
