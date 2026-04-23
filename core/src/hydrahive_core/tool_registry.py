@@ -1616,7 +1616,10 @@ class FileSearchTool(BaseTool):
         if not search_dir.exists():
             return {"error": f"Verzeichnis nicht gefunden: {search_dir}"}
 
-        cmd = ["grep", "-rn", "--include", file_pattern or "*", "-m", str(max_results * 3), pattern, str(search_dir)]
+        # Fix #830: empty string for --include causes grep to skip all files.
+        # Must use "*" when no filter specified.
+        include_arg = "*" if file_pattern == "" else file_pattern
+        cmd = ["grep", "-rn", "--include", include_arg, "-m", str(max_results * 3), pattern, str(search_dir)]
         try:
             r = await asyncio.to_thread(lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=30))
         except subprocess.TimeoutExpired:
