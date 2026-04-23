@@ -65,7 +65,9 @@ class IsolationMode(str, Enum):
 
 
 ALLOWED_ISOLATION_MODES: frozenset[str] = frozenset(m.value for m in IsolationMode)
-DEFAULT_ISOLATION_MODE: IsolationMode = IsolationMode.FULL_WORKTREE
+# #822: read_only als sicherster Default — ein Agent darf andere Agents nur
+# lesen, nicht schreiben. full_worktree bleibt explizit anwählbar.
+DEFAULT_ISOLATION_MODE: IsolationMode = IsolationMode.READ_ONLY
 
 
 class ToolCategory(str, Enum):

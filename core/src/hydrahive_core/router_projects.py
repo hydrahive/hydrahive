@@ -462,6 +462,13 @@ def register_project_routes(
                 )
                 if clone_result.returncode != 0:
                     provision_warnings.append(f"Git-Clone: {clone_result.stderr[:200]}")
+                else:
+                    # #875: .git/ auf proj_<id>:hydrahive setzen
+                    clone_target = files_dir / req.id
+                    subprocess.run(
+                        ["sudo", "chown", "-R", f"proj_{req.id}:hydrahive", str(clone_target)],
+                        check=False, capture_output=True,
+                    )
             except Exception as e:
                 logger.warning("Git-Clone fehlgeschlagen: %s", e)
                 provision_warnings.append(f"Git-Clone: {e}")
@@ -1017,6 +1024,9 @@ def register_project_routes(
                 raise HTTPException(500, "Git clone fehlgeschlagen")
             # Berechtigungen setzen
             _sp.run(["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True)
+            # #875: .git/ auf proj_<project_id>:hydrahive setzen
+            _sp.run(["sudo", "chown", "-R", f"proj_{project_id}:hydrahive", str(target / ".git")], check=False, capture_output=True)
+            _sp.run(["sudo", "chown", "-R", f"proj_{project_id}:hydrahive", str(target)], check=False, capture_output=True)
             return {"ok": True, "project_id": project_id, "cloned_to": str(target), "branch": req.branch}
         except _sp.TimeoutExpired:
             raise HTTPException(504, "Git clone Timeout (5 Minuten)")
