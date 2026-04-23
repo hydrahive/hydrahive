@@ -278,9 +278,9 @@ def test_settings_default_path(monkeypatch):
 
 # ── #652: isolation_mode Parameter ──────────────────────────────────────────
 
-def test_default_isolation_mode_full_worktree(repo, worktrees):
+def test_default_isolation_mode_read_only(repo, worktrees):
     meta = create_worktree(base_repo=repo, **BASE_KW)
-    assert meta.isolation_mode == "full_worktree"
+    assert meta.isolation_mode == "read_only"
 
 
 @pytest.mark.parametrize("mode", ["read_only", "patch_only", "full_worktree"])
@@ -332,3 +332,4 @@ def test_legacy_isolation_mode_mapped_on_read(repo, worktrees):
 
     reread = get_worktree(meta.worktree_id)
     assert reread.isolation_mode == "full_worktree"
+
