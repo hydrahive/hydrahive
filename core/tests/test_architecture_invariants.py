@@ -2325,3 +2325,60 @@ def test_invariant30_project_reconcile_wired():
         "Doctor-Fix-ID reconcile_projects entfernt — UI-Button funktioniert nicht mehr"
     assert "_check_projects_reconcile" in doctor, \
         "Doctor-Check _check_projects_reconcile entfernt — fehlende Shares werden nicht mehr gemeldet"
+
+
+async def test_system_prompt_includes_github_repo(tmp_path, boss_cfg):
+    """860: build_system_prompt injiziert github_repo in den statischen Prompt.
+    
+    Wenn `github_repo` gesetzt ist, muss der Prompt-Block "## Projekt-Metadaten"
+    erscheinen und den Repo-Namen enthalten.
+    """
+    from hydrahive_core.orchestrator_context import build_system_prompt
+    
+    boss_cfg.github_repo = "hydrahive/hydrahive"
+    boss_cfg.execution_mode = "safe"
+    # identity.name → Projekt-Name
+    from dataclasses import dataclass
+    @dataclass
+    class Identity:
+        name: str = "Test Projekt"
+    boss_cfg.identity = Identity()
+    
+    static_p, _dynamic = await build_system_prompt(boss_cfg, "test")
+    
+    assert "## Projekt-Metadaten" in static_p, (
+        "Prompt sollte '## Projekt-Metadaten' enthalten wenn github_repo gesetzt"
+    )
+    assert "hydrahive/hydrahive" in static_p, (
+        "Prompt muss github_repo-Wert enthalten"
+    )
+    assert "Execution Mode: safe" in static_p, (
+        "Prompt muss execution_mode enthalten"
+    )
+    assert "Name: Test Projekt" in static_p, (
+        "Prompt muss Projekt-Namen aus identity.name enthalten"
+    )
+
+
+async def test_system_prompt_skips_empty_github_repo(tmp_path, boss_cfg):
+    """860: build_system_prompt lässt Projekt-Metadaten-Block weg wenn kein github_repo gesetzt.
+    
+    Ohne github_repo wird kein "## Projekt-Metadaten"-Block erzeugt — kein Clutter.
+    """
+    from hydrahive_core.orchestrator_context import build_system_prompt
+    
+    # Explizit leerer github_repo → kein Block
+    boss_cfg.github_repo = ""
+    boss_cfg.execution_mode = "safe"
+    from dataclasses import dataclass
+    @dataclass
+    class Identity:
+        name: str = "Test Projekt"
+    boss_cfg.identity = Identity()
+    
+    static_p, _dynamic = await build_system_prompt(boss_cfg, "test")
+    
+    # Kein "## Projekt-Metadaten" wenn github_repo leer ist
+    assert "## Projekt-Metadaten" not in static_p, (
+        "Prompt sollte keinen Projekt-Metadaten-Block haben wenn github_repo leer ist"
+    )

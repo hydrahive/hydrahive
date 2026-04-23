@@ -637,6 +637,24 @@ async def build_system_prompt(
         ]
         channels.policies = "\n\n".join(p for p in _policy_parts if p)
 
+        # #860: Projekt-Metadaten injecten — github_repo, execution_mode etc.
+        # damit der Agent weiss zu welchem GitHub-Repo er gehört und welchen
+        # Execution-Mode das Projekt hat (safe/elevated/unrestricted).
+        # Block ist statisch (ändert sich selten), daher cachebar.
+        # Nur anzeigen wenn github_repo gesetzt ist — sonst kein Clutter (#860).
+        _github_repo = getattr(boss_cfg, "github_repo", None) or ""
+        _exec_mode = getattr(boss_cfg, "execution_mode", None) or "safe"
+        if _github_repo:
+            _proj_name = getattr(boss_cfg, "identity", None)
+            _proj_name = getattr(_proj_name, "name", None) if _proj_name else None
+            channels.metadata = (
+                "## Projekt-Metadaten\n\n"
+                f"- Name: {_proj_name or boss_cfg.id}\n"
+                f"- Workspace: /projects/{boss_cfg.id}\n"
+                f"- GitHub-Repo: {_github_repo}\n"
+                f"- Execution Mode: {_exec_mode}"
+            )
+
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
             if blueprint_ctx:
