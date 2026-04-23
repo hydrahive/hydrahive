@@ -152,22 +152,27 @@ def test_cache_hit_on_second_call(monkeypatch):
 
 def test_claude_path_unchanged(monkeypatch):
     """claude-encoding läuft über tiktoken, kein HF-Tokenizer involviert."""
-    # transformers wird geladen, aber der Aufruf sollte kein HF-Tok verwenden
-    transformers = pytest.importorskip("transformers")
-    _reset_caches()
+    import types
+    from unittest.mock import MagicMock
+
+    # #858: kein pytest.importorskip("transformers") — dieser Test prüft
+    # den tiktoken-Pfad, braucht transformers nur als Spy-Target.
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.AutoTokenizer = MagicMock()
+    monkeypatch.setitem(__import__("sys").modules, "transformers", fake_transformers)
 
     hf_called = False
-    original = transformers.AutoTokenizer.from_pretrained
 
     def trackcall(repo_id, **kwargs):
         nonlocal hf_called
         hf_called = True
-        return original(repo_id, **kwargs)
 
-    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", trackcall)
+    fake_transformers.AutoTokenizer.from_pretrained = trackcall
+
+    _reset_caches()
 
     from hydrahive_core.token_estimation import estimate_tokens
 
     result = estimate_tokens("hello claude", "claude-sonnet-4")
     assert not hf_called, "tiktoken-Pfad sollte kein HF importieren"
-    assert result > 0  # tiktoken zählt tokens
+    assert result > 0
