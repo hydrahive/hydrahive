@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from hydrahive_core.session_manager import SessionManager, MessageRole
+from hydrahive_core.session_manager import SessionManager, MessageRole, cleanup_incomplete_messages
 
 
 @pytest.fixture
@@ -378,3 +378,64 @@ async def test_new_session_cleans_db_ghosts(sm):
     row_fresh = sm._db.execute("SELECT ended_at FROM sessions WHERE id = ?", (fresh.id,)).fetchone()
     assert row_ghost["ended_at"] is not None, "Geist muss beendet sein"
     assert row_fresh["ended_at"] is None, "Frische Session muss noch aktiv sein"
+
+
+# -------------------------------------------------------------------------- #871
+
+def _make_msg(role, content="test", tool_calls=None, tool_call_id=None):
+    """Hilfsfunktion für Message-Objekte im Test."""
+    from hydrahive_core.session_manager import Message
+    return Message.create(
+        role=MessageRole(role),
+        content=content,
+        tool_calls=tool_calls,
+        tool_call_id=tool_call_id,
+    )
+
+
+def test_cleanup_removes_incomplete_assistant_after_cancel():
+    """#871: Nach Cancellation — incomplete ASSISTANT (tool_calls aber kein
+    tool_result) ist die LETZTE message und wird entfernt."""
+    messages = [
+        _make_msg("user", "start"),
+        # ASSISTANT mit tool_calls gefolgt von nichts (Cancel) — incomplete
+        _make_msg("assistant", "ich rufe tool auf", tool_calls=[{"id": "tc1", "type": "function", "function": {"name": "test", "arguments": "{}"}}]),
+    ]
+    removed = cleanup_incomplete_messages(messages)
+    assert removed == 1, f"Erwartet 1 removed, bekommen {removed}"
+    # Nur user-Message übrig
+    assert len(messages) == 1
+    assert messages[0].role == MessageRole.USER
+
+
+def test_cleanup_removes_orphaned_tool_results():
+    """#871: Orphaned TOOL (tool_call_id hat keinen corresponding ASSISTANT)
+    wird entfernt. ASSISTANTtc1 bleibt weil tc1 ein gültiges tool_call.id ist
+    (corresponding TOOLtc1 existiert)."""
+    messages = [
+        _make_msg("user", "start"),
+        _make_msg("assistant", "", tool_calls=[{"id": "tc1", "type": "function", "function": {"name": "test", "arguments": "{}"}}]),
+        _make_msg("tool", "result for tc1", tool_call_id="tc1"),   # valid pair for tc1
+        _make_msg("tool", "orphaned result", tool_call_id="tc999"),  # orphaned — tc999 has no corresponding assistant
+    ]
+    removed = cleanup_incomplete_messages(messages)
+    assert removed == 1, f"Erwartet 1 removed (orphaned tool_result), bekommen {removed}"
+    assert len(messages) == 3, f"USER + ASSISTANTtc1 + TOOLtc1 = 3 messages, got {len(messages)}"
+    # TOOLtc999 removed, last message is now TOOLtc1
+    assert messages[-1].role == MessageRole.TOOL, "TOOLtc1 muss erhalten bleiben"
+    assert messages[-1].tool_call_id == "tc1"
+
+
+def test_cleanup_noop_on_clean_history():
+    """#871: Saubere History (kein cancel) — keine Aenderung."""
+    messages = [
+        _make_msg("user", "start"),
+        _make_msg("assistant", "antwort"),
+        _make_msg("tool", "ok", tool_call_id="tc1"),
+        _make_msg("assistant", "fertig", tool_calls=[{"id": "tc2", "type": "function", "function": {"name": "test2", "arguments": "{}"}}]),
+        _make_msg("tool", "ok2", tool_call_id="tc2"),
+    ]
+    original_len = len(messages)
+    removed = cleanup_incomplete_messages(messages)
+    assert removed == 0, f"Erwartet 0 removed, bekommen {removed}"
+    assert len(messages) == original_len

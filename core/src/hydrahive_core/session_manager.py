@@ -74,6 +74,70 @@ def redact_thinking_blocks(messages: list[dict]) -> list[dict]:
     return result
 
 
+def cleanup_incomplete_messages(session_messages: list) -> int:
+    """#871: Nach Cancellation/Abort — incomplete Messages entfernen:
+    1. Orphaned TOOL: TOOL dessen tool_call_id kein corresponding ASSISTANT hat
+       (wird zuerst entfernt, damit gültige ASSISTANT-.tool_calls sichtbar werden)
+    2. Incomplete ASSISTANT: ASSISTANT mit tool_calls aber die naechste Message
+       ist nicht TOOL (d.h. tool_results fehlen)
+
+    Ersetzt den litellm.modify_params=True Hack. Gibt Anzahl entfernter Messages zurück.
+    """
+    if not session_messages:
+        return 0
+
+    _removed = 0
+
+    def _has_parent_assistant(msgs, tc_id):
+        """Prueft ob es einen ASSISTANT mit diesem tool_call.id gibt."""
+        for _m in reversed(msgs):
+            if not (hasattr(_m, 'role') and _m.role == MessageRole.ASSISTANT):
+                continue
+            _tcs = getattr(_m, 'tool_calls', None)
+            if not _tcs:
+                continue
+            for _tc in _tcs:
+                _tc_id_val = _tc.get("id") if isinstance(_tc, dict) else getattr(_tc, 'id', None)
+                if _tc_id_val == tc_id:
+                    return True
+        return False
+
+    while session_messages:
+        _last = session_messages[-1]
+
+        # Fall 1: Orphaned TOOL (tool_call_id kein corresponding ASSISTANT)
+        if (hasattr(_last, 'role') and _last.role == MessageRole.TOOL
+                and getattr(_last, 'tool_call_id', None)):
+            _tc_id = _last.tool_call_id
+            if not _has_parent_assistant(session_messages, _tc_id):
+                session_messages.pop()
+                _removed += 1
+                logger.info("cleanup_incomplete_messages: 1 orphaned tool_result removed")
+                continue
+
+        # Fall 2: Incomplete ASSISTANT (tool_calls aber keine TOOL-Message danach)
+        if (hasattr(_last, 'role') and _last.role == MessageRole.ASSISTANT
+                and getattr(_last, 'tool_calls', None)):
+            # Pruefen ob die naechste Message ein TOOL ist
+            if len(session_messages) >= 2:
+                _next_msg = session_messages[-2]
+                _next_is_tool = (
+                    hasattr(_next_msg, 'role') and _next_msg.role == MessageRole.TOOL
+                )
+            else:
+                _next_is_tool = False
+
+            if not _next_is_tool:
+                session_messages.pop()
+                _removed += 1
+                logger.info("cleanup_incomplete_messages: 1 incomplete assistant removed")
+                continue
+
+        break  # Nichts mehr zu entfernen
+
+    return _removed
+
+
 def repair_tool_pairs(messages: list[dict]) -> list[dict]:
     """#507: Verwaiste tool_use/tool_result Paare reparieren.
 
@@ -1014,6 +1078,13 @@ class SessionManager:
                     session.messages.append(recovery_msg)
                     session._recovery_shown = True  # #826: nur einmal pro Session
                     _repaired += 1
+
+            # #871: Nach Resume — incomplete Messages (Abort/Cancellation-Rest) aufräumen
+            # bevor die Session weitergenutzt wird. Das ersetzt den litellm.modify_params=True Hack.
+            _cleaned = cleanup_incomplete_messages(session.messages)
+            if _cleaned:
+                _repaired += _cleaned
+                logger.info("cleanup_incomplete_messages: %d Nachrichten entfernt", _cleaned)
 
             # Verwaiste SYSTEM-Messages am Ende entfernen (z.B. 🔧 Tool-Detail ohne Result)
             while session.messages and session.messages[-1].role == MessageRole.SYSTEM:
