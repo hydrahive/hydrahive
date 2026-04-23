@@ -266,6 +266,9 @@ class Session:
     messages:    list[Message] = field(default_factory=list)
     # #630: Working-Memory-Snapshot bei Resume (None für frische Sessions)
     working_state: object | None = None
+    # #826: Recovery-Marker nur einmal pro Session zeigen (nicht bei jedem
+    # Tool-Result das >= 60s alt ist)
+    _recovery_shown: bool = field(default=False, repr=False)
 
     @classmethod
     def new(cls, project_id: str) -> "Session":
@@ -977,8 +980,14 @@ class SessionManager:
             #  (c) letzte Message ist mind. 60s alt (sonst ist die Session
             #      vermutlich noch live, kein echter Restart)
             _repaired = 0
-            _last_msg = session.messages[-1] if session.messages else None
-            if _last_msg and _last_msg.role == MessageRole.TOOL:
+            # #826: Recovery-Marker NUR einmal pro Session. Das 60s-_last_age_s
+            # Check feuert bei aktiven Sessions fuer jedes Tool-Result nach 60s —
+            # mit session._recovery_shown verhindern wir Wiederholung.
+            if session._recovery_shown:
+                _last_msg = None  # Skip alle Recovery-Logik
+            else:
+                _last_msg = session.messages[-1] if session.messages else None
+            if _last_msg and _last_msg.role == MessageRole.TOOL and not session._recovery_shown:
                 _recent = session.messages[-4:]
                 _has_marker = any(
                     m.role == MessageRole.SYSTEM and "[Session Recovery]" in (m.content or "")
@@ -1003,6 +1012,7 @@ class SessionManager:
                         ),
                     )
                     session.messages.append(recovery_msg)
+                    session._recovery_shown = True  # #826: nur einmal pro Session
                     _repaired += 1
 
             # Verwaiste SYSTEM-Messages am Ende entfernen (z.B. 🔧 Tool-Detail ohne Result)
