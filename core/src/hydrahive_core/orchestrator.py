@@ -617,7 +617,7 @@ class Orchestrator:
         await self._get_queue(project_id).put((future, project_cfg, content, sender, execution_mode, request_user))
         self._queue_last_used[project_id] = asyncio.get_event_loop().time()
         try:
-            return await asyncio.wait_for(asyncio.shield(future), timeout=300.0)
+            return await asyncio.wait_for(asyncio.shield(future), timeout=float(settings.orchestrator_timeout))
         except asyncio.TimeoutError:
             future.cancel()
             raise RuntimeError(

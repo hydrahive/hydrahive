@@ -178,6 +178,24 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "wks_keys"
 
     @property
+    def orchestrator_timeout(self) -> int:
+        """Timeout in Sekunden für Agent-Queue-Wartezeit (#873).
+
+        Override via Env HYDRAHIVE_ORCHESTRATOR_TIMEOUT (Default: 300).
+        """
+        import os
+        override = os.environ.get("HYDRAHIVE_ORCHESTRATOR_TIMEOUT")
+        if override:
+            try:
+                return int(override)
+            except ValueError:
+                logger.warning(
+                    "HYDRAHIVE_ORCHESTRATOR_TIMEOUT=%s ist kein integer, nutze 300",
+                    override,
+                )
+        return 300
+
+    @property
     def worktrees_dir(self) -> Path:
         """Basisverzeichnis für Sub-Agent-Worktrees (#651).
 
