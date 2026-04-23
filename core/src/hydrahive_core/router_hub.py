@@ -3,6 +3,7 @@
 GET  /hub/index                    → Index vom GitHub-Repo (gecacht 5 Min)
 POST /hub/install                  → Agent aus Hub installieren
 GET  /hub/installed                → Liste aller installierten Hub-Pakete
+GET  /hub/local-plugins            → Alle lokal installierten Plugins (#262)
 GET  /hub/clawhub/skills?q=...     → ClawhHub Skills suchen / browsen
 GET  /hub/clawhub/packages?family= → ClawhHub Plugins browsen
 POST /hub/clawhub/skill/install    → ClawhHub Skill in Agent-Skills importieren
