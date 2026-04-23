@@ -3443,12 +3443,14 @@ class VideoGenerateTool(BaseTool):
         }
 
 
-# #689: MiniMax Text-to-Music (sync, blockierend wie #679 Image).
+# #689/#801: MiniMax Text-to-Music (async, wie #688 video_generate).
 class MusicGenerateTool(BaseTool):
-    """Erzeugt einen Song per MiniMax music-2.6. Blockierender Tool-Call
-    (analog ImageGenerateTool), weil die MiniMax-Music-API synchron ist —
-    ein HTTP-POST liefert das fertige MP3 direkt im Response (hex-encoded).
-    Tool blockt typischerweise 10–30 s.
+    """Erzeugt einen Song per MiniMax music-2.6. Wie video_generate:
+    Tool submittet einen Job und **returnt sofort** mit
+    ``{job_id, status=queued, poll_url, message}``. Der Runner führt
+    den blockierenden Music-API-Call im Hintergrund aus und speichert
+    das MP3 als Artifact. Fortschritt und Ergebnis sind über
+    ``GET /me/jobs/{job_id}`` abfragbar.
 
     Dispatch-Regel:
     - ``lyrics`` gesetzt → User-Lyrics werden verwendet.
@@ -3475,7 +3477,7 @@ class MusicGenerateTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Erzeugt einen Song via MiniMax music-2.6. Sync (~1–4 min). "
+            "Erzeugt einen Song via MiniMax music-2.6. Asynchron — Tool returnt sofort. "
             "\n\n"
             "WICHTIG — zwei getrennte Felder, NICHT beides in `prompt` packen:\n"
             "  • `prompt` (max 500 Zeichen): NUR Style/Genre/Mood/Instrumente/BPM. "
@@ -3674,51 +3676,26 @@ class MusicGenerateTool(BaseTool):
         except JobStorageError:
             return {"error": "jobs storage unavailable"}
 
-        # Blockierend: auf den Task warten, damit Agent-Turn direkt das
-        # Ergebnis sieht (analog #679 Image; Music-API ist sync).
-        task = self._job_service._tasks.get(meta.job_id)
-        if task is not None:
-            try:
-                await task
-            except Exception:  # pragma: no cover — Runner-Exceptions
-                # Handled im JobService._run via _finalize; finalen Status
-                # lesen wir unten.
-                pass
-
-        final = self._job_service.get(meta.job_id)
-
-        # #802 Phase 3a: signed URL für audio/video sind im Browser ohne
-        # Auth-Cookie abrufbar. Wenn request_user vorhanden, signieren wir
-        # die URL, sonst fallback auf plain /me/jobs/-URL.
         from .jobs_service import _artifact_signed_url as _signer
 
-        artifacts = []
-        for a in (final.artifacts or []):
-            fname = a.get("filename") or ""
-            mime = a.get("mime") or ""
-            url = f"/me/jobs/{final.job_id}/artifacts/{fname}"
-            if request_user and fname:
-                signed = _signer(final.job_id, fname, request_user, ttl_seconds=300)
-                if signed:
-                    url = signed
-            artifacts.append({
-                "filename":    fname,
-                "size":       a.get("size"),
-                "mime":       mime,
-                "download_url": url,
-            })
-
-        out: dict = {
-            "job_id":    final.job_id,
-            "status":    final.status,
-            "artifacts": artifacts,
+        # SUBMIT-AND-RETURN: nicht auf den Task warten. Der Runner läuft
+        # im Hintergrund und schreibt Progress/Artifacts ins Jobs-Store.
+        poll_url = f"/me/jobs/{meta.job_id}"
+        if request_user:
+            signed_poll = _signer(meta.job_id, "poll_status", request_user, ttl_seconds=300)
+            if signed_poll:
+                poll_url = signed_poll
+        return {
+            "job_id":   meta.job_id,
+            "status":   meta.status,
+            "poll_url": poll_url,
+            "message": (
+                "Music generation started. Poll the job status for progress "
+                "(expected 1–4 min). Use GET /me/jobs/<job_id> to check."
+            ),
         }
-        if final.error:
-            out["error"] = final.error
-        return out
 
 
-# =========================================================================
 # Register all Core Tools
 # =========================================================================
 
@@ -3741,5 +3718,5 @@ registry.register(WksShellExecTool())
 registry.register(ImageGenerateTool())
 # #688: Video-Generation via MiniMax (JobService wird von main.py injectet).
 registry.register(VideoGenerateTool())
-# #689: Music-Generation via MiniMax (JobService wird von main.py injectet).
+# #689/#801: Music-Generation via MiniMax (async). JobService wird von main.py injectet.
 registry.register(MusicGenerateTool())

@@ -33,7 +33,7 @@ _denial_state: dict[str, list[float]] = defaultdict(list)  # agent_id:tool → t
 _TOOL_TIMEOUT_DEFAULT = 120  # Default: 2 Minuten
 # Per-Tool-Overrides. Tools die länger brauchen (sync-APIs mit großen Payloads).
 _TOOL_TIMEOUTS: dict[str, int] = {
-    "music_generate": 300,  # MiniMax music-2.6 Sync-API + hex-Decode
+    # music_generate: removed in #801 — tool returns immediately,
 }
 
 
