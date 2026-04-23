@@ -200,6 +200,48 @@ def _extract_tool_video(
     return None
 
 
+def _should_use_minimax_anthropic_stream(
+    model_name: str,
+    agent_cfg,
+    *,
+    oauth_token_present: bool = False,
+) -> tuple[bool, str]:
+    """#868: Entscheidet ob der Streaming-Pfad über ``_stream_minimax_anthropic``
+    gehen soll. Pur + testbar — keine Side-Effekte.
+
+    Returns ``(should_use, api_key)``. Wenn ``should_use`` False ist, bleibt
+    ``api_key`` leer und der Dispatch fällt auf den bestehenden litellm- oder
+    OAuth-Pfad zurück.
+
+    Bedingungen (ALLE erforderlich):
+      1. Kein Claude-OAuth-Token aktiv — OAuth hätte Vorrang.
+      2. ``model_name`` ist ein direktes MiniMax-Modell (``_is_direct_minimax_model``).
+      3. Feature-Flag ``HYDRAHIVE_MINIMAX_ANTHROPIC_SDK=1`` ist gesetzt.
+      4. MiniMax-Key ist via ``_provider_call_kwargs`` auflösbar.
+    """
+    from .orchestrator_llm import (
+        _is_direct_minimax_model,
+        _minimax_anthropic_sdk_enabled,
+        _provider_call_kwargs,
+    )
+    if oauth_token_present:
+        return (False, "")
+    if not _is_direct_minimax_model(model_name, None):
+        return (False, "")
+    if not _minimax_anthropic_sdk_enabled():
+        return (False, "")
+    prov = _provider_call_kwargs(model_name, agent_cfg)
+    key = prov.get("api_key", "")
+    if not key:
+        logger.warning(
+            "MiniMax-Anthropic-SDK-Flag gesetzt aber kein Key aufloesbar fuer %s — "
+            "Fall-Through zu litellm",
+            model_name,
+        )
+        return (False, "")
+    return (True, key)
+
+
 async def handle_message_stream(
     orch,
     project_id: str,
@@ -450,7 +492,37 @@ async def handle_message_stream(
                 else:
                     oauth_token = ""
 
-                if oauth_token:
+                # --- MiniMax via direkten Anthropic-SDK (#864/#868) ---
+                # Feature-Flag-gated. Bei Flag=0 fällt der Call auf den litellm-Pfad
+                # zurück (wie vor #864). Bei Flag=1 + MiniMax-Model + resolvebarem
+                # Key wird der direkte SDK-Pfad verwendet — native tool_use-Blöcke
+                # statt XML-Halluzinationen.
+                _mm_should_use, _mm_key_stream = _should_use_minimax_anthropic_stream(
+                    _model_name, boss_cfg, oauth_token_present=bool(oauth_token),
+                )
+                _mm_routed = False
+                if _mm_should_use:
+                    _mm_routed = True
+                    logger.info(
+                        "MiniMax-Anthropic-SDK-Pfad aktiv (streaming) für %s",
+                        _model_name,
+                    )
+                    async for chunk in _stream_minimax_anthropic(
+                        orch, boss_cfg, boss_id, project_id, content,
+                        messages, litellm_tools, _mm_key_stream, _model_name,
+                        execution_mode, _usage,
+                        request_user=request_user,
+                        static_prompt=_static_prompt, dynamic_prompt=_dynamic_prompt,
+                    ):
+                        if isinstance(chunk, dict):
+                            full_response = chunk.get("_full_response", full_response)
+                            streamed_any = chunk.get("_streamed_any", streamed_any)
+                        else:
+                            yield chunk
+
+                if _mm_routed:
+                    break  # MiniMax-Anthropic-SDK hat übernommen, kein weiterer Fallback
+                elif oauth_token:
                     async for chunk in _stream_anthropic_oauth(
                         orch, boss_cfg, boss_id, project_id, content,
                         messages, litellm_tools, oauth_token, _model_name,
@@ -465,7 +537,7 @@ async def handle_message_stream(
                             yield chunk
 
                 else:
-                    # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
+                    # litellm Streaming (Ollama / OpenAI / MiniMax-litellm-Pfad) mit Tool-Loop
                     async for chunk in _stream_litellm(
                         orch, boss_cfg, boss_id, project_id, content,
                         messages, litellm_tools, _model_name,
