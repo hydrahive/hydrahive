@@ -294,7 +294,7 @@ async def _execute_tool(
 import time as _time
 import hashlib as _hashlib
 
-_CACHEABLE_TOOLS = frozenset({"file_read", "read_system_file", "list_directory", "git_status", "git_diff"})
+_CACHEABLE_TOOLS = frozenset({"read_system_file", "list_directory", "git_status", "git_diff"})  # file_read removed: offset makes caching unsafe
 _tool_result_cache: dict[str, tuple[float, dict]] = {}
 _TOOL_CACHE_TTL = 30  # 30 Sekunden — kurz genug dass Änderungen sichtbar werden
 _TOOL_CACHE_MAX = 200

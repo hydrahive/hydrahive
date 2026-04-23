@@ -1641,7 +1641,7 @@ class FileSearchTool(BaseTool):
                 matches.append({
                     "file": m.group(1).replace(str(search_dir) + "/", ""),
                     "line": int(m.group(2)),
-                    "text": m.group(3)[:200].strip(),
+                    "text": m.group(3),  # Volle Zeile, kein [:200]-Limit
                 })
 
         return {"matches": matches, "count": len(matches), "pattern": pattern, "search_dir": str(search_dir)}
