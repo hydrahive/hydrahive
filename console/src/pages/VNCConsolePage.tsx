@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, AlertCircle, Monitor, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft, AlertCircle, Monitor, Loader2,
+  Maximize2, Keyboard, Wifi, WifiOff, Play, X,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
+// noVNC types — RFB instance for browser VNC connections
+type RFBInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb").RFB>;
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 interface VNCInfo {
   vm_id: string;
   websocket_url: string;
@@ -17,24 +24,96 @@ interface VMInfo {
   status: string;
 }
 
+// ── VNCCanvas ──────────────────────────────────────────────────────────────────
+interface VNCCanvasProps {
+  wsUrl: string;
+  onDisconnect: () => void;
+  onConnect: () => void;
+}
+
+function VNCCanvas({ wsUrl, onDisconnect, onConnect }: VNCCanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rfbRef = useRef<RFBInstance | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !wsUrl) return;
+
+    // Dynamic import to avoid SSR issues
+    import("@novnc/novnc/lib/rfb").then(({ RFB }) => {
+      if (!containerRef.current) return;
+
+      const rfb = new RFB(containerRef.current, wsUrl, {
+        scaleViewport: true,
+        resizeSession: true,
+        credentials: { password: "" },
+      } as Record<string, unknown>);
+
+      rfbRef.current = rfb as RFBInstance;
+
+      rfb.addEventListener("connect", () => {
+        onConnect();
+      });
+
+      rfb.addEventListener("disconnect", () => {
+        rfbRef.current = null;
+        onDisconnect();
+      });
+
+      // Listen for Ctrl+Alt+Del events from toolbar
+      const handleCtrlAltDel = () => rfb.sendCtrlAltDel();
+      window.addEventListener("vnc-ctrl-alt-del", handleCtrlAltDel);
+      (rfbRef as React.MutableRefObject<RFBInstance | null>).current = rfb as RFBInstance;
+    });
+
+    return () => {
+      if (rfbRef.current) {
+        rfbRef.current.disconnect();
+        rfbRef.current = null;
+      }
+    };
+  }, [wsUrl, onDisconnect, onConnect]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full"
+      style={{
+        background: "#1a1a1a",
+        overflow: "hidden",
+      }}
+    />
+  );
+}
+
+// ── Connection States ─────────────────────────────────────────────────────────
+type ConnState = "loading" | "error" | "not_running" | "connected" | "disconnected";
+
+// ── VNCConsolePage ─────────────────────────────────────────────────────────────
 export function VNCConsolePage() {
   const { vm_id } = useParams<{ vm_id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const token = user?.token ?? "";
 
-  const [vncInfo, setVncInfo] = useState<VNCInfo | null>(null);
+  const [connState, setConnState] = useState<ConnState>("loading");
   const [vm, setVm] = useState<VMInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [vncInfo, setVncInfo] = useState<VNCInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
 
+  // Load data on mount
   useEffect(() => {
     if (!vm_id) return;
+
     async function load() {
-      setLoading(true);
+      setConnState("loading");
       setError(null);
+
       try {
-        // Load VM info
-        const vmRes = await fetch(`/api/admin/vms/${vm_id}`, { headers: { Authorization: `Bearer ${token}` } });
+        // Fetch VM info
+        const vmRes = await fetch(`/api/admin/vms/${vm_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!vmRes.ok) {
           const d = await vmRes.json().catch(() => ({}));
           throw new Error(d.detail || `HTTP ${vmRes.status}`);
@@ -42,95 +121,252 @@ export function VNCConsolePage() {
         const vmData = await vmRes.json();
         setVm(vmData as VMInfo);
 
-        // Load VNC info
-        const vncRes = await fetch(`/api/admin/vms/${vm_id}/vnc`, { headers: { Authorization: `Bearer ${token}` } });
+        // VM not running → show not_running state
+        if ((vmData as VMInfo).status !== "running") {
+          setConnState("not_running");
+          return;
+        }
+
+        // Fetch VNC info
+        const vncRes = await fetch(`/api/admin/vms/${vm_id}/vnc`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!vncRes.ok) {
           const d = await vncRes.json().catch(() => ({}));
           throw new Error(d.detail || `HTTP ${vncRes.status}`);
         }
         const vncData = await vncRes.json();
         setVncInfo(vncData as VNCInfo);
+
+        // Will transition to "connected" via VNCCanvas onConnect event
+        setConnState("connected");
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setLoading(false);
+        setConnState("error");
       }
     }
+
     load();
   }, [vm_id, token]);
 
-  if (loading) {
+  // Update VM status while viewing (poll every 10s for running state)
+  useEffect(() => {
+    if (!vm_id || connState !== "connected") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/vms/${vm_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json() as VMInfo;
+          if (data.status !== "running") {
+            setDisconnectReason("VM wurde gestoppt oder ist nicht mehr aktiv");
+            setConnState("disconnected");
+          }
+        }
+      } catch { /* ignore poll errors */ }
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [vm_id, token, connState]);
+
+  function handleDisconnect() {
+    setDisconnectReason("Verbindung zum VNC-Server verloren");
+    setConnState("disconnected");
+  }
+
+  function handleConnect() {
+    setDisconnectReason(null);
+    setConnState("connected");
+  }
+
+  async function handleStart() {
+    if (!vm_id) return;
+    try {
+      const res = await fetch(`/api/admin/vms/${vm_id}/start`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || `HTTP ${res.status}`);
+      }
+      // Reload to get fresh vnc info
+      const vmRes = await fetch(`/api/admin/vms/${vm_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const vmData = await vmRes.json() as VMInfo;
+      setVm(vmData);
+      if (vmData.status === "running") {
+        const vncRes = await fetch(`/api/admin/vms/${vm_id}/vnc`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const vncData = await vncRes.json() as VNCInfo;
+        setVncInfo(vncData);
+        setConnState("connected");
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── Render States ────────────────────────────────────────────────────────────
+
+  if (connState === "loading") {
     return (
-      <div className="flex items-center justify-center h-screen text-muted-foreground">
-        <Loader2 className="w-8 h-8 animate-spin mr-3" />
-        Lade VNC-Informationen…
+      <div className="flex flex-col h-screen bg-gray-950 text-white">
+        <div className="flex items-center justify-center flex-1 gap-3">
+          <Loader2 className="w-7 h-7 animate-spin" />
+          <span className="text-gray-400">Verbinde mit VNC-Server…</span>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (connState === "error" || connState === "not_running") {
     return (
-      <div className="p-8 max-w-md mx-auto text-center space-y-4">
-        <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
-        <h2 className="text-xl font-semibold">Fehler beim Laden</h2>
-        <p className="text-muted-foreground">{error}</p>
-        <Link to="/vms" className="btn btn-primary inline-flex items-center gap-2">
-          <ArrowLeft className="w-4 h-4" /> Zurück zu VMs
-        </Link>
+      <div className="flex flex-col h-screen bg-gray-950 text-white p-8">
+        {/* Toolbar */}
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => navigate("/vms")}
+            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> VMs
+          </button>
+          {vm && (
+            <>
+              <span className="text-gray-600">|</span>
+              <Monitor className="w-4 h-4 text-gray-400" />
+              <span className="font-medium">{vm.name}</span>
+            </>
+          )}
+        </div>
+
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto">
+              <AlertCircle className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-semibold">
+              {connState === "not_running" ? "VM läuft nicht" : "Fehler"}
+            </h2>
+            <p className="text-gray-400 text-sm">
+              {connState === "not_running"
+                ? `Die VM "${vm?.name ?? vm_id}" ist aktuell gestoppt.`
+                : error ?? "Unbekannter Fehler"}
+            </p>
+            {connState === "not_running" && (
+              <button
+                className="btn btn-primary flex items-center gap-2 mx-auto"
+                onClick={handleStart}
+              >
+                <Play className="w-4 h-4" /> VM starten
+              </button>
+            )}
+            <button
+              onClick={() => navigate("/vms")}
+              className="text-sm text-gray-400 hover:text-white flex items-center gap-1 mx-auto"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Zurück zu VMs
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (!vm || !vncInfo) return null;
+  if (connState === "disconnected") {
+    return (
+      <div className="flex flex-col h-screen bg-gray-950 text-white p-8">
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => navigate("/vms")} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+            <ArrowLeft className="w-4 h-4" /> VMs
+          </button>
+          {vm && (
+            <>
+              <span className="text-gray-600">|</span>
+              <Monitor className="w-4 h-4 text-gray-400" />
+              <span className="font-medium">{vm.name}</span>
+            </>
+          )}
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto">
+              <WifiOff className="w-8 h-8 text-yellow-400" />
+            </div>
+            <h2 className="text-xl font-semibold">VNC-Verbindung getrennt</h2>
+            <p className="text-gray-400 text-sm">{disconnectReason ?? "Die Verbindung zum VNC-Server wurde getrennt."}</p>
+            <button onClick={() => navigate("/vms")} className="text-sm text-gray-400 hover:text-white">
+              ← Zurück zu VMs
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // connState === "connected"
+  if (!vncInfo) return null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="border-b px-6 py-4 flex items-center justify-between bg-card">
+    <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
+      {/* ── Toolbar ── */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-4">
-          <Link to="/vms" className="btn btn-sm flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Zurück
-          </Link>
-          <div className="flex items-center gap-2">
-            <Monitor className="w-5 h-5" />
-            <span className="font-semibold">{vm.name}</span>
-            <span className={`status-pill ${vm.status === "running" ? "status-pill-ok" : ""}`}>
-              {vm.status}
-            </span>
-          </div>
+          <button
+            onClick={() => navigate("/vms")}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> VMs
+          </button>
+          <span className="text-gray-600">|</span>
+          <Monitor className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-medium">{vm?.name}</span>
+          <span className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-green-400">Verbunden</span>
+          </span>
         </div>
-        {!vncInfo.websockify_ok && (
-          <div className="flex items-center gap-2 text-xs text-yellow-600 dark:text-yellow-400">
-            <AlertCircle className="w-4 h-4" />
-            websockify nicht erreichbar (Port 6080 prüfen)
-          </div>
-        )}
+
+        <div className="flex items-center gap-2">
+          {/* websockify warning */}
+          {!vncInfo.websockify_ok && (
+            <span className="flex items-center gap-1.5 text-xs text-yellow-400 mr-2">
+              <AlertCircle className="w-3.5 h-3.5" /> websockify prüfen
+            </span>
+          )}
+
+          {/* Ctrl+Alt+Del */}
+          <button
+            className="btn btn-sm flex items-center gap-1.5"
+            onClick={() => {
+              // Access rfb via the VNCCanvas ref — emit via custom event
+              window.dispatchEvent(new CustomEvent("vnc-ctrl-alt-del"));
+            }}
+            title="Ctrl+Alt+Del an VM senden"
+          >
+            <Keyboard className="w-4 h-4" /> Ctrl+Alt+Del
+          </button>
+
+          {/* Vollbild */}
+          <button
+            className="btn btn-sm flex items-center gap-1.5"
+            onClick={() => document.documentElement.requestFullscreen?.()}
+            title="Vollbild"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* VNC Canvas Placeholder — #903 */}
-      <div className="flex-1 flex items-center justify-center bg-gray-900 text-white">
-        <div className="text-center space-y-4 max-w-md p-8">
-          <Monitor className="w-16 h-16 mx-auto opacity-40" />
-          <h2 className="text-xl font-semibold">VNC-Konsole — Platzhalter</h2>
-          <p className="text-gray-400 text-sm">
-            noVNC wird in <strong>#903</strong> implementiert.
-          </p>
-          <div className="bg-gray-800 rounded-lg p-4 text-left text-xs font-mono space-y-1">
-            <div className="text-gray-400">WebSocket URL:</div>
-            <div className="text-green-400 break-all">{vncInfo.websocket_url}</div>
-            <div className="text-gray-400 mt-2">Token:</div>
-            <div className="text-green-400">{vncInfo.token}</div>
-            <div className="text-gray-400 mt-2">VNC Port:</div>
-            <div className="text-green-400">{vncInfo.vnc_port}</div>
-            <div className="text-gray-400 mt-2">websockify:</div>
-            <div className={vncInfo.websockify_ok ? "text-green-400" : "text-yellow-400"}>
-              {vncInfo.websockify_ok ? "OK" : "NICHT ERREICHBAR"}
-            </div>
-          </div>
-          <p className="text-gray-500 text-xs">
-            Port 6080 muss erreichbar sein und noVNC muss als Abhängigkeit installiert werden.
-          </p>
-        </div>
+      {/* ── VNC Canvas ── */}
+      <div className="flex-1 relative overflow-hidden" id="vnc-container">
+        <VNCCanvas
+          wsUrl={vncInfo.websocket_url}
+          onDisconnect={handleDisconnect}
+          onConnect={handleConnect}
+        />
       </div>
     </div>
   );

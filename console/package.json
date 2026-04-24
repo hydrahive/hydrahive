@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.25",
+    "@novnc/novnc": "^1.6.0",
     "@types/three": "^0.183.1",
     "@xyflow/react": "^12.3.6",
     "clsx": "^2.1.0",
