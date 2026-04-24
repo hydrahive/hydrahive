@@ -829,6 +829,13 @@ async def build_system_prompt(
         except Exception as _ws_err:
             logger.debug("working_state Channel-Render fehlgeschlagen: %s", _ws_err)
 
+    # #313: Scratchpad-Inhalt injizieren (flüchtig, wird bei neuer Session geleert)
+    if boss_cfg.agent_dir:
+        from .scratchpad_service import get_scratchpad as _get_sp
+        _sp = _get_sp(boss_cfg.id)
+        if _sp:
+            channels.scratchpad = f"## Scratchpad (Arbeitsnotizen)\n\n{_sp}"
+
     dynamic_suffix = channels.to_dynamic_str()
 
     # #627: Channel-Sizes loggen (Diagnose)

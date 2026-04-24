@@ -330,6 +330,28 @@ def register_agent_admin_routes(
         logger.info("workflow_blueprint.json gespeichert: %s", wf_path)
         return {"saved": True}
 
+    # ── Scratchpad (#313) ─────────────────────────────────────────────
+
+    @auth_router.get("/agents/{agent_id}/scratchpad")
+    def get_scratchpad(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_read(agent_id, _a)
+        from .scratchpad_service import get_scratchpad
+        return {"content": get_scratchpad(agent_id)}
+
+    @auth_router.put("/agents/{agent_id}/scratchpad")
+    def save_scratchpad(agent_id: str, req: WorkflowDataRequest, _a: tuple = Depends(require_admin)):
+        _validate_agent_id(agent_id)
+        from .scratchpad_service import save_scratchpad as _save_sp
+        _save_sp(agent_id, req.data.get("content", "") if req.data else "")
+        return {"saved": True}
+
+    @auth_router.delete("/agents/{agent_id}/scratchpad")
+    def clear_scratchpad(agent_id: str, _a: tuple = Depends(require_admin)):
+        _validate_agent_id(agent_id)
+        from .scratchpad_service import clear_scratchpad as _clear_sp
+        _clear_sp(agent_id)
+        return {"cleared": True}
+
     # ── Agent Workflow Flow (Arbeitsablauf) ──────────────────────────
     @auth_router.get("/agents/{agent_id}/workflow-flow")
     def get_workflow_flow(agent_id: str, _a: tuple = Depends(require_auth)):

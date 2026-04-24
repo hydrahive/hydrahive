@@ -54,6 +54,7 @@ class ContextChannels:
     memory_hits: str = ""          # BM25-Treffer für aktuelle Query
     amem_hits: str = ""             # A-MEM globale Treffer
     working_state: str = ""         # WorkingState-Snapshot (#632) — Anomalien zuerst
+    scratchpad: str = ""           # #313: Scratchpad-Inhalt (fluechtig)
     forced_handoff: str = ""         # _last_handoff.md nach Forced-Abort (#624)
     last_session: str = ""          # _last_session.md (Session-Continuity)
     skills: str = ""                # query-spezifisch ausgewählte Skills
@@ -72,7 +73,7 @@ class ContextChannels:
     _DYNAMIC_SLOTS = (
         "runtime", "memory_hits", "amem_hits", "working_state",
         "forced_handoff", "last_session", "skills", "repo_guidance",
-        "deferred_tools", "plan_mode", "frustration",
+        "deferred_tools", "plan_mode", "frustration", "scratchpad",
     )
 
     def to_static_str(self) -> str:

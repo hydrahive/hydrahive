@@ -1067,6 +1067,17 @@ def register_project_routes(
         _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        # #313: Scratchpad bei neuer Session automatisch leeren
+        _cfg = projects.get(project_id)
+        _agent_id: str | None = _cfg.agents.boss if _cfg else None
+        if _agent_id:
+            try:
+                from .scratchpad_service import clear_scratchpad
+                clear_scratchpad(_agent_id)
+            except Exception:
+                pass   # Scratchpad ist flüchtig — Fehler nicht kritisch
+
         session = await sessions.new_session(project_id)
         return {"session_id": session.id, "started_at": session.started_at}
 
