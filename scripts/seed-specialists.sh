@@ -49,7 +49,7 @@ create_or_skip() {
 
   echo -n "[$id] $identity … "
 
-  RESP=$(curl -s -b "$COOKIE" -X POST "$HOST/admin/agents" \
+  RESP=$(curl -s -b "$COOKIE" -X POST "$HOST/agents" \
     -H "Content-Type: application/json" \
     -d "$(printf '%s' "$(cat <<PAYLOAD
 {
