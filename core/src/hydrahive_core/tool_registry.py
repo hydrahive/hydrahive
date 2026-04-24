@@ -3368,3 +3368,200 @@ registry.register(ServerFileReadTool())
 registry.register(ServerFileWriteTool())
 registry.register(WksShellExecTool())
 
+
+# ── #906: VM-Manager Agent-Tools ──────────────────────────────────────────────
+
+class VmListTool(BaseTool):
+    @property
+    def id(self) -> str: return "vm_list"
+    @property
+    def name(self) -> str: return "Virtuelle Maschinen auflisten"
+    @property
+    def description(self) -> str:
+        return "Listet alle VMs mit Status, CPU, RAM und Disk-Konfiguration."
+    @property
+    def always_loaded(self) -> bool: return False
+    @property
+    def category(self) -> str: return "vm"
+    @property
+    def semantic_tags(self) -> list[str]: return ["vm", "infrastructure"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        from .router_vms import _get_vm_manager
+        mgr = _get_vm_manager()
+        vms = await mgr.list_vms()
+        return {"vms": [v.to_dict() for v in vms], "count": len(vms)}
+
+
+class VmStatusTool(BaseTool):
+    @property
+    def id(self) -> str: return "vm_status"
+    @property
+    def name(self) -> str: return "VM-Status abrufen"
+    @property
+    def description(self) -> str:
+        return "Gibt den aktuellen Status einer VM zurück (running/stopped/error etc.) und prüft ob der Prozess noch läuft."
+    @property
+    def always_loaded(self) -> bool: return False
+    @property
+    def category(self) -> str: return "vm"
+    @property
+    def semantic_tags(self) -> list[str]: return ["vm", "infrastructure"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "vm_id": {"type": "string", "description": "ID der VM"},
+            },
+            "required": ["vm_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, vm_id: str, **kwargs) -> dict:
+        from .router_vms import _get_vm_manager
+        mgr = _get_vm_manager()
+        try:
+            vm = await mgr.refresh_status(vm_id)
+            return vm.to_dict()
+        except ValueError as e:
+            return {"error": str(e)}
+
+
+class VmCreateTool(BaseTool):
+    @property
+    def id(self) -> str: return "vm_create"
+    @property
+    def name(self) -> str: return "VM erstellen"
+    @property
+    def description(self) -> str:
+        return "Erstellt eine neue virtuelle Maschine mit QCOW2-Disk. Admin-Berechtigung erforderlich."
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def always_loaded(self) -> bool: return False
+    @property
+    def category(self) -> str: return "vm"
+    @property
+    def semantic_tags(self) -> list[str]: return ["vm", "infrastructure"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "name":    {"type": "string", "description": "VM-Name (alphanumerisch, max 64 Zeichen)"},
+                "cpu":     {"type": "integer", "description": "Anzahl vCPUs (1-16)", "default": 2},
+                "ram_mb":  {"type": "integer", "description": "RAM in MB (min 512)", "default": 2048},
+                "disk_gb": {"type": "integer", "description": "Disk-Größe in GB (5-500)", "default": 20},
+                "iso_file": {"type": "string", "description": "ISO-Dateiname für Boot-CD (optional)"},
+            },
+            "required": ["name"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        name: str, cpu: int = 2, ram_mb: int = 2048, disk_gb: int = 20,
+        iso_file: str | None = None, **kwargs,
+    ) -> dict:
+        from .router_vms import _get_vm_manager, _get_iso_manager
+        from .settings import settings
+        if not settings.vm_enabled:
+            return {"error": "VM-Manager ist deaktiviert"}
+        mgr = _get_vm_manager()
+        vms = await mgr.list_vms()
+        if len(vms) >= settings.vm_max_count:
+            return {"error": f"VM-Limit erreicht ({settings.vm_max_count})"}
+        iso_path: str | None = None
+        if iso_file:
+            resolved = _get_iso_manager().get_iso_path(iso_file)
+            if resolved is None:
+                return {"error": f"ISO nicht gefunden: {iso_file}"}
+            iso_path = str(resolved)
+        try:
+            vm = await mgr.create_vm(name=name, cpu=cpu, ram_mb=ram_mb, disk_gb=disk_gb, iso_file=iso_path, owner=agent_id)
+            return {"ok": True, "vm": vm.to_dict()}
+        except (ValueError, RuntimeError) as e:
+            return {"error": str(e)}
+
+
+class VmStartTool(BaseTool):
+    @property
+    def id(self) -> str: return "vm_start"
+    @property
+    def name(self) -> str: return "VM starten"
+    @property
+    def description(self) -> str:
+        return "Startet eine gestoppte VM und weist einen VNC-Port zu."
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def always_loaded(self) -> bool: return False
+    @property
+    def category(self) -> str: return "vm"
+    @property
+    def semantic_tags(self) -> list[str]: return ["vm", "infrastructure"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "vm_id": {"type": "string", "description": "ID der VM"},
+            },
+            "required": ["vm_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, vm_id: str, **kwargs) -> dict:
+        from .router_vms import _get_vm_manager
+        mgr = _get_vm_manager()
+        try:
+            vm = await mgr.start_vm(vm_id)
+            return {"ok": True, "vm": vm.to_dict()}
+        except (ValueError, RuntimeError) as e:
+            return {"error": str(e)}
+
+
+class VmStopTool(BaseTool):
+    @property
+    def id(self) -> str: return "vm_stop"
+    @property
+    def name(self) -> str: return "VM stoppen"
+    @property
+    def description(self) -> str:
+        return "Stoppt eine laufende VM (graceful SIGTERM oder force SIGKILL)."
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def always_loaded(self) -> bool: return False
+    @property
+    def category(self) -> str: return "vm"
+    @property
+    def semantic_tags(self) -> list[str]: return ["vm", "infrastructure"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "vm_id": {"type": "string", "description": "ID der VM"},
+                "force": {"type": "boolean", "description": "SIGKILL statt SIGTERM (sofortiger Stopp)", "default": False},
+            },
+            "required": ["vm_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, vm_id: str, force: bool = False, **kwargs) -> dict:
+        from .router_vms import _get_vm_manager
+        mgr = _get_vm_manager()
+        try:
+            vm = await mgr.stop_vm(vm_id, force=force)
+            return {"ok": True, "vm": vm.to_dict()}
+        except (ValueError, RuntimeError) as e:
+            return {"error": str(e)}
+
+
+registry.register(VmListTool())
+registry.register(VmStatusTool())
+registry.register(VmCreateTool())
+registry.register(VmStartTool())
+registry.register(VmStopTool())
+

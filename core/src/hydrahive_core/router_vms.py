@@ -10,7 +10,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from .iso_manager import ISOManager
@@ -108,15 +108,25 @@ def register_vm_routes(
             required_bytes = req.disk_gb * 1024**3
             if free_bytes < required_bytes:
                 raise HTTPException(400, f"Nicht genug Disk-Space ({free_bytes/1024**3:.1f} GB frei, {req.disk_gb} GB benötigt)")
-        except Exception as e:
+        except HTTPException:
+            raise
+        except OSError as e:
             logger.warning("disk_space_check fehlgeschlagen: %s", e)
+        # ISO-Pfad validieren: nur bekannte ISO-Dateinamen zulassen
+        iso_path: str | None = None
+        if req.iso_file:
+            iso_mgr = _get_iso_manager()
+            resolved = iso_mgr.get_iso_path(req.iso_file)
+            if resolved is None:
+                raise HTTPException(400, f"ISO nicht gefunden: {req.iso_file}")
+            iso_path = str(resolved)
         try:
             vm = await mgr.create_vm(
                 name=req.name,
                 cpu=req.cpu,
                 ram_mb=req.ram_mb,
                 disk_gb=req.disk_gb,
-                iso_file=req.iso_file,
+                iso_file=iso_path,
                 owner="admin",
             )
             return vm.to_dict()
