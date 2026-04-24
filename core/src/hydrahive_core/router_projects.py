@@ -82,7 +82,8 @@ class CreateProjectV2Request(BaseModel):
     git_branch: str = "main"
     git_token: str = ""                   # Optional fuer private Repos
     messenger: dict = {}                  # {discord: {...}, telegram: {...}, whatsapp: {...}}
-
+    create_agent: bool = True            # Master-Agent automatisch miterstellen
+    agent_name: str = ""                 # Identity des Master-Agents (leer = Projektname)
 
 # v2: Projekt-Settings aktualisieren
 class UpdateProjectSettingsRequest(BaseModel):
@@ -341,6 +342,9 @@ def register_project_routes(
             "github_repo": req.github_repo,
         }
         config_path = project_dir / "config.yaml"
+        # agents: Boss = Projekt-ID, Workers = []
+        config_data["agents"] = {"boss": req.id, "workers": []}
+
         config_path.write_text(
             _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
             encoding="utf-8",
@@ -401,6 +405,53 @@ def register_project_routes(
         # Provisioning (Samba + Linux-User + Matrix) — nicht fatal bei Fehler
         provision_result = None
         provision_warnings: list[str] = []
+
+        # Auto-Agent-Erstellung: Master-Agent des Projekts anlegen
+        if req.create_agent and (discovery is None or discovery.get(req.id) is None):
+            _agent_err: str = ""
+            try:
+                from pathlib import Path as _Path
+                _agent_dir = _Path(agents_dir) / req.id
+                _agent_dir.mkdir(parents=True, exist_ok=True)
+                (_agent_dir / "skills").mkdir(exist_ok=True)
+                _agent_identity = req.agent_name.strip() or req.name
+                _agent_yaml = {
+                    "id": req.id,
+                    "type": "boss",
+                    "identity": _agent_identity,
+                    "llm": {
+                        "provider": req.provider,
+                        "model": req.model,
+                        "temperature": req.temperature,
+                        "max_tokens": req.max_tokens,
+                    },
+                    "execution_modes": {"default": exec_mode},
+                    "tools": [],
+                    "mcp_servers": [],
+                }
+                (_agent_dir / "agent.yaml").write_text(
+                    _yaml.dump(_agent_yaml, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                    encoding="utf-8",
+                )
+                _soul_text = (
+                    f"# {_agent_identity}\n\n"
+                    f"Du bist der Master-Agent des Projekts \"{req.name}\".\n\n"
+                    f"Dein Projekt-Verzeichnis: /projects/{req.id}/\n"
+                    f"Dort findest du alle Dateien, den Kontext und das Gedächtnis deines Projekts.\n"
+                    f"Du kannst Spezialisten hinzuziehen um Aufgaben zu delegieren.\n"
+                )
+                (_agent_dir / "soul.md").write_text(_soul_text, encoding="utf-8")
+                subprocess.run(
+                    ["chown", "-R", "hydrahive:hydrahive", str(_agent_dir)],
+                    capture_output=True, timeout=5,
+                )
+                logger.info("Master-Agent automatisch erstellt: %s", req.id)
+                await _asyncio.sleep(0.3)  # discovery einlesen lassen
+            except Exception as _e:
+                _agent_err = str(_e)
+                logger.warning("Master-Agent-Erstellung fehlgeschlagen fuer %s: %s", req.id, _e)
+                provision_warnings.append(f"Master-Agent: {_agent_err}")
+
         if _users_sync_error:
             provision_warnings.append(
                 f"users.json-Sync fehlgeschlagen: {_users_sync_error}. "

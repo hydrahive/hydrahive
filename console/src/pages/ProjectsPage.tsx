@@ -59,6 +59,8 @@ interface CreateForm {
   gitClone: boolean;
   gitBranch: string;
   gitToken: string;
+  createAgent: boolean;
+  agentName: string;
 }
 
 interface EditForm {
@@ -67,7 +69,7 @@ interface EditForm {
   members: string;
 }
 
-const EMPTY: CreateForm = { id: "", name: "", description: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
+const EMPTY: CreateForm = { id: "", name: "", description: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "", createAgent: true, agentName: "" };
 
 function ProjectsContent() {
   const { t } = useTranslation();
@@ -172,8 +174,8 @@ function ProjectsContent() {
         id: form.id,
         name: form.name,
         description: form.description,
-        boss: form.id,
-        workers: [],
+        create_agent: form.createAgent,
+        agent_name: form.agentName || form.id,
         samba: form.samba,
         github_repo: form.githubRepo.trim(),
       });
@@ -385,6 +387,24 @@ function ProjectsContent() {
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+            {/* Master-Agent Sektion */}
+            <div className="md:col-span-2 space-y-3 rounded-2xl border bg-secondary/30 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                  <input type="checkbox" checked={form.createAgent} onChange={e => setForm({ ...form, createAgent: e.target.checked })} className="h-4 w-4 rounded border" />
+                  Master-Agent automatisch erstellen
+                </label>
+              </div>
+              {form.createAgent && (
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Agent-Name <span className="opacity-50">(leer = Projekt-ID)</span></label>
+                  <input value={form.agentName} onChange={e => setForm({ ...form, agentName: e.target.value })}
+                    placeholder={form.id || "Mein-Projekt-Agent"}
+                    className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              )}
+            </div>
+
             <div className="md:col-span-2 space-y-3 rounded-2xl border bg-secondary/30 px-4 py-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Git-Repository <span className="text-muted-foreground font-normal">(optional)</span></label>
@@ -469,6 +489,8 @@ function ProjectsContent() {
                     <span className="font-semibold">{proj.name}</span>
                     <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">{id}</span>
                     {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
+                    {(proj as any).agents?.boss && <span className="rounded-full bg-indigo-900/40 px-1.5 py-0.5 text-[11px] text-indigo-300">Agent: {(proj as any).agents.boss}</span>}
+                    {!(proj as any).agents?.boss && <span className="text-muted-foreground/50">Kein Agent</span>}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(proj.members || []).length || 1} {(proj.members || []).length === 1 ? "Mitglied" : "Mitglieder"}</span>
