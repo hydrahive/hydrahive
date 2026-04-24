@@ -171,15 +171,18 @@ function ProjectsContent() {
   async function createAgentForProject(projectId: string, projectName: string) {
     setCreatingAgent(projectId);
     try {
-      await api.post("/agents", {
-        id: projectId,
-        identity: projectName,
-        type: "boss",
-        model: "claude-sonnet-4-6",
-      });
-      await api.put(`/projects/${projectId}/settings`, {
-        agents_boss: projectId,
-      });
+      try {
+        await api.post("/agents", {
+          id: projectId,
+          identity: projectName,
+          type: "boss",
+          model: "claude-sonnet-4-6",
+        });
+      } catch (e: any) {
+        if (!e?.message?.includes("409") && !e?.message?.includes("existiert")) throw e;
+        // Agent existiert bereits — Boss-Zuweisung trotzdem durchführen
+      }
+      await api.put(`/projects/${projectId}/settings`, { agents_boss: projectId });
       await load();
     } catch (e) {
       alert("Agent anlegen fehlgeschlagen: " + (e instanceof Error ? e.message : String(e)));
