@@ -81,14 +81,20 @@ export function AgentsPage() {
         api.get<Record<string, Agent>>("/agents"),
         api.get<string[]>("/admin/teams").then(async (ids: string[]) => {
           const mapped: Team[] = [];
-          for (const id of ids) {
+          for (const id of (ids ?? [])) {
             try { mapped.push(await api.get<Team>(`/admin/teams/${id}`)); } catch { /* skip */ }
           }
           return mapped;
         }),
-        api.get<Project[]>("/projects"),
+        api.get<Record<string, any>>("/projects").then(rec =>
+          Object.entries(rec ?? {}).map(([id, cfg]: [string, any]) => ({
+            id,
+            name: cfg?.identity?.name ?? cfg?.name ?? id,
+            agents: cfg?.agents ?? {},
+          }))
+        ),
       ]);
-      setAgents(a);
+      setAgents(a ?? {});
       setTeams(t);
       setProjects(p);
     } catch (e) {
