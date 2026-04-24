@@ -693,9 +693,52 @@ class SessionManager:
             restored, ghosts_ended,
         )
 
+    def _load_session_from_jsonl(self, jsonl_path: Path, project_id: str) -> Session | None:
+        """Lädt Session aus JSONL-Datei. Gibt None zurück wenn Datei nicht existiert oder kaputt ist."""
+        if not jsonl_path.exists():
+            return None
+        try:
+            msgs: list[Message] = []
+            with jsonl_path.open(encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    _d = json.loads(_line)
+                    msgs.append(Message(
+                        msg_id=_d.get("id", uuid.uuid4().hex[:8]),
+                        role=MessageRole(_d.get("role", "assistant")),
+                        content=_d.get("content") or "",
+                        timestamp=_d.get("ts", datetime.now(timezone.utc).isoformat()),
+                        tool_calls=_d.get("tool_calls"),
+                        tool_call_id=_d.get("tool_call_id"),
+                    ))
+            if not msgs:
+                return None
+            session = Session.new(project_id)
+            session.messages = msgs
+            logger.info("Session aus JSONL geladen: %s (%d Messages)", project_id, len(msgs))
+            return session
+        except Exception as _e:
+            logger.warning("JSONL-Load fehlgeschlagen für %s: %s", project_id, _e)
+            return None
+
     def get_or_create(self, project_id: str) -> Session:
         """Gibt aktive Session zurück oder startet eine neue (synchron, ohne Lock)."""
         if project_id not in self._active:
+            # #891: JSONL-Backend — aus JSONL laden falls vorhanden
+            _settings = None
+            try:
+                from .settings import get_settings as _gs
+                _settings = _gs()
+            except Exception:
+                pass
+            if _settings and _settings.session_backend == "jsonl":
+                _jsonl_path = self._projects_dir / project_id / "session.jsonl"
+                _loaded = self._load_session_from_jsonl(_jsonl_path, project_id)
+                if _loaded:
+                    self._active[project_id] = _loaded
+                    return _loaded
             session = Session.new(project_id)
             self._active[project_id] = session
             self._db_insert_session(session)
@@ -829,10 +872,10 @@ class SessionManager:
                 _jsonl_path.parent.mkdir(parents=True, exist_ok=True)
                 with _jsonl_path.open("a", encoding="utf-8") as _f:
                     _f.write(json.dumps({
-                        "id": message.id,
+                        "id": message.msg_id,
                         "role": message.role.value,
                         "content": message.content or "",
-                        "ts": message.created_at,
+                        "ts": message.timestamp,
                         "tool_calls": message.tool_calls,
                         "tool_call_id": message.tool_call_id,
                     }, ensure_ascii=False) + "\n")
