@@ -333,7 +333,8 @@ async def lifespan(app: FastAPI):
     _tr.ShellExecTool.set_job_service(job_service)
 
     # #804: BrowserScreenshotTool job_service-Injektion
-    _tr.BrowserScreenshotTool.set_job_service(job_service)
+    from . import browser_tools as _browser_tools
+    _browser_tools.BrowserScreenshotTool.set_job_service(job_service)
 
     # Audit-Log-Pfad vorbereiten
     _ensure_audit_log_path()
