@@ -394,6 +394,31 @@ export const api = {
   clawhubPackages:    (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
   clawhubInstallSkill: (slug: string, agent_id: string, force?: boolean) =>
     api.post<{installed:boolean;skill_name:string;agent_id:string;file:string}>("/hub/clawhub/skill/install", { slug, agent_id, force: force ?? false }),
+
+  // ── #312/#314 Blueprints ─────────────────────────────────────────────────
+  blueprintList:      () => api.get<any[]>(`/admin/blueprints`),
+  blueprintGet:       (id: string) => api.get<Record<string,any>>(`/admin/blueprints/${id}`),
+  blueprintExport:    (id: string) => api.get<Record<string,any>>(`/admin/blueprints/export/${id}`),
+  blueprintImport:    (data: Record<string,any>) =>
+    api.post<{imported:string}>(`/admin/blueprints/import`, data),
+  blueprintDelete:    (id: string) =>
+    api.delete<{deleted:string}>(`/admin/blueprints/${id}`),
+  blueprintInstall:   (bpId: string, agentId: string) =>
+    api.post<Record<string,any>>(`/admin/blueprints/${bpId}/install/${agentId}`, {}),
+  promoteScratchpad:  (agentId: string, blueprintId: string, descriptionOverride?: string) =>
+    api.post<Record<string,any>>(`/admin/blueprints/promote-scratchpad/${agentId}`, {
+      blueprint_id: blueprintId, description_override: descriptionOverride ?? "",
+    }),
+  promotePreview:     (agentId: string) =>
+    api.get<Record<string,any>>(`/admin/blueprints/promote-scratchpad/${agentId}/preview`),
+
+  // ── #313 Scratchpad ─────────────────────────────────────────────────────
+  scratchpadGet:  (agentId: string) =>
+    api.get<{content:string}>(`/admin/agents/${agentId}/scratchpad`),
+  scratchpadSave: (agentId: string, content: string) =>
+    api.put<{saved:boolean}>(`/admin/agents/${agentId}/scratchpad`, { data: { content } }),
+  scratchpadClear: (agentId: string) =>
+    api.delete<{cleared:boolean}>(`/admin/agents/${agentId}/scratchpad`),
 };
 
 export interface A2APeer {

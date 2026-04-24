@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from "react";
-import { Workflow, Bell, Cpu, Bot, FolderOpen, PenTool } from "lucide-react";
+import { Workflow, Bell, Cpu, Bot, FolderOpen, PenTool, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
@@ -7,6 +7,7 @@ import { ButlerPage } from "@/pages/ButlerPage";
 import { NotificationRouterTab } from "@/pages/blueprint/NotificationRouterTab";
 import { WorkflowTab }          from "@/pages/blueprint/WorkflowTab";
 import { AgentBlueprintTab }    from "@/pages/blueprint/AgentBlueprintTab";
+import { BlueprintCatalogTab }  from "@/pages/blueprint/BlueprintCatalogTab";
 import { FilePipelineTab }      from "@/pages/blueprint/FilePipelineTab";
 const ScratchpadTab = lazy(() => import("@/pages/blueprint/ScratchpadTab").then(m => ({ default: m.ScratchpadTab })));
 
@@ -16,6 +17,7 @@ const ALL_TABS = [
   { id: "workflow",        i18nKey: "workflow",         icon: Cpu,         minGroup: "standard" },
   { id: "agentblueprint",  i18nKey: "agentblueprint",  icon: Bot,         minGroup: "dev" },
   { id: "scratchpad",      i18nKey: "scratchpad",       icon: PenTool,     minGroup: "chatter" },
+  { id: "blueprints",      i18nKey: "blueprints",       icon: Bookmark,    minGroup: "admin" },
   { id: "notifications",   i18nKey: "notifications",   icon: Bell,        minGroup: "admin" },
 ] as const;
 
@@ -75,6 +77,7 @@ export function BlueprintPage() {
         {tab === "workflow"       && <WorkflowTab />}
         {tab === "agentblueprint" && <AgentBlueprintTab />}
         {tab === "scratchpad"     && <Suspense fallback={<div className="flex items-center justify-center h-full text-white/20">{t("blueprint.loading")}</div>}><ScratchpadTab /></Suspense>}
+        {tab === "blueprints"     && <BlueprintCatalogTab />}
       </div>
     </div>
   );
