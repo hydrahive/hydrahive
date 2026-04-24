@@ -1313,16 +1313,18 @@ def register_project_routes(
 
     # #554: Collaborative Composer — WebSocket zu einem per-Projekt Yjs-Doc.
     # Mehrere User teilen den Composer-Text live (screen-x für Prompts).
-    # Auth läuft über Query-Param `token`, weil Browser keine Custom-Header
-    # auf WebSockets setzen können. Der Token wird VOR websocket.accept()
-    # validiert — sonst verliert Yjs die Initial-Sync-Messages.
+    # Auth: Cookie (httpOnly, vom _AuthCookieMiddleware injected) zuerst,
+    # Query-Param als Fallback für Rückkompatibilität. Token wird VOR
+    # websocket.accept() validiert — sonst verliert Yjs die Initial-Sync-Messages.
     @public_router.websocket("/projects/{project_id}/collab")
     async def collab_ws(
         websocket: WebSocket,
         project_id: str,
-        token: str = Query(..., description="JWT-Token (Bearer-Äquivalent für WS)"),
+        # #766: Optional — Cookie hat Priorität, Query-Param nur Fallback.
+        token: str | None = Query(default=None, description="JWT-WS-Ticket oder Session-Cookie (Query-Fallback)"),
     ):
         from .collab_yjs import FastApiWsChannel, get_yjs_server, record_yjs_debug_event
+        from .auth_utils import AUTH_COOKIE_NAME
 
         # Room-Name strikt validieren — verhindert Path-Traversal in der
         # SQLite-Datei, da project_id in den Dateinamen einfließt.
@@ -1330,12 +1332,28 @@ def register_project_routes(
             await websocket.close(code=4400, reason="Ungültige Projekt-ID")
             return
 
+        # #766: Cookie zuerst (httpOnly, vom Browser automatisch im WS-Handshake
+        # gesendet), Query-Param als Fallback für Rückkompatibilität.
+        # Cookie-JWT = reguläres Session-JWT (kein aud="websocket" Claim).
+        # Query-Param = kurzlebiges WS-Ticket mit aud="websocket".
+        cookie_token = websocket.cookies.get(AUTH_COOKIE_NAME)
+        if cookie_token:
+            # Reguläres Session-JWT aus Cookie — kein aud-Check nötig.
+            raw_token = cookie_token
+            required_aud: str | None = None
+        elif token:
+            # WS-Ticket via Query-Param — muss aud="websocket" haben.
+            raw_token = token
+            required_aud = "websocket"
+        else:
+            await websocket.close(code=1008, reason="Auth fehlgeschlagen — kein Cookie/Token")
+            return
+
         # Auth vor accept — sonst gehen Yjs-Initial-Messages verloren.
         # _verify_jwt kommt aus main.py; Lazy-Import gegen Zirkularität.
-        # #770: WS-Ticket muss aud="websocket" haben (kurzlebiges Ticket, kein Session-JWT).
         from .main import _verify_jwt, _load_users as _lu
         try:
-            username, role = _verify_jwt(token, required_aud="websocket")
+            username, role = _verify_jwt(raw_token, required_aud=required_aud)
         except HTTPException:
             await websocket.close(code=4401, reason="Auth fehlgeschlagen")
             return

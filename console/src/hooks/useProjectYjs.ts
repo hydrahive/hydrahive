@@ -89,44 +89,26 @@ function buildServerUrl(projectId: string): string {
 export function useProjectYjs(projectId: string | undefined, username: string | undefined): ProjectYjs | null {
   const [connected, setConnected] = useState(false);
 
-  // #770: Token kommt aus dem kurzlebigen WS-Ticket-Endpoint. Kein
-  // localStorage-JWT-Persistence mehr — das Ticket (120s gültig) wird
-  // per Cookie-Auth von /auth/ws-token geholt. Bei Logout bleibt der
-  // Cookie invalide → wsToken="" → useMemo gibt null → kein Connect.
-  const [wsToken, setWsToken] = useState<string>("");
-
-  useEffect(() => {
-    if (!projectId || !username) return;
-    let cancelled = false;
-    fetch("/auth/ws-token", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: { ticket?: string }) => {
-        if (!cancelled && data.ticket) setWsToken(data.ticket);
-      })
-      .catch(() => { /* fetch-Fehler -> leerer String, useMemo gibt null */ });
-    return () => { cancelled = true; };
-  }, [projectId, username]);
+  // #766: Kein expliziter Token-Fetch mehr — der Browser sendet das httpOnly
+  // AUTH_COOKIE_NAME Cookie automatisch im WS-Handshake (gleicher Origin).
+  // Backend liest den Cookie in collab_ws() und validiert das JWT.
+  // useMemo ohne wsToken-dep — wsToken/Logout-Thematik entfällt damit.
 
   const docAndProvider = useMemo(() => {
-    if (!projectId || !username || !wsToken) return null;
+    if (!projectId || !username) return null;
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("composer");
-    // y-websocket bildet die URL als `${serverUrl}/${roomname}?${params}`.
+    // y-websocket baut die URL als `${serverUrl}/${roomname}`.
     // Unser Backend-Endpoint ist /api/projects/{id}/collab, daher:
     //   serverUrl = wss://.../api/projects/{id}
     //   roomname  = "collab"
-    // Resultat: wss://.../api/projects/{id}/collab?token=...
-    // Innerhalb des FastAPI-Endpoints setzen wir channel.path = project_id,
-    // daraus wird der pycrdt-Roomname → ein SQLiteYStore pro Projekt.
+    // Cookie wird vom Browser automatisch im WS-Handshake gesendet.
     const provider = new WebsocketProvider(
       buildServerUrl(projectId),
       "collab",
       ydoc,
       {
         connect: true,
-        // #770: Token ist jetzt ein kurzlebiges WS-Ticket (aud="websocket").
-        // Cookie-Auth allein reichte für WS-Connect nicht zuverlässig (#766).
-        params: { token: wsToken },
         // #554: Cross-Browser-Sync muss über den HydraHive/pycrdt-Server
         // laufen. y-websocket nutzt sonst im selben Browser zusätzlich
         // BroadcastChannel und kann Backend-Probleme verdecken.
@@ -156,9 +138,7 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       console.debug(`[collab/${projectId}] ydoc update origin=`, origin);
     });
     return { ydoc, ytext, provider };
-    // wsToken in deps: bei Logout wird alles abgerissen, Re-Login mit
-    // neuem Token baut einen frischen Provider auf.
-  }, [projectId, username, wsToken]);
+  }, [projectId, username]);
 
   useEffect(() => {
     if (!docAndProvider) return;
