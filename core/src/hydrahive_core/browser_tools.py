@@ -324,6 +324,12 @@ class BrowserNavigateTool(BaseTool):
 
 
 class BrowserScreenshotTool(BaseTool):
+    _job_service: ClassVar = None
+
+    @classmethod
+    def set_job_service(cls, svc) -> None:
+        cls._job_service = svc
+
     @property
     def id(self) -> str:
         return "browser_screenshot"
