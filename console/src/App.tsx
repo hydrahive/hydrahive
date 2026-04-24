@@ -47,6 +47,7 @@ const QuickstartPage         = lazy(() => import("@/pages/QuickstartPage").then(
 const PlaygroundPage         = lazy(() => import("@/pages/PlaygroundPage").then((m) => ({ default: m.PlaygroundPage })));
 const ProactivePage          = lazy(() => import("@/pages/ProactivePage").then((m) => ({ default: m.ProactivePage })));
 const TargetSystemsPage      = lazy(() => import("@/pages/TargetSystemsPage").then((m) => ({ default: m.TargetSystemsPage })));
+const TeamsPage            = lazy(() => import("@/pages/TeamsPage").then((m) => ({ default: m.TeamsPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
             <Route path="usermanagement"    element={<UserManagementPage />} />
+            <Route path="teams"             element={<TeamsPage />} />
             <Route path="prompt-guide"      element={<PromptGuidePage />} />
             <Route path="quickstart"        element={<QuickstartPage />} />
             <Route path="playground"       element={<PlaygroundPage />} />

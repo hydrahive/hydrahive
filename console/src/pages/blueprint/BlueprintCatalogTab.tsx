@@ -23,6 +23,10 @@ export function BlueprintCatalogTab() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteAgentId, setPromoteAgentId] = useState("");
+  const [promoteBpId, setPromoteBpId] = useState(() => "bp-" + Date.now().toString(36));
+  const [promoteDesc, setPromoteDesc] = useState("");
   const [importId, setImportId] = useState("");
   const [importData, setImportData] = useState("");
   const [importing, setImporting] = useState(false);
@@ -68,6 +72,22 @@ export function BlueprintCatalogTab() {
     } finally {
       setDeleting(null);
       setConfirm(null);
+    }
+  }
+
+  async function doPromote() {
+    if (!promoteAgentId || !promoteBpId.trim()) return;
+    setInstalling("promote");
+    try {
+      await api.promoteScratchpad(promoteAgentId, promoteBpId.trim(), promoteDesc || undefined);
+      showToast(`Promoted auf ${promoteBpId.trim()}`, true);
+      setPromoteOpen(false);
+      setPromoteBpId("bp-" + Date.now().toString(36));
+      setPromoteDesc("");
+    } catch (e: any) {
+      showToast("Promote fehlgeschlagen: " + (e.message ?? "Unbekannt"), false);
+    } finally {
+      setInstalling(null);
     }
   }
 
@@ -117,6 +137,11 @@ export function BlueprintCatalogTab() {
           onClick={() => setImportOpen(true)}
           className="flex items-center gap-1.5 rounded-lg bg-zinc-800 border border-white/10 px-3 py-1.5 text-xs text-white hover:bg-zinc-700 transition-colors">
           <Upload className="h-3.5 w-3.5" /> Import
+        </button>
+        <button
+          onClick={() => { if (agents.length > 0) { setPromoteAgentId(agents[0]); setPromoteOpen(true); } else { alert("Keine Agents verfügbar"); } }}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-950/60 border border-indigo-500/30 px-3 py-1.5 text-xs text-indigo-300 hover:bg-indigo-900/40 transition-colors">
+          <Upload className="h-3.5 w-3.5" /> Promote Scratchpad
         </button>
         <button
           onClick={load}
@@ -174,6 +199,46 @@ export function BlueprintCatalogTab() {
           </div>
         )}
       </div>
+
+      {/* Promote-Dialog */}
+      {promoteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-white mb-4">Scratchpad → Blueprint Promote</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-white/40 mb-1">Agent</label>
+                <select value={promoteAgentId} onChange={e => setPromoteAgentId(e.target.value)}
+                  className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60">
+                  {agents.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-white/40 mb-1">Blueprint-ID</label>
+                <input value={promoteBpId} onChange={e => setPromoteBpId(e.target.value)}
+                  className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60" />
+              </div>
+              <div>
+                <label className="block text-xs text-white/40 mb-1">Beschreibung (optional)</label>
+                <input value={promoteDesc} onChange={e => setPromoteDesc(e.target.value)}
+                  placeholder="z.B. Agent-Scratchpad vom 24.04.2026"
+                  className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => { setPromoteOpen(false); }}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">
+                Abbrechen
+              </button>
+              <button onClick={doPromote} disabled={installing === "promote" || !promoteAgentId || !promoteBpId.trim()}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors">
+                {installing === "promote" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Promote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import-Dialog */}
       {importOpen && (
