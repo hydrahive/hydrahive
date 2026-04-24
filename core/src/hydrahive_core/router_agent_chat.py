@@ -530,6 +530,7 @@ def register_agent_chat_routes(
         virtual_cfg = _PC(
             id=agent_id,
             identity=_PI(name=cfg.identity),
+            llm=cfg.llm,          # Agent-Config übernehmen statt Default
             agents=_PA(boss=agent_id, workers=[]),
         )
         # project_id immer auf agent_id setzen (kein client-controlled override)
@@ -618,6 +619,7 @@ def register_agent_chat_routes(
         virtual_cfg = _PC(
             id=agent_id,
             identity=_PI(name=cfg.identity),
+            llm=cfg.llm,          # Agent-Config übernehmen statt Default
             agents=_PA(boss=agent_id, workers=[]),
         )
 

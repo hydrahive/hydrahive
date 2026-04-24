@@ -933,7 +933,7 @@ def register_project_routes(
             "id": req.id,
             "version": "2.0.0",
             "identity": {"name": req.name, "description": req.description},
-            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-6", "temperature": 0.7, "max_tokens": 4096},
+            "llm": {"provider": "anthropic", "model": req.model, "temperature": 0.7, "max_tokens": 4096},
             "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
             "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
             "members": req.members,
