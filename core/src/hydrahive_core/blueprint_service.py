@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 BLUEPRINTS_DIR = Path("/etc/hydrahive/blueprints")
+AGENTS_DIR = Path("/etc/hydrahive/agents")
 
 # ── Manifest-Schema ──────────────────────────────────────────────────────────
 
@@ -132,3 +133,77 @@ def install_to_agent(bp_id: str, agent_id: str) -> dict:
 
     logger.info("Blueprint %s -> Agent %s installiert", bp_id, agent_id)
     return {"installed": bp_id, "agent": agent_id}
+
+
+# ── #314: Promotion Scratchpad → Blueprint ────────────────────────────────────
+
+def promote_scratchpad_to_blueprint(
+    agent_id: str,
+    bp_id: str,
+    description_override: str = "",
+) -> dict:
+    """Promoted den aktuellen Scratchpad-Inhalt eines Agents in einen Blueprint."""
+    import hashlib
+
+    scratchpad_path = AGENTS_DIR / agent_id / "scratchpad.md"
+    if not scratchpad_path.exists():
+        return {"error": f"Kein Scratchpad für Agent '{agent_id}' gefunden"}
+
+    scratchpad_content = scratchpad_path.read_text(encoding="utf-8")
+
+    existing = get_blueprint(bp_id)
+    nodes = list(existing.nodes) if existing else []
+    edges = list(existing.edges) if existing else []
+
+    SP_HASH = hashlib.sha256(scratchpad_content.encode()).hexdigest()[:12]
+    nodes = [n for n in nodes if n.type != "scratchpad"]
+    nodes.append(BlueprintNode(
+        type="scratchpad",
+        label=f"scratchpad-{SP_HASH}",
+        config={"content": scratchpad_content, "agent_id": agent_id},
+    ))
+
+    description = description_override or (
+        f"Promoted von Scratchpad-Agent {agent_id} am {datetime.now(timezone.utc).date().isoformat()}"
+    )
+
+    bp = BlueprintManifest(
+        id=bp_id,
+        version="1.0",
+        description=description,
+        nodes=nodes,
+        edges=edges,
+        promoted_from={"agent_id": agent_id, "scratchpad_hash": SP_HASH},
+    )
+    save_blueprint(bp)
+    return {
+        "promoted": bp_id,
+        "agent": agent_id,
+        "node_count": len(nodes),
+        "scratchpad_hash": SP_HASH,
+        "size_chars": len(scratchpad_content),
+    }
+
+
+def preview_promotion(agent_id: str) -> dict:
+    """Gibt eine Vorschau zurück: aktueller Scratchpad-Inhalt + Blueprint-Vorschau."""
+    import hashlib
+
+    scratchpad_path = AGENTS_DIR / agent_id / "scratchpad.md"
+    if not scratchpad_path.exists():
+        return {"error": f"Kein Scratchpad für Agent '{agent_id}' gefunden"}
+
+    scratchpad_content = scratchpad_path.read_text(encoding="utf-8")
+    SP_HASH = hashlib.sha256(scratchpad_content.encode()).hexdigest()[:12]
+    preview = scratchpad_content[:200] + ("..." if len(scratchpad_content) > 200 else "")
+    return {
+        "agent_id": agent_id,
+        "scratchpad_content": scratchpad_content,
+        "scratchpad_hash": SP_HASH,
+        "size_chars": len(scratchpad_content),
+        "preview_node": {
+            "type": "scratchpad",
+            "label": f"scratchpad-{SP_HASH}",
+            "config": {"content": preview, "agent_id": agent_id},
+        },
+    }

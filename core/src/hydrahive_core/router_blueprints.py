@@ -12,6 +12,8 @@ from .blueprint_service import (
     get_blueprint,
     install_to_agent,
     list_blueprints,
+    promote_scratchpad_to_blueprint,
+    preview_promotion,
     save_blueprint,
 )
 
@@ -92,6 +94,39 @@ def register_blueprint_routes(
     @router.post("/admin/blueprints/{bp_id}/install/{agent_id}")
     def install_blueprint(bp_id: str, agent_id: str, _a: tuple = Depends(require_admin)) -> dict:
         result = install_to_agent(bp_id, agent_id)
+        if "error" in result:
+            raise HTTPException(404, result["error"])
+        return result
+
+    # ── Schema für Promotion ─────────────────────────────────────────────────
+
+    class PromoteScratchpadRequest(BaseModel):
+        blueprint_id: str
+        description_override: str = ""
+
+    # ── #314: Promotion Scratchpad → Blueprint ──────────────────────────────
+
+    @router.post("/admin/blueprints/promote-scratchpad/{agent_id}")
+    def promote_scratchpad(
+        agent_id: str,
+        req: PromoteScratchpadRequest,
+        _a: tuple = Depends(require_admin),
+    ) -> dict:
+        result = promote_scratchpad_to_blueprint(
+            agent_id=agent_id,
+            bp_id=req.blueprint_id,
+            description_override=req.description_override,
+        )
+        if "error" in result:
+            raise HTTPException(400, result["error"])
+        return result
+
+    @router.get("/admin/blueprints/promote-scratchpad/{agent_id}/preview")
+    def preview_scratchpad_promotion(
+        agent_id: str,
+        _a: tuple = Depends(require_admin),
+    ) -> dict:
+        result = preview_promotion(agent_id)
         if "error" in result:
             raise HTTPException(404, result["error"])
         return result
