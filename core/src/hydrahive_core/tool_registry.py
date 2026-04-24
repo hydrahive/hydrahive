@@ -1000,13 +1000,9 @@ class ShellExecTool(BaseTool):
                 logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
                             agent_id, _proj_user, command[:120])
             elif os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
-                # Explizite Dev-Escape-Hatch. In Prod nicht setzen.
-                # #747: frueher war das der Silent-Default.
-                # #776: error-Level + persistenter Audit-Log-Eintrag. Jeder
-                # Root-Escape muss in Log + Audit-Trail landen, da Angreifer
-                # mit Zugriff auf die Env-Var (oder Systemd-Unit) den Fallback
-                # triggern kann.
-                exec_command = f"sudo bash -c {_quoted}"
+                # Kein sudo — Prozess läuft bereits als hydrahive-User.
+                # sudo bash ist nicht in der sudoers-Whitelist → direkt ausführen.
+                exec_command = f"bash -c {_quoted}"
                 logger.error(
                     "AUDIT [SECURITY] shell_exec [%s] (UNRESTRICTED/ROOT via Env-Override): %s",
                     agent_id, command[:120],
