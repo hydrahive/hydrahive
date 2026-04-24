@@ -336,6 +336,13 @@ async def lifespan(app: FastAPI):
     from . import browser_tools as _browser_tools
     _browser_tools.BrowserScreenshotTool.set_job_service(job_service)
 
+    # #790: Browser-Tools (5 weitere) in Tool-Registry registrieren
+    _tr.registry.register(_browser_tools.BrowserNavigateTool())
+    _tr.registry.register(_browser_tools.BrowserClickTool())
+    _tr.registry.register(_browser_tools.BrowserFillTool())
+    _tr.registry.register(_browser_tools.BrowserEvaluateTool())
+    _tr.registry.register(_browser_tools.BrowserCloseTool())
+
     # Audit-Log-Pfad vorbereiten
     _ensure_audit_log_path()
 
