@@ -1,148 +1,142 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HydraHive — AI Agent Server Platform</title>
+  <title>HydraHive — Self-hosted AI Agent Server</title>
+  <meta name="description" content="HydraHive: Open-source AI agent server. Selbst hosten, eigene LLMs, volle Kontrolle. Kein Cloud-Abo, kein Lock-in.">
   <style>
     :root {
-      --bg: #0a1220;
-      --bg2: #121f33;
-      --accent: #4ade80;
+      --bg:      #0c0c0f;
+      --bg2:     #111116;
+      --surface: #18181f;
+      --border:  #2a2a35;
+      --accent:  #4ade80;
       --accent2: #22c55e;
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-      --card: #1e293b;
-      --border: #334155;
+      --blue:    #60a5fa;
+      --text:    #f0f0f5;
+      --muted:   #8888a0;
+      --dim:     #44445a;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
+      font-size: 16px;
     }
 
-    /* NAV */
+    /* ── NAV ─────────────────────────────────────────── */
     nav {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 1.2rem 2rem;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 60px;
       border-bottom: 1px solid var(--border);
-      background: rgba(18,31,51,0.95);
+      background: rgba(12,12,15,0.9);
+      backdrop-filter: blur(12px);
       position: sticky;
       top: 0;
       z-index: 100;
-      backdrop-filter: blur(8px);
     }
-    .logo {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -0.5px;
-    }
-    .logo span { color: var(--text); }
-    nav a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 0.9rem;
-      transition: color 0.2s;
-    }
-    nav a:hover { color: var(--accent); }
-    .nav-links { display: flex; gap: 2rem; align-items: center; }
-    .nav-toggle { display: none; background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; }
-    @media (max-width: 768px) {
-      nav { flex-wrap: wrap; padding: 0.8rem 1rem; gap: 0.5rem; }
-      .nav-toggle { display: block; }
-      .nav-links { display: none; flex-direction: column; width: 100%; gap: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
-      .nav-links.open { display: flex; }
-      .badge { display: none; }
-    }
-    .badge {
-      background: #22c55e22;
-      color: #22c55e;
-      border: 1px solid #22c55e55;
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 0.2rem 0.6rem;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .github-link {
+    .nav-logo {
       display: flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.3px;
+    }
+    .nav-logo img { height: 28px; width: 28px; border-radius: 6px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+    .nav-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      border: 1px solid #4ade8033;
+      background: #4ade8010;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+    }
+    .nav-gh {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       color: var(--muted);
       text-decoration: none;
       font-size: 0.85rem;
       border: 1px solid var(--border);
-      padding: 0.3rem 0.8rem;
+      padding: 0.3rem 0.75rem;
       border-radius: 6px;
-      transition: border-color 0.2s, color 0.2s;
+      transition: color 0.15s, border-color 0.15s;
     }
-    .github-link:hover { border-color: var(--accent); color: var(--accent); }
+    .nav-gh:hover { color: var(--text); border-color: var(--dim); }
 
-    /* LANG TOGGLE */
-    .lang-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 0.25rem 0.65rem;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-      letter-spacing: 0.05em;
-      font-family: inherit;
-    }
-    .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-    /* HERO */
+    /* ── HERO ────────────────────────────────────────── */
     .hero {
-      text-align: center;
-      padding: 6rem 2rem 4rem;
-      max-width: 860px;
+      max-width: 760px;
       margin: 0 auto;
+      padding: 6rem 2rem 5rem;
+      text-align: center;
     }
-    .hero-tag {
-      display: inline-block;
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      font-size: 0.8rem;
-      padding: 0.3rem 1rem;
-      border-radius: 999px;
-      margin-bottom: 1.5rem;
-      letter-spacing: 0.08em;
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
     }
-    .hero h1 {
-      font-size: clamp(2.5rem, 6vw, 4rem);
+    .hero-eyebrow::before,
+    .hero-eyebrow::after {
+      content: '';
+      display: block;
+      width: 28px;
+      height: 1px;
+      background: var(--accent);
+      opacity: 0.4;
+    }
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 3.8rem);
       font-weight: 800;
       line-height: 1.1;
+      letter-spacing: -1.5px;
       margin-bottom: 1.5rem;
-      letter-spacing: -1px;
     }
-    .hero h1 em {
+    h1 em {
       font-style: normal;
-      background: linear-gradient(135deg, var(--accent), #22d3ee);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: var(--accent);
     }
-    .hero p {
-      font-size: 1.2rem;
+    .hero-sub {
+      font-size: 1.1rem;
       color: var(--muted);
-      max-width: 600px;
-      margin: 0 auto 2.5rem;
+      max-width: 520px;
+      margin: 0 auto 0.8rem;
+    }
+    .hero-honest {
+      font-size: 0.82rem;
+      color: var(--dim);
+      margin-bottom: 2.5rem;
     }
     .hero-cta {
       display: flex;
-      gap: 1rem;
+      gap: 0.75rem;
       justify-content: center;
       flex-wrap: wrap;
     }
@@ -150,1041 +144,616 @@
       background: var(--accent);
       color: #000;
       font-weight: 700;
-      padding: 0.8rem 2rem;
-      border-radius: 8px;
+      padding: 0.7rem 1.8rem;
+      border-radius: 7px;
       text-decoration: none;
-      font-size: 0.95rem;
-      transition: background 0.2s, transform 0.1s;
+      font-size: 0.9rem;
+      transition: background 0.15s;
     }
-    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
-    .btn-secondary {
+    .btn-primary:hover { background: var(--accent2); }
+    .btn-ghost {
       border: 1px solid var(--border);
-      color: var(--text);
-      padding: 0.8rem 2rem;
-      border-radius: 8px;
+      color: var(--muted);
+      padding: 0.7rem 1.8rem;
+      border-radius: 7px;
       text-decoration: none;
-      font-size: 0.95rem;
-      transition: border-color 0.2s;
+      font-size: 0.9rem;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .btn-secondary:hover { border-color: var(--accent); }
+    .btn-ghost:hover { border-color: var(--dim); color: var(--text); }
 
-    /* HYDRA SVG */
-    .hydra-hero {
-      margin: 3rem auto 0;
-      display: flex;
-      justify-content: center;
+    /* ── SCREENSHOTS ─────────────────────────────────── */
+    .shots-wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 2rem 5rem;
     }
-    .hydra-svg {
-      width: 240px;
-      height: 240px;
-      filter: drop-shadow(0 0 40px rgba(74,222,128,0.3));
-      animation: pulse-glow 3s ease-in-out infinite;
+    .shots-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
     }
-    @keyframes pulse-glow {
-      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 40px rgba(74,222,128,0.3)); }
-      50% { transform: scale(1.04); filter: drop-shadow(0 0 55px rgba(74,222,128,0.5)); }
+    @media (max-width: 700px) {
+      .shots-grid { grid-template-columns: 1fr; }
+    }
+    .shot-frame {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow:
+        0 0 0 1px #4ade8018,
+        0 8px 32px rgba(0,0,0,0.5),
+        0 0 60px #4ade8015;
+      transition: box-shadow 0.3s;
+    }
+    .shot-frame:hover {
+      box-shadow:
+        0 0 0 1px #4ade8030,
+        0 12px 48px rgba(0,0,0,0.6),
+        0 0 100px #4ade8028;
+    }
+    .shot-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .shot-label {
+      font-size: 0.72rem;
+      color: var(--dim);
+      text-align: center;
+      margin-top: 0.6rem;
+      font-family: monospace;
     }
 
-    /* TAGLINE BAR */
-    .tagline-bar {
+    /* ── CONSOLE MOCK ────────────────────────────────── */
+    .mock-wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 2rem 5rem;
+    }
+    .mock-window {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
       background: var(--bg2);
-      border-top: 1px solid var(--border);
+      box-shadow: 0 40px 80px rgba(0,0,0,0.5);
+    }
+    .mock-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 1.5rem 2rem;
-      text-align: center;
-      font-size: 1.1rem;
-      color: var(--muted);
-      margin: 4rem 0;
     }
-    .tagline-bar strong { color: var(--text); }
-
-    /* SECTIONS */
-    .section {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 3rem 2rem;
-    }
-    .section-title {
+    .mock-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mock-dot.r { background: #ff5f57; }
+    .mock-dot.y { background: #febc2e; }
+    .mock-dot.g { background: #28c840; }
+    .mock-url {
+      flex: 1;
       text-align: center;
-      font-size: 1.8rem;
+      font-size: 0.72rem;
+      color: var(--dim);
+      font-family: monospace;
+    }
+    .mock-body {
+      display: flex;
+      height: 400px;
+    }
+    .mock-sidebar {
+      width: 210px;
+      border-right: 1px solid var(--border);
+      padding: 12px 0;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .mock-sidebar-label {
+      font-size: 0.65rem;
       font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-    .section-sub {
-      text-align: center;
-      color: var(--muted);
-      margin-bottom: 3rem;
-    }
-
-    /* FEATURES GRID */
-    .grid-3 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.5rem;
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.8rem;
-      transition: border-color 0.2s, transform 0.2s;
-    }
-    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .card-icon { font-size: 2rem; margin-bottom: 1rem; }
-    .card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
-    .card p { color: var(--muted); font-size: 0.9rem; }
-
-    /* ARCHITECTURE */
-    .arch-box {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 2rem;
-      font-family: 'Courier New', monospace;
-      font-size: 0.85rem;
-      color: var(--accent);
-      max-width: 700px;
-      margin: 0 auto;
-      line-height: 2;
-      overflow-x: auto;
-    }
-    .arch-box .dim { color: var(--muted); }
-    .arch-box .bright { color: var(--text); }
-
-    /* STACK */
-    .stack-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    .stack-item {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.2rem;
-    }
-    .stack-item .layer {
-      font-size: 0.7rem;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--accent);
-      margin-bottom: 0.3rem;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      padding: 0 14px;
+      margin-bottom: 8px;
     }
-    .stack-item .tech {
-      font-size: 0.9rem;
-      color: var(--text);
-    }
-    .stack-item .tech small {
-      color: var(--muted);
-      font-size: 0.8rem;
-      display: block;
-    }
-
-    /* PROFILES */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 1.5rem;
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    .profile-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 2rem;
-    }
-    .profile-card.featured { border-color: var(--accent); }
-    .profile-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.3rem; }
-    .profile-card .price-tag {
-      color: var(--accent);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 1rem;
-    }
-    .profile-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
-    .profile-card li { color: var(--muted); font-size: 0.9rem; }
-    .profile-card li::before { content: "✓ "; color: var(--accent); }
-
-    /* FLOW */
-    .flow {
+    .mock-agent {
       display: flex;
       align-items: center;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 2rem 0;
+      gap: 8px;
+      padding: 7px 14px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: default;
     }
-    .flow-step {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.8rem 1.4rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-    }
-    .flow-arrow { color: var(--accent); font-size: 1.2rem; }
-
-    /* DOCS */
-    .docs-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1rem;
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    .doc-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.4rem;
-      text-decoration: none;
-      transition: border-color 0.2s, transform 0.2s;
-      display: block;
-    }
-    .doc-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .doc-card .doc-icon { font-size: 1.5rem; margin-bottom: 0.6rem; }
-    .doc-card h3 { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
-    .doc-card p { font-size: 0.82rem; color: var(--muted); }
-
-    /* QUICKSTART */
-    .code-block {
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.5rem 2rem;
-      font-family: 'Courier New', monospace;
-      font-size: 0.88rem;
-      max-width: 600px;
-      margin: 0 auto;
-      line-height: 2;
-    }
-    .code-block .prompt { color: var(--accent); }
-    .code-block .cmd { color: var(--text); }
-    .code-block .cmt { color: var(--muted); }
-
-    /* STATUS */
-    .status-bar {
-      background: var(--bg2);
-      border: 1px solid #22c55e44;
-      border-radius: 12px;
-      padding: 1.5rem 2rem;
-      max-width: 700px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      background: #22c55e;
+    .mock-agent.active { background: #4ade8012; color: var(--text); }
+    .mock-agent-dot {
+      width: 7px; height: 7px;
       border-radius: 50%;
-      animation: pulse 2s infinite;
+      background: var(--dim);
       flex-shrink: 0;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+    .mock-agent.active .mock-agent-dot { background: var(--accent); }
+    .mock-agent-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mock-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .mock-chat-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mock-model-pill {
+      font-size: 0.65rem;
+      color: var(--blue);
+      border: 1px solid #60a5fa33;
+      background: #60a5fa0d;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+    }
+    .mock-messages {
+      flex: 1;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+    }
+    .mock-msg {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .mock-msg-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--dim);
+    }
+    .mock-msg.user .mock-msg-label { color: var(--blue); }
+    .mock-msg.assistant .mock-msg-label { color: var(--accent); }
+    .mock-bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 13px;
+      font-size: 0.8rem;
+      color: var(--text);
+      max-width: 85%;
+    }
+    .mock-msg.user .mock-bubble {
+      align-self: flex-end;
+      background: #4ade8010;
+      border-color: #4ade8025;
+    }
+    .mock-tool-call {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      background: #60a5fa08;
+      border: 1px solid #60a5fa20;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      color: var(--blue);
+      font-family: monospace;
+      max-width: 80%;
+    }
+    .mock-tool-call svg { flex-shrink: 0; }
+    .mock-input-row {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    .mock-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      color: var(--dim);
+    }
+    .mock-send {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
     }
 
-    /* FOOTER */
+    /* ── SECTION ─────────────────────────────────────── */
+    .section {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.6rem;
+    }
+    .section-sub {
+      font-size: 1rem;
+      color: var(--muted);
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 2rem;
+    }
+
+    /* ── FEATURES GRID ───────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    @media (max-width: 720px) {
+      .features-grid { grid-template-columns: 1fr; }
+    }
+    @media (min-width: 721px) and (max-width: 960px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .feat-card {
+      background: var(--bg2);
+      padding: 1.6rem;
+    }
+    .feat-icon {
+      font-size: 1.4rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+    .feat-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      color: var(--text);
+    }
+    .feat-card p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ── INSTALL ─────────────────────────────────────── */
+    .install-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .install-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .install-topbar span {
+      font-size: 0.72rem;
+      color: var(--dim);
+      font-family: monospace;
+    }
+    .copy-btn {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.2rem 0.6rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--dim); }
+    .install-code {
+      padding: 1.5rem;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.88rem;
+      color: var(--accent);
+      line-height: 2;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .install-code .c { color: var(--dim); }
+    .install-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 1.2rem;
+    }
+    .install-note a { color: var(--accent); text-decoration: none; }
+    .install-note a:hover { text-decoration: underline; }
+
+    /* ── FOOTER ──────────────────────────────────────── */
     footer {
       border-top: 1px solid var(--border);
       padding: 2rem;
       text-align: center;
-      color: var(--muted);
-      font-size: 0.85rem;
-      margin-top: 4rem;
+      font-size: 0.8rem;
+      color: var(--dim);
     }
-    footer strong { color: var(--accent); }
-    footer a { color: var(--muted); text-decoration: none; }
-    footer a:hover { color: var(--accent); }
+    footer a { color: var(--dim); text-decoration: none; margin: 0 0.75rem; }
+    footer a:hover { color: var(--muted); }
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    .footer-logo span { color: var(--accent); }
+    .footer-logo img { height: 22px; width: 22px; border-radius: 5px; }
+
+    /* ── RESPONSIVE ──────────────────────────────────── */
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-badge { display: none; }
+      .mock-sidebar { display: none; }
+      .hero { padding: 4rem 1.5rem 3.5rem; }
+      .section { padding: 3.5rem 1.5rem; }
+    }
   </style>
 </head>
 <body>
 
+<!-- NAV -->
 <nav>
-  <div class="logo"><img src="hydrahive-logo.png" alt="HydraHive" style="height:36px;width:36px;border-radius:8px;vertical-align:middle;margin-right:8px">Hydra<span>Hive</span></div>
-  <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
-  <div class="nav-links">
-    <a href="#features" data-i18n="nav-features">Features</a>
-    <a href="#how-it-works" data-i18n="nav-how">How it works</a>
-    <a href="#docs" data-i18n="nav-docs">Docs</a>
-    <a href="https://github.com/HydraHive/hydrahive" class="github-link" target="_blank">
+  <a href="/" class="nav-logo">
+    <img src="hydrahive-logo.png" alt="">
+    Hydra<span>Hive</span>
+  </a>
+  <div class="nav-right">
+    <span class="nav-badge">Open Beta</span>
+    <a href="https://github.com/hydrahive/hydrahive" class="nav-gh" target="_blank" rel="noopener">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub
     </a>
-    <span class="badge">Active Development — stable core, features may change</span>
-    <button class="lang-btn" id="langBtn" onclick="toggleLang()">DE</button>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-tag" data-i18n="hero-tag">Self-Hosted AI Agent Server</div>
-  <h1 data-i18n="hero-h1">One brain.<br><em>Many heads.</em><br>Infinite reach.</h1>
-  <p data-i18n="hero-p">Install Linux. Install HydraHive. Done.<br>
-  Manage your entire AI agent swarm from a single web console — no Docker, no cloud dependency.</p>
+  <div class="hero-eyebrow">Self-Hosted AI Agent Server</div>
+  <h1>Ein Server.<br><em>Viele Agenten.</em><br>Volle Kontrolle.</h1>
+  <p class="hero-sub">
+    HydraHive läuft auf deiner eigenen Hardware. Kein Cloud-Abo, kein Lock-in.
+    Claude, MiniMax, Ollama — du entscheidest welches Modell welcher Agent benutzt.
+  </p>
+  <p class="hero-honest">Open source · Hobby-Projekt · In aktiver Entwicklung</p>
   <div class="hero-cta">
-    <a href="#quickstart" class="btn-primary" data-i18n="btn-quickstart">Quick Start</a>
-    <a href="#how-it-works" class="btn-secondary" data-i18n="btn-how">How it works →</a>
-  </div>
-  <div class="hydra-hero">
-    <img src="hydrahive-logo.png" alt="HydraHive" class="hydra-svg" style="border-radius:24px">
+    <a href="#install" class="btn-primary">Quick Install ↓</a>
+    <a href="https://github.com/hydrahive/hydrahive" class="btn-ghost" target="_blank" rel="noopener">GitHub →</a>
   </div>
 </section>
 
-<!-- TAGLINE -->
-<div class="tagline-bar" data-i18n="tagline">
-  <strong>HydraHive</strong> — The self-hosted agent swarm platform.<br><span style="font-size:0.95rem">No cloud. No lock-in. Full control.</span>
+<!-- SCREENSHOTS -->
+<div class="shots-wrap">
+  <div class="shots-grid">
+    <div>
+      <div class="shot-frame">
+        <img src="hydradesk.png" alt="HydraHive Dashboard">
+      </div>
+      <p class="shot-label">Dashboard · Live-Status · Token-Metriken</p>
+    </div>
+    <div>
+      <div class="shot-frame">
+        <img src="systemwissen.png" alt="HydraHive Systemwissen-Graph">
+      </div>
+      <p class="shot-label">Systemwissen · Agent-Wissensgraph</p>
+    </div>
+  </div>
 </div>
+
+<!-- CONSOLE MOCK -->
+<div class="mock-wrap" style="display:none">
+  <div class="mock-window">
+    <div class="mock-titlebar">
+      <div class="mock-dot r"></div>
+      <div class="mock-dot y"></div>
+      <div class="mock-dot g"></div>
+      <span class="mock-url">hydrahive.local / console</span>
+    </div>
+    <div class="mock-body">
+      <div class="mock-sidebar">
+        <div class="mock-sidebar-label">Agenten</div>
+        <div class="mock-agent active">
+          <div class="mock-agent-dot"></div>
+          <span class="mock-agent-name">personal_admin</span>
+        </div>
+        <div class="mock-agent">
+          <div class="mock-agent-dot"></div>
+          <span class="mock-agent-name">projekt-backend</span>
+        </div>
+        <div class="mock-agent">
+          <div class="mock-agent-dot"></div>
+          <span class="mock-agent-name">recherche-bot</span>
+        </div>
+        <div class="mock-agent">
+          <div class="mock-agent-dot"></div>
+          <span class="mock-agent-name">support</span>
+        </div>
+        <div class="mock-sidebar-label" style="margin-top:1.5rem">Boss-Agent</div>
+        <div class="mock-agent">
+          <div class="mock-agent-dot" style="background:#f59e0b"></div>
+          <span class="mock-agent-name">boss</span>
+        </div>
+      </div>
+      <div class="mock-chat">
+        <div class="mock-chat-header">
+          <span>personal_admin</span>
+          <span class="mock-model-pill">claude-sonnet-4-5</span>
+        </div>
+        <div class="mock-messages">
+          <div class="mock-msg user">
+            <span class="mock-msg-label">Du</span>
+            <div class="mock-bubble">Erstell mir ein Python-Script das die letzten Logs auswertet und per Telegram schickt.</div>
+          </div>
+          <div class="mock-msg assistant">
+            <span class="mock-msg-label">personal_admin</span>
+            <div class="mock-tool-call">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              shell_exec("tail -n 500 /var/log/syslog | grep ERROR")
+            </div>
+            <div class="mock-tool-call">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+              write_file("log_report.py", ...)
+            </div>
+            <div class="mock-bubble">Fertig. Script liegt unter <code style="color:var(--accent);font-size:0.78rem">~/log_report.py</code> — sendet täglich um 08:00 einen Bericht per Telegram.</div>
+          </div>
+        </div>
+        <div class="mock-input-row">
+          <div class="mock-input">Schreib eine Nachricht…</div>
+          <button class="mock-send">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
 
 <!-- FEATURES -->
 <section class="section" id="features">
-  <h2 class="section-title" data-i18n="feat-title">Everything you need. Nothing you don't.</h2>
-  <p class="section-sub" data-i18n="feat-sub">Built for real infrastructure. No Docker networking nightmares.</p>
-  <div class="grid-3">
-    <div class="card">
-      <div class="card-icon">🧠</div>
-      <h3 data-i18n="f1-h">Project-Based Agents</h3>
-      <p data-i18n="f1-p">Every project is its own AI agent — no Boss/Worker hierarchy. Each project has its own memory, tools, LLM config and access control. Ask any project anything.</p>
+  <div class="section-header">
+    <div class="section-label">Was drin ist</div>
+    <h2 class="section-title">Alles was du brauchst.<br>Nichts was du nicht brauchst.</h2>
+    <p class="section-sub">Kein Overhead, keine Vendor-Abhängigkeit. Läuft auf einem 20€-VPS genauso wie auf deinem NAS.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feat-card">
+      <span class="feat-icon">🤖</span>
+      <h3>Boss + Worker Agenten</h3>
+      <p>Ein Boss-Agent koordiniert mehrere Worker. Aufgaben werden aufgeteilt, parallel ausgeführt und die Ergebnisse zusammengeführt.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">🔌</div>
-      <h3 data-i18n="f2-h">One-Command Install</h3>
-      <p data-i18n="f2-p">One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.</p>
+    <div class="feat-card">
+      <span class="feat-icon">🔀</span>
+      <h3>Multi-LLM pro Agent</h3>
+      <p>Jeder Agent nutzt sein eigenes Modell: Claude (OAuth), MiniMax, Ollama oder andere OpenAI-kompatible APIs. Mischbetrieb möglich.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">💬</div>
-      <h3 data-i18n="f3-h">Matrix Communication</h3>
-      <p data-i18n="f3-p">Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.</p>
+    <div class="feat-card">
+      <span class="feat-icon">💻</span>
+      <h3>Web Console</h3>
+      <p>React-basierte Dark-Mode-UI. Streaming, Tool-Call-Anzeige, Agenten-Verwaltung, Admin-Bereich — alles im Browser.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">🤖</div>
-      <h3 data-i18n="f4-h">Multi-LLM per Agent</h3>
-      <p data-i18n="f4-p">Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.</p>
+    <div class="feat-card">
+      <span class="feat-icon">🧠</span>
+      <h3>Memory & Skills</h3>
+      <p>Agenten speichern Wissen in Markdown-Dateien, die automatisch in jede Session injiziert werden. Skills erweitern das Verhalten per hot-reload.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">📚</div>
-      <h3 data-i18n="f5-h">Skills</h3>
-      <p data-i18n="f5-p">Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.</p>
+    <div class="feat-card">
+      <span class="feat-icon">🔧</span>
+      <h3>Shell-Exec (3 Modi)</h3>
+      <p>Safe, Elevated oder Unrestricted — du bestimmst wie viel Systemzugriff ein Agent bekommt. Blocklist für kritische Kommandos inklusive.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">📁</div>
-      <h3 data-i18n="f6-h">Project Isolation</h3>
-      <p data-i18n="f6-p">Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
+    <div class="feat-card">
+      <span class="feat-icon">🎙️</span>
+      <h3>Voice</h3>
+      <p>TTS und STT über MiniMax oder lokale Engines (Coqui, Wyoming). Agenten können sprechen und zuhören.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">🧑‍💻</div>
-      <h3 data-i18n="f7-h">Personal Agent</h3>
-      <p data-i18n="f7-p">Every user gets a private agent (personal_&lt;username&gt;) with its own chat, skills, memory and workstation access — completely independent of projects.</p>
+    <div class="feat-card">
+      <span class="feat-icon">📱</span>
+      <h3>Telegram & WhatsApp</h3>
+      <p>Jeder Agent ist optional als Telegram-Bot erreichbar. WhatsApp-Bridge per Projekt konfigurierbar.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">🧠</div>
-      <h3 data-i18n="f8-h">Memory System</h3>
-      <p data-i18n="f8-p">Agents store knowledge in Markdown files, auto-injected into every session. Combine with A-MEM semantic search to save tokens on large memory sets.</p>
+    <div class="feat-card">
+      <span class="feat-icon">🔌</span>
+      <h3>MCP-Support</h3>
+      <p>Model Context Protocol: externe Tools und Datenquellen werden als MCP-Server eingebunden. Über 70 Tools direkt verfügbar.</p>
     </div>
-    <div class="card">
-      <div class="card-icon">💻</div>
-      <h3 data-i18n="f9-h">WKS Access</h3>
-      <p data-i18n="f9-p">Personal agents SSH into your workstation — run commands, read and write files. WKS Ollama models appear automatically in the model dropdown.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔧</div>
-      <h3 data-i18n="f10-h">Git Integration</h3>
-      <p data-i18n="f10-p">Agents commit, push, and create pull requests on Gitea. Full git workflow from chat — no terminal needed.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔌</div>
-      <h3 data-i18n="f11-h">MCP Servers</h3>
-      <p data-i18n="f11-p">Connect external tool servers via streamableHttp (Model Context Protocol). Ships with A-MEM — semantic memory search built in.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔗</div>
-      <h3 data-i18n="f12-h">Webhook System</h3>
-      <p data-i18n="f12-p">Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🛡️</div>
-      <h3 data-i18n="f13-h">Security &amp; Audit</h3>
-      <p data-i18n="f13-p">JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🖥️</div>
-      <h3 data-i18n="f14-h">Full Web Console</h3>
-      <p data-i18n="f14-p">Manage agents, projects, users, skills, webhooks, MCP servers and LLM config — all without SSH. One-click system update included.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔄</div>
-      <h3 data-i18n="f15-h">Heartbeat Monitoring</h3>
-      <p data-i18n="f15-p">Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">💾</div>
-      <h3 data-i18n="f16-h">Backup &amp; Restore</h3>
-      <p data-i18n="f16-p">One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🕸️</div>
-      <h3 data-i18n="f17-h">AgentLink Hub</h3>
-      <p data-i18n="f17-p">Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🌐</div>
-      <h3 data-i18n="f18-h">VPN — Tailscale / Headscale</h3>
-      <p data-i18n="f18-p">Built-in Tailscale WireGuard overlay. No port forwarding needed. Optionally self-host your own Headscale coordinator — full mesh-VPN without cloud lock-in.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">📊</div>
-      <h3 data-i18n="f19-h">API Cost Monitoring</h3>
-      <p data-i18n="f19-p">Token usage and API costs per project and model — input, output, cache hits. Prompt caching efficiency calculated automatically. No surprise bills.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔴</div>
-      <h3 data-i18n="f20-h">Live Agent Monitor</h3>
-      <p data-i18n="f20-p">Real-time view of all running agents — status, current task, runtime. Emergency stop from the UI. Auto-alerts for critical errors. Stale-data display during network issues.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🧩</div>
-      <h3 data-i18n="f21-h">Extension Manager</h3>
-      <p data-i18n="f21-p">Install optional services — SearXNG, Vaultwarden, Code-Server, Headscale — in one click. SSE-streamed install log. Extensions managed via JSON manifests, easy to add.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">⚡</div>
-      <h3 data-i18n="f22-h">Butler Blueprint Editor</h3>
-      <p data-i18n="f22-p">Visual node-graph automation rules (Unreal Engine-style). Wire triggers, conditions and actions into flows — auto-reply, ignore, guided responses, agent forwarding. Active in Telegram &amp; Discord.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">📅</div>
-      <h3 data-i18n="f23-h">Cron Scheduler</h3>
-      <p data-i18n="f23-p">Schedule any agent task with cron syntax — directly from the web console. No SSH, no crontab editing. Tasks run in agent context with full tool access.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔍</div>
-      <h3 data-i18n="f24-h">Web Search (SearXNG)</h3>
-      <p data-i18n="f24-p">Private, self-hosted meta-search engine. Agents use it automatically via the web_search tool — no API key, no tracking, no rate limits. Install as an extension in one click.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">💻</div>
-      <h3 data-i18n="f25-h">Code Editor (VS Code)</h3>
-      <p data-i18n="f25-p">Full VS Code in the browser via code-server. One-click install as an extension. Agents and users share the same project filesystem — edit, run, debug without leaving the browser.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🌐</div>
-      <h3 data-i18n="f26-h">A2A Federation</h3>
-      <p data-i18n="f26-p">Agent-to-Agent protocol support. HydraHive can act as A2A server and client — expose agents as remote skills or consume external A2A agents from any compatible platform.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔔</div>
-      <h3 data-i18n="f27-h">Notification Center</h3>
-      <p data-i18n="f27-p">Agents send structured notifications — info, warning, error, success. Notification Center in the console shows a live feed. Matrix DM delivery for critical alerts included.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔌</div>
-      <h3 data-i18n="f28-h">Plugin System</h3>
-      <p data-i18n="f28-p">Extend agents with custom tools, hooks and services — no core code changes. Write a plugin.yaml + plugin.py, drop it in /plugins/, assign to agents. Tools execute deterministic code instead of burning LLM tokens.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🏪</div>
-      <h3 data-i18n="f29-h">HydraHub</h3>
-      <p data-i18n="f29-p">Built-in package manager. Install curated agents and plugins with one click. Browse and import skills from ClawhHub — the OpenClaw community registry with thousands of AI skills.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🔭</div>
-      <h3 data-i18n="f30-h">Tailscale Auto-Discovery</h3>
-      <p data-i18n="f30-p">Connect HydraHive instances via Tailscale — encrypted, no port forwarding. Auto-scan the tailnet for other instances, one-click peering. Invite external users with a single auth key.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🧠</div>
-      <h3 data-i18n="f31-h">HydraBrain 3D Graph</h3>
-      <p data-i18n="f31-p">Interactive 3D visualization of all agents, tools, memories and their connections. Real-time activity colors — green for reading, orange for writing, cyan for thinking. Federation view shows remote peers as separate clusters.</p>
+    <div class="feat-card">
+      <span class="feat-icon">📦</span>
+      <h3>One-Command Install</h3>
+      <p>Ein Bash-Script richtet alles ein: systemd-Service, nginx, SQLite, Verzeichnisstruktur. In unter 5 Minuten betriebsbereit.</p>
     </div>
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="section" id="how-it-works">
-  <h2 class="section-title" data-i18n="how-title">How it works</h2>
-  <p class="section-sub" data-i18n="how-sub">A message travels through 10 layers in under a second.</p>
-  <div class="flow">
-    <div class="flow-step">👤 Web Chat</div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step">⚡ FastAPI Core</div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step">📡 Matrix Room</div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step">📁 Project Agent</div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step">🔧 9 Core Tools</div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step">✅ SSE Stream</div>
+<hr class="divider">
+
+<!-- INSTALL -->
+<section class="section" id="install">
+  <div class="section-header">
+    <div class="section-label">Los geht's</div>
+    <h2 class="section-title">Einen Befehl. Fertig.</h2>
+    <p class="section-sub">Funktioniert auf Ubuntu 22.04 / 24.04. Root oder sudo erforderlich.</p>
   </div>
-  <p style="text-align:center;color:var(--muted);font-size:0.9rem;" data-i18n="how-note">The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.</p>
+  <div class="install-box">
+    <div class="install-topbar">
+      <span>bash</span>
+      <button class="copy-btn" onclick="copyInstall(this)">Kopieren</button>
+    </div>
+    <div class="install-code"><span class="c"># HydraHive installieren</span>
+curl -sSL https://raw.githubusercontent.com/hydrahive/hydrahive/main/installer/install.sh | bash
+
+<span class="c"># Danach: Browser öffnen → http://&lt;dein-server&gt;</span></div>
+  </div>
+  <p class="install-note">
+    Sourcecode und Dokumentation auf
+    <a href="https://github.com/hydrahive/hydrahive" target="_blank" rel="noopener">github.com/hydrahive/hydrahive</a>
+  </p>
 </section>
 
-<!-- ARCHITECTURE -->
-<section class="section" id="architecture">
-  <h2 class="section-title" data-i18n="arch-title">Architecture</h2>
-  <p class="section-sub" data-i18n="arch-sub">Clean separation of concerns. Every layer replaceable.</p>
-  <div class="arch-box">
-    <div><span class="dim">┌─────────────────────────────────────────┐</span></div>
-    <div><span class="dim">│</span>  <span class="bright">CLIENT</span>       <span class="dim">React Console · Element · REST API</span>  <span class="dim">│</span></div>
-    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
-    <div><span class="dim">│</span>  <span class="bright">GATEWAY</span>      <span class="dim">nginx HTTPS · JWT Auth · Rate Limit</span>  <span class="dim">│</span></div>
-    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
-    <div><span class="dim">│</span>  <span class="bright">CORE</span>         <span class="dim">FastAPI · Orchestrator · Audit Log</span>   <span class="dim">│</span></div>
-    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
-    <div><span class="dim">│</span>  <span class="bright">COMM BUS</span>     <span class="dim">conduwuit Matrix · Agent Bots</span>        <span class="dim">│</span></div>
-    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
-    <div><span class="dim">│</span>  <span class="bright">LLM ADAPTER</span>  <span class="dim">Ollama · Claude OAuth · OpenAI</span>       <span class="dim">│</span></div>
-    <div><span class="dim">└─────────────────────────────────────────┘</span></div>
-  </div>
-</section>
-
-<!-- STACK -->
-<section class="section">
-  <h2 class="section-title" data-i18n="stack-title">Stack</h2>
-  <p class="section-sub" data-i18n="stack-sub">Boring technology. Battle-tested components.</p>
-  <div class="stack-grid">
-    <div class="stack-item">
-      <div class="layer">Core</div>
-      <div class="tech">Python 3.12 + FastAPI
-        <small>litellm · matrix-nio · anthropic SDK</small>
-      </div>
-    </div>
-    <div class="stack-item">
-      <div class="layer">Console</div>
-      <div class="tech">React 18 + TypeScript
-        <small>Vite · Tailwind CSS · shadcn/ui</small>
-      </div>
-    </div>
-    <div class="stack-item">
-      <div class="layer">Matrix</div>
-      <div class="tech">conduwuit (Rust)
-        <small>Single binary · RocksDB · no Postgres</small>
-      </div>
-    </div>
-    <div class="stack-item">
-      <div class="layer">LLM</div>
-      <div class="tech">Ollama + Cloud APIs
-        <small>llama3 · Claude · OpenAI · mixed per agent</small>
-      </div>
-    </div>
-    <div class="stack-item">
-      <div class="layer">Infrastructure</div>
-      <div class="tech">Bash + systemd
-        <small data-i18n="stack-infra-small">No Docker · idempotent installer</small>
-      </div>
-    </div>
-    <div class="stack-item">
-      <div class="layer">Platform</div>
-      <div class="tech">Ubuntu 22/24 LTS
-        <small>Proxmox VM · PCIe GPU passthrough</small>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- PROFILES -->
-<section class="section" id="profiles">
-  <h2 class="section-title" data-i18n="prof-title">Deployment Profiles</h2>
-  <p class="section-sub" data-i18n="prof-sub">Start small. Scale to full GPU when ready.</p>
-  <div class="grid-2">
-    <div class="profile-card">
-      <h3>🔵 Lite</h3>
-      <div class="price-tag" data-i18n="prof-lite-tag">Cloud APIs · No GPU required</div>
-      <ul>
-        <li data-i18n="prof-lite-1">Any VM or VPS</li>
-        <li>Claude Max OAuth + OpenAI</li>
-        <li data-i18n="prof-lite-3">Full web console</li>
-        <li data-i18n="prof-lite-4">Matrix communication</li>
-        <li data-i18n="prof-lite-5">All project features</li>
-        <li data-i18n="prof-lite-6">HTTPS out of the box</li>
-        <li data-i18n="prof-lite-spec"><strong>Min:</strong> 8 GB RAM · 80 GB Disk</li>
-      </ul>
-    </div>
-    <div class="profile-card featured">
-      <h3>🟣 Full</h3>
-      <div class="price-tag" data-i18n="prof-full-tag">Local LLMs · GPU Passthrough</div>
-      <ul>
-        <li data-i18n="prof-full-1">PCIe GPU passthrough (e.g. GTX 1080)</li>
-        <li data-i18n="prof-full-2">Ollama — llama3.1:8b default</li>
-        <li data-i18n="prof-full-3">No API costs for local tasks</li>
-        <li data-i18n="prof-full-4">Hybrid: local + cloud per agent</li>
-        <li data-i18n="prof-full-5">Auto-detected at install time</li>
-        <li data-i18n="prof-full-6">Reference: GTX 1080 Ti, 11GB VRAM</li>
-        <li data-i18n="prof-full-spec"><strong>Rec:</strong> 32 GB RAM · 1 TB Disk</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<!-- HANDBOOK HIGHLIGHTS -->
-<section class="section" id="handbook">
-  <h2 class="section-title" data-i18n="hb-title">Agent System</h2>
-  <p class="section-sub" data-i18n="hb-sub">From the handbook — how agents, skills and projects work together.</p>
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:3rem;">
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-types-title">Project = Agent</h3>
-      <div style="display:flex;flex-direction:column;gap:0.8rem;">
-        <div>
-          <div style="font-weight:600;font-size:0.9rem;">📁 Project Agent</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-project">Each project is a standalone AI agent with its own memory, LLM config and access control. No Boss/Worker hierarchy.</div>
-        </div>
-        <div>
-          <div style="font-weight:600;font-size:0.9rem;">👤 Personal Agent</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-personal">Every user gets a personal project (personal_username) — always available, sandboxed from other projects.</div>
-        </div>
-        <div>
-          <div style="font-weight:600;font-size:0.9rem;">🔗 ask_agent</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-ask">Projects can consult each other via ask_agent tool — collaborative without shared state.</div>
-        </div>
-      </div>
-    </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">QMD Skills</h3>
-      <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--muted);line-height:1.8;">
-        <span style="color:#22d3ee">---</span><br>
-        <span style="color:var(--accent)">skill:</span> <span style="color:var(--text)">Tax Law Basics</span><br>
-        <span style="color:var(--accent)">scope:</span> <span style="color:var(--text)">on-demand</span><br>
-        <span style="color:var(--accent)">triggers:</span> <span style="color:var(--text)">[tax, vat, income]</span><br>
-        <span style="color:var(--accent)">priority:</span> <span style="color:var(--text)">10</span><br>
-        <span style="color:#22d3ee">---</span><br>
-        <span style="color:var(--muted)">## Knowledge content here...</span>
-      </div>
-      <p style="color:var(--muted);font-size:0.82rem;margin-top:0.8rem;" data-i18n="hb-skill-note">Hot-reload. No restart needed. Injected into system prompt on keyword match.</p>
-    </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-tools-title">Available Tools</h3>
-      <div style="display:flex;flex-direction:column;gap:0.6rem;">
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read</span> <span style="color:var(--muted);" data-i18n="tool-fr">— read project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted);" data-i18n="tool-fw">— write project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted);" data-i18n="tool-ws">— search the web</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted);" data-i18n="tool-hr">— call external APIs</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_patch</span> <span style="color:var(--muted);" data-i18n="tool-fp">— targeted file editing</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">ask_agent</span> <span style="color:var(--muted);" data-i18n="tool-aa">— consult another project</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- DATA FLOW -->
-<section class="section" id="dataflow">
-  <h2 class="section-title" data-i18n="df-title">Data Flow A → Z</h2>
-  <p class="section-sub" data-i18n="df-sub">From the technical docs — what happens when a message is sent.</p>
-  <div style="max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:0;">
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">1</div>
-      <div><strong>Browser</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df1">POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">2</div>
-      <div><strong data-i18n="df2-h">Auth</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df2">JWT validated, project loaded, asyncio.Queue selected</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">3</div>
-      <div><strong>Memory</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df3">Memory files injected into system prompt (INDEX.md + all memory/*.md)</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">4</div>
-      <div><strong>Skills</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df4">Skill files scanned, always-loaded + keyword-matched injected into system prompt</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">5</div>
-      <div><strong>LLM</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df5">litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">6</div>
-      <div><strong>Tools</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df6">Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">7</div>
-      <div><strong>Memory</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df7">Bootstrap-Memory + AutoDream maintain project knowledge across sessions</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">8</div>
-      <div><strong data-i18n="df8-h">Response</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df8">Final answer posted to Matrix room, stored in session history</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
-      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">9</div>
-      <div><strong>SSE</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df9">Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown</span></div>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;">
-      <div style="background:#22c55e;color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">✓</div>
-      <div><strong data-i18n="df-done-h">Done</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df-done">data: {"done":true} → stream closed → Audit Log written</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- QUICKSTART -->
-<section class="section" id="quickstart">
-  <h2 class="section-title" data-i18n="qs-title">Quick Start</h2>
-  <p class="section-sub" data-i18n="qs-sub">Three commands. One browser tab. Running.</p>
-  <div class="code-block">
-    <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/HydraHive/hydrahive.git</span></div>
-    <div><span class="prompt">$ </span><span class="cmd">cd hydrahive</span></div>
-    <div><span class="prompt">$ </span><span class="cmd">sudo bash installer/install.sh</span></div>
-    <div>&nbsp;</div>
-    <div><span class="cmt" data-i18n="qs-comment"># → open https://&lt;your-ip&gt; → Setup Wizard → done</span></div>
-  </div>
-</section>
-
-<!-- DOCS -->
-<section class="section" id="docs">
-  <h2 class="section-title" data-i18n="docs-title">Documentation</h2>
-  <p class="section-sub" data-i18n="docs-sub">Everything you need to install, use, and extend HydraHive.</p>
-  <div class="docs-grid">
-    <a class="doc-card" href="handbuch.html">
-      <div class="doc-icon">📖</div>
-      <h3 data-i18n="doc1-h">Handbook</h3>
-      <p data-i18n="doc1-p">Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting</p>
-    </a>
-    <a class="doc-card" href="technical.html">
-      <div class="doc-icon">⚙️</div>
-      <h3 data-i18n="doc2-h">Technical Docs</h3>
-      <p data-i18n="doc2-p">Architecture, module overview, data flow A–Z, error handling, known limitations</p>
-    </a>
-    <a class="doc-card" href="api.html">
-      <div class="doc-icon">🔌</div>
-      <h3 data-i18n="doc3-h">API Reference</h3>
-      <p data-i18n="doc3-p">All REST endpoints with request/response examples — agents, projects, webhooks, audit</p>
-    </a>
-    <a class="doc-card" href="development.html">
-      <div class="doc-icon">🛠️</div>
-      <h3 data-i18n="doc4-h">Developer Guide</h3>
-      <p data-i18n="doc4-p">Write tools, skills, endpoints, Console pages — extend HydraHive with new features</p>
-    </a>
-  </div>
-</section>
-
-<!-- STATUS -->
-<section class="section">
-  <div class="status-bar">
-    <div class="status-dot"></div>
-    <div>
-      <strong data-i18n="status-h">Production ready — actively developed</strong><br>
-      <span style="color:var(--muted);font-size:0.85rem;" data-i18n="status-p">Core complete · Console complete · Docs complete · API not yet stable</span>
-    </div>
-  </div>
-</section>
-
+<!-- FOOTER -->
 <footer>
-  <strong>HydraHive</strong> — <span data-i18n="footer-tagline">Self-Hosted AI Agent Platform</span> &nbsp;·&nbsp;
-  <a href="https://github.com/HydraHive/hydrahive" target="_blank">GitHub</a> &nbsp;·&nbsp;
-  MIT License &nbsp;·&nbsp;
-  <a href="impressum.html">Impressum</a> &nbsp;·&nbsp;
-  <a href="datenschutz.html">Datenschutz</a><br>
-  <span style="font-size:0.8rem;margin-top:0.5rem;display:block;" data-i18n="footer-slogan">One brain. Many heads. Infinite reach.</span>
+  <div class="footer-logo">
+    <img src="hydrahive-logo.png" alt="">
+    Hydra<span>Hive</span>
+  </div>
+  <div>
+    <a href="https://github.com/hydrahive/hydrahive" target="_blank" rel="noopener">GitHub</a>
+    <a href="impressum.html">Impressum</a>
+    <a href="datenschutz.html">Datenschutz</a>
+  </div>
+  <p style="margin-top:0.75rem">Open Source · MIT License · Made with ☕ in Germany</p>
 </footer>
 
 <script>
-  const translations = {
-    en: {
-      'nav-features':    'Features',
-      'nav-how':         'How it works',
-      'nav-docs':        'Docs',
-      'hero-tag':        'Self-Hosted AI Agent Server',
-      'hero-h1':         'One brain.<br><em>Many heads.</em><br>Infinite reach.',
-      'hero-p':          'Install Linux. Install HydraHive. Done.<br>Manage your entire AI agent swarm from a single web console — no Docker, no cloud dependency.',
-      'btn-quickstart':  'Quick Start',
-      'btn-how':         'How it works →',
-      'tagline':         '<strong>HydraHive</strong> — The self-hosted agent swarm platform.<br><span style="font-size:0.95rem">No cloud. No lock-in. Full control.</span>',
-      'feat-title':      'Everything you need. Nothing you don\'t.',
-      'feat-sub':        'Built for real infrastructure. No Docker networking nightmares.',
-      'f1-h': 'Project-Based Agents',
-      'f1-p': 'Every project is its own AI agent — no Boss/Worker hierarchy. Each project has its own memory, LLM config and access control. Projects can collaborate via ask_agent.',
-      'f2-h': 'One-Command Install',
-      'f2-p': 'One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.',
-      'f3-h': 'Matrix Communication',
-      'f3-p': 'Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.',
-      'f4-h': 'Multi-LLM per Agent',
-      'f4-p': 'Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.',
-      'f5-h': 'QMD Skills',
-      'f5-p': 'Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.',
-      'f6-h': 'Project Isolation',
-      'f6-p': 'Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.',
-      'f7-h': 'Personal Agent',
-      'f7-p': 'Every user gets a private agent (personal_&lt;username&gt;) with its own chat, skills, memory and workstation access — completely independent of projects.',
-      'f8-h': 'Memory System',
-      'f8-p': 'Agents store knowledge in Markdown files, auto-injected into every session. Combine with A-MEM semantic search to save tokens on large memory sets.',
-      'f9-h': 'WKS Access',
-      'f9-p': 'Personal agents SSH into your workstation — run commands, read and write files. WKS Ollama models appear automatically in the model dropdown.',
-      'f10-h': 'Git Integration',
-      'f10-p': 'Agents commit, push, and create pull requests on Gitea. Full git workflow from chat — no terminal needed.',
-      'f11-h': 'MCP Servers',
-      'f11-p': 'Connect external tool servers via streamableHttp (Model Context Protocol). Ships with A-MEM — semantic memory search built in.',
-      'f12-h': 'Webhook System',
-      'f12-p': 'Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.',
-      'f13-h': 'Security & Audit',
-      'f13-p': 'JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.',
-      'f14-h': 'Full Web Console',
-      'f14-p': 'Manage agents, projects, users, skills, webhooks, MCP servers and LLM config — all without SSH. One-click system update included.',
-      'f15-h': 'Heartbeat Monitoring',
-      'f15-p': 'Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.',
-      'f16-h': 'Backup & Restore',
-      'f16-p': 'One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.',
-      'f17-h': 'AgentLink Hub',
-      'f17-p': 'Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.',
-      'f18-h': 'VPN — Tailscale / Headscale',
-      'f18-p': 'Built-in Tailscale WireGuard overlay. No port forwarding needed. Optionally self-host your own Headscale coordinator — full mesh-VPN without cloud lock-in.',
-      'f19-h': 'API Cost Monitoring',
-      'f19-p': 'Token usage and API costs per project and model — input, output, cache hits. Prompt caching efficiency calculated automatically. No surprise bills.',
-      'f20-h': 'Live Agent Monitor',
-      'f20-p': 'Real-time view of all running agents — status, current task, runtime. Emergency stop from the UI. Auto-alerts for critical errors. Stale-data display during network issues.',
-      'f21-h': 'Extension Manager',
-      'f21-p': 'Install optional services — SearXNG, Vaultwarden, Code-Server, Headscale — in one click. SSE-streamed install log. Extensions managed via JSON manifests, easy to add.',
-      'f22-h': 'Butler Blueprint Editor',
-      'f22-p': 'Visual node-graph automation rules (Unreal Engine-style). Wire triggers, conditions and actions into flows — auto-reply, ignore, guided responses, agent forwarding. Active in Telegram & Discord.',
-      'f23-h': 'Cron Scheduler',
-      'f23-p': 'Schedule any agent task with cron syntax — directly from the web console. No SSH, no crontab editing. Tasks run in agent context with full tool access.',
-      'f24-h': 'Web Search (SearXNG)',
-      'f24-p': 'Private, self-hosted meta-search engine. Agents use it automatically via the web_search tool — no API key, no tracking, no rate limits. Install as an extension in one click.',
-      'f25-h': 'Code Editor (VS Code)',
-      'f25-p': 'Full VS Code in the browser via code-server. One-click install as an extension. Agents and users share the same project filesystem — edit, run, debug without leaving the browser.',
-      'f26-h': 'A2A Federation',
-      'f26-p': 'Agent-to-Agent protocol support. HydraHive can act as A2A server and client — expose agents as remote skills or consume external A2A agents from any compatible platform.',
-      'f27-h': 'Notification Center',
-      'f27-p': 'Agents send structured notifications — info, warning, error, success. Notification Center in the console shows a live feed. Matrix DM delivery for critical alerts included.',
-      'f28-h': 'Plugin System',
-      'f28-p': 'Extend agents with custom tools, hooks and services — no core code changes. Write a plugin.yaml + plugin.py, drop it in /plugins/, assign to agents. Tools execute deterministic code instead of burning LLM tokens.',
-      'f29-h': 'HydraHub',
-      'f29-p': 'Built-in package manager. Install curated agents and plugins with one click. Browse and import skills from ClawhHub — the OpenClaw community registry with thousands of AI skills.',
-      'f30-h': 'Tailscale Auto-Discovery',
-      'f30-p': 'Connect HydraHive instances via Tailscale — encrypted, no port forwarding. Auto-scan the tailnet for other instances, one-click peering. Invite external users with a single auth key.',
-      'f31-h': 'HydraBrain 3D Graph',
-      'f31-p': 'Interactive 3D visualization of all agents, tools, memories and their connections. Real-time activity colors — green for reading, orange for writing, cyan for thinking. Federation view shows remote peers as separate clusters.',
-      'how-title': 'How it works',
-      'how-sub':   'A message travels through 10 layers in under a second.',
-      'how-note':  'The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.',
-      'arch-title': 'Architecture',
-      'arch-sub':   'Clean separation of concerns. Every layer replaceable.',
-      'stack-title': 'Stack',
-      'stack-sub':   'Boring technology. Battle-tested components.',
-      'stack-infra-small': 'No Docker · idempotent installer',
-      'prof-title': 'Deployment Profiles',
-      'prof-sub':   'Start small. Scale to full GPU when ready.',
-      'prof-lite-tag': 'Cloud APIs · No GPU required',
-      'prof-lite-1': 'Any VM or VPS',
-      'prof-lite-3': 'Full web console',
-      'prof-lite-4': 'Matrix communication',
-      'prof-lite-5': 'All project features',
-      'prof-lite-6': 'HTTPS out of the box',
-      'prof-lite-spec': '<strong>Min:</strong> 8 GB RAM · 80 GB Disk',
-      'prof-full-tag': 'Local LLMs · GPU Passthrough',
-      'prof-full-1': 'PCIe GPU passthrough (e.g. GTX 1080)',
-      'prof-full-2': 'Ollama — llama3.1:8b default',
-      'prof-full-3': 'No API costs for local tasks',
-      'prof-full-4': 'Hybrid: local + cloud per agent',
-      'prof-full-5': 'Auto-detected at install time',
-      'prof-full-6': 'Reference: GTX 1080 Ti, 11GB VRAM',
-      'prof-full-spec': '<strong>Rec:</strong> 32 GB RAM · 1 TB Disk',
-      'hb-title': 'Agent System',
-      'hb-sub':   'From the handbook — how agents, skills and projects work together.',
-      'hb-types-title': 'Project = Agent (v2)',
-      'hb-project': 'Each project is a standalone AI agent with its own memory, LLM config and access control. No Boss/Worker hierarchy.',
-      'hb-personal': 'Every user gets a personal project (personal_username) — always available, sandboxed from other projects.',
-      'hb-ask': 'Projects can consult each other via ask_agent tool — collaborative without shared state.',
-      'hb-skill-note': 'Hot-reload. No restart needed. Injected into system prompt on keyword match.',
-      'hb-tools-title': 'v2 Core Tools',
-      'tool-fr': '— read project files',
-      'tool-fw': '— write project files',
-      'tool-ws': '— search the web',
-      'tool-hr': '— call external APIs',
-      'tool-fp': '— targeted file editing',
-      'tool-aa': '— consult another project',
-      'df-title': 'Data Flow A → Z',
-      'df-sub':   'From the technical docs — what happens when a message is sent.',
-      'df1': 'POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI',
-      'df2-h': 'Auth', 'df2': 'JWT validated, project loaded, asyncio.Queue selected',
-      'df3': 'Memory files injected into system prompt (INDEX.md + all memory/*.md)',
-      'df4': 'AGENT.md loaded, execution mode checked (safe/elevated/unrestricted)',
-      'df5': 'LLM provider routes to configured backend (Ollama / Claude / OpenAI), streaming enabled',
-      'df6': 'Tool calls intercepted, executed via registry (9 core tools), results returned to LLM (multi-turn)',
-      'df7': 'Bootstrap-Memory + AutoDream maintain project knowledge across sessions',
-      'df8-h': 'Response', 'df8': 'Final answer stored in session history, SSE stream continues',
-      'df9': 'Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown',
-      'df-done-h': 'Done', 'df-done': 'data: {"done":true} → stream closed → Audit Log written',
-      'qs-title':   'Quick Start',
-      'qs-sub':     'Three commands. One browser tab. Running.',
-      'qs-comment': '# → open https://<your-ip> → Setup Wizard → done',
-      'docs-title': 'Documentation',
-      'docs-sub':   'Everything you need to install, use, and extend HydraHive.',
-      'doc1-h': 'Handbook',        'doc1-p': 'Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting',
-      'doc2-h': 'Technical Docs',  'doc2-p': 'Architecture, module overview, data flow A–Z, error handling, known limitations',
-      'doc3-h': 'API Reference',   'doc3-p': 'All REST endpoints with request/response examples — agents, projects, webhooks, audit',
-      'doc4-h': 'Developer Guide', 'doc4-p': 'Write tools, skills, endpoints, Console pages — extend HydraHive with new features',
-      'status-h': 'Production ready — actively developed',
-      'status-p': 'Core complete · Console complete · Docs complete · API not yet stable',
-      'footer-tagline': 'Self-Hosted AI Agent Platform',
-      'footer-slogan':  'One brain. Many heads. Infinite reach.',
-    },
-    de: {
-      'nav-features':    'Funktionen',
-      'nav-how':         'Wie es funktioniert',
-      'nav-docs':        'Doku',
-      'hero-tag':        'Selbst-gehosteter KI-Agenten-Server',
-      'hero-h1':         'Ein Hirn.<br><em>Viele Köpfe.</em><br>Grenzenlose Reichweite.',
-      'hero-p':          'Linux installieren. HydraHive installieren. Fertig.<br>Verwalte deinen gesamten KI-Agenten-Schwarm über eine einzige Web-Konsole — kein Docker, keine Cloud-Abhängigkeit.',
-      'btn-quickstart':  'Schnellstart',
-      'btn-how':         'Wie es funktioniert →',
-      'tagline':         '<strong>HydraHive</strong> — Die selbst-gehostete Agenten-Schwarm-Plattform.<br><span style="font-size:0.95rem">Keine Cloud. Kein Lock-in. Volle Kontrolle.</span>',
-      'feat-title':      'Alles was du brauchst. Nichts was du nicht brauchst.',
-      'feat-sub':        'Für echte Infrastruktur gebaut. Kein Docker-Netzwerk-Albtraum.',
-      'f1-h': 'Projektbasierte Agenten',
-      'f1-p': 'Jedes Projekt ist sein eigener KI-Agent — keine Boss/Worker-Hierarchie. Eigene Memory, LLM-Config und Zugangskontrolle. Projekte können sich gegenseitig via ask_agent befragen.',
-      'f2-h': 'Ein-Befehl-Installation',
-      'f2-p': 'Ein Bash-Befehl. GPU automatisch erkannt. Matrix, nginx, TLS, systemd — alles konfiguriert. Web-Konsole in Minuten bereit.',
-      'f3-h': 'Matrix-Kommunikation',
-      'f3-p': 'Agenten sind echte Matrix-Bots. Mit Element jedes Gespräch live beobachten. Eingebauter Watchdog startet abgestürzte Bots automatisch neu.',
-      'f4-h': 'Multi-LLM pro Agent',
-      'f4-p': 'Jeder Agent läuft mit eigenem Modell. Ollama lokal, Claude Max (OAuth), OpenAI — gemischt pro Aufgabe. Konfigurierbare Temperatur und Token-Limits.',
-      'f5-h': 'QMD Skills',
-      'f5-p': 'Agenten zusätzliches Wissen geben via Markdown-Dateien mit YAML-Frontmatter. Scope: immer aktiv oder per Keyword on-demand. Hot-Reload, kein Neustart.',
-      'f6-h': 'Projekt-Isolation',
-      'f6-p': 'Jedes Projekt bekommt einen Linux-User, isoliertes Dateisystem, Samba-Share und Matrix-Room. Agenten können nur auf ihr eigenes Projektverzeichnis zugreifen.',
-      'f7-h': 'Persönlicher Agent',
-      'f7-p': 'Jeder Nutzer bekommt einen privaten Agenten (personal_&lt;username&gt;) mit eigenem Chat, Skills, Memory und Workstation-Zugriff — völlig unabhängig von Projekten.',
-      'f8-h': 'Memory-System',
-      'f8-p': 'Agenten speichern Wissen in Markdown-Dateien, die automatisch in jede Session injiziert werden. Mit QMD-Semantiksuche kombiniert spart das Tokens bei großen Memory-Sets.',
-      'f9-h': 'WKS-Zugriff',
-      'f9-p': 'Persönliche Agenten verbinden sich per SSH mit deiner Workstation — Befehle ausführen, Dateien lesen und schreiben. WKS-Ollama-Modelle erscheinen automatisch im Modell-Dropdown.',
-      'f10-h': 'Git-Integration',
-      'f10-p': 'Agenten committen, pushen und erstellen Pull Requests auf Gitea. Vollständiger Git-Workflow aus dem Chat — kein Terminal nötig.',
-      'f11-h': 'MCP-Server',
-      'f11-p': 'Externe Tool-Server via streamableHttp verbinden (Model Context Protocol). Wird mit QMD geliefert — semantische Memory-Suche direkt eingebaut.',
-      'f12-h': 'Webhook-System',
-      'f12-p': 'Agenten von externen Systemen triggern — Git-Pushes, CI-Pipelines, Monitoring-Alerts. HMAC-signierte ausgehende Webhooks inklusive.',
-      'f13-h': 'Sicherheit & Audit',
-      'f13-p': 'JWT-Auth, Login-Rate-Limiting, atomare Config-Writes, dreischichtiges Tool-Permission-Modell. Vollständiges Audit-Log aller Nutzeraktionen.',
-      'f14-h': 'Vollständige Web-Konsole',
-      'f14-p': 'Agenten, Projekte, Nutzer, Skills, Webhooks, MCP-Server und LLM-Config verwalten — alles ohne SSH. System-Update per Knopfdruck inklusive.',
-      'f15-h': 'Heartbeat-Monitoring',
-      'f15-p': 'Wiederkehrende Tasks für jeden Agenten planen — System-Checks, Log-Scans, API-Pings. Nicht-triviale Befunde werden automatisch per AgentLink eskaliert.',
-      'f16-h': 'Backup & Restore',
-      'f16-p': 'Vollständiges System-Backup per Knopfdruck. Agenten, Projekte, Config und Skills — alles in einem Archiv. Wiederherstellung per einfachem Upload.',
-      'f17-h': 'AgentLink Hub',
-      'f17-p': 'Eingebauter Agent-Koordinations-Bus. Agenten übergeben Tasks, teilen Kontext und eskalieren Befunde projektübergreifend — oder über mehrere Maschinen hinweg.',
-      'f18-h': 'VPN — Tailscale / Headscale',
-      'f18-p': 'Eingebautes Tailscale WireGuard-Overlay. Kein Port-Forwarding nötig. Wahlweise eigenes Headscale als Coordinator — vollständiges Mesh-VPN ohne Cloud Lock-in.',
-      'f19-h': 'API-Kostenüberwachung',
-      'f19-p': 'Token-Verbrauch und API-Kosten pro Projekt und Modell — Input, Output, Cache Hits. Prompt-Caching-Effizienz wird automatisch berechnet. Keine unerwarteten Rechnungen.',
-      'f20-h': 'Live Agent Monitor',
-      'f20-p': 'Echtzeit-Übersicht aller laufenden Agenten — Status, aktueller Task, Laufzeit. Notfall-Stop aus der UI. Automatische Alerts bei kritischen Fehlern. Stale-Data-Anzeige bei Netzwerkproblemen.',
-      'f21-h': 'Erweiterungs-Manager',
-      'f21-p': 'Optionale Dienste — SearXNG, Vaultwarden, Code-Server, Headscale — per Klick installieren. SSE-gestreamtes Install-Log. Erweiterungen als JSON-Manifeste verwaltet, leicht erweiterbar.',
-      'f22-h': 'Butler Blueprint-Editor',
-      'f22-p': 'Visuelle Node-Graph-Automatisierungsregeln (Unreal-Engine-Stil). Trigger, Bedingungen und Aktionen zu Flows verdrahten — Auto-Antwort, Ignorieren, geführte Antworten, Agent-Weiterleitung. Aktiv in Telegram & Discord.',
-      'f23-h': 'Cron-Scheduler',
-      'f23-p': 'Beliebige Agenten-Tasks mit Cron-Syntax planen — direkt aus der Web-Konsole. Kein SSH, kein Crontab-Editieren. Tasks laufen im Agenten-Kontext mit vollem Tool-Zugriff.',
-      'f24-h': 'Web-Suche (SearXNG)',
-      'f24-p': 'Private, selbst-gehostete Meta-Suchmaschine. Agenten nutzen sie automatisch via web_search-Tool — kein API-Key, kein Tracking, keine Rate-Limits. Per Erweiterungs-Manager in einem Klick installieren.',
-      'f25-h': 'Code-Editor (VS Code)',
-      'f25-p': 'Vollständiges VS Code im Browser via code-server. Ein-Klick-Installation als Erweiterung. Agenten und Nutzer teilen dasselbe Projekt-Dateisystem — bearbeiten, ausführen, debuggen ohne den Browser zu verlassen.',
-      'f26-h': 'A2A-Federation',
-      'f26-p': 'Agent-to-Agent-Protokoll-Unterstützung. HydraHive kann als A2A-Server und -Client agieren — Agenten als Remote-Skills bereitstellen oder externe A2A-Agenten von beliebigen kompatiblen Plattformen nutzen.',
-      'f27-h': 'Benachrichtigungs-Center',
-      'f27-p': 'Agenten senden strukturierte Benachrichtigungen — Info, Warnung, Fehler, Erfolg. Das Notification Center in der Konsole zeigt einen Live-Feed. Matrix-DM-Zustellung für kritische Alerts inklusive.',
-      'f28-h': 'Plugin-System',
-      'f28-p': 'Agenten mit eigenen Tools, Hooks und Services erweitern — ohne Core-Code zu ändern. plugin.yaml + plugin.py schreiben, in /plugins/ ablegen, Agenten zuweisen. Tools führen deterministischen Code aus statt LLM-Tokens zu verbrennen.',
-      'f29-h': 'HydraHub',
-      'f29-p': 'Eingebauter Paketmanager. Kuratierte Agenten und Plugins mit einem Klick installieren. Skills aus ClawhHub durchsuchen und importieren — die OpenClaw-Community-Registry mit tausenden KI-Skills.',
-      'f30-h': 'Tailscale Auto-Discovery',
-      'f30-p': 'HydraHive-Instanzen via Tailscale verbinden — verschlüsselt, kein Port-Forwarding. Tailnet automatisch nach anderen Instanzen scannen, Ein-Klick-Peering. Externe User mit einem Auth-Key einladen.',
-      'f31-h': 'HydraBrain 3D-Graph',
-      'f31-p': 'Interaktive 3D-Visualisierung aller Agenten, Tools, Memories und ihrer Verbindungen. Echtzeit-Aktivitätsfarben — grün für Lesen, orange für Schreiben, cyan für Denken. Federation-Ansicht zeigt Remote-Peers als separate Cluster.',
-      'how-title': 'Wie es funktioniert',
-      'how-sub':   'Eine Nachricht durchläuft 10 Schichten in unter einer Sekunde.',
-      'how-note':  'Der Nutzer sieht einen sauberen Streaming-Chat. Die Agenten erledigen den Rest — mit vollem Matrix-Audit-Trail.',
-      'arch-title': 'Architektur',
-      'arch-sub':   'Saubere Trennung der Verantwortlichkeiten. Jede Schicht austauschbar.',
-      'stack-title': 'Stack',
-      'stack-sub':   'Bewährte Technologie. Kampferprobte Komponenten.',
-      'stack-infra-small': 'Kein Docker · idempotenter Installer',
-      'prof-title': 'Deployment-Profile',
-      'prof-sub':   'Klein anfangen. Bei Bedarf auf volle GPU skalieren.',
-      'prof-lite-tag': 'Cloud APIs · Keine GPU erforderlich',
-      'prof-lite-1': 'Beliebige VM oder VPS',
-      'prof-lite-3': 'Vollständige Web-Konsole',
-      'prof-lite-4': 'Matrix-Kommunikation',
-      'prof-lite-5': 'Alle Projekt-Features',
-      'prof-lite-6': 'HTTPS direkt nach Installation',
-      'prof-lite-spec': '<strong>Minimum:</strong> 8 GB RAM · 80 GB Disk',
-      'prof-full-tag': 'Lokale LLMs · GPU Passthrough',
-      'prof-full-1': 'PCIe GPU Passthrough (z.B. GTX 1080)',
-      'prof-full-2': 'Ollama — llama3.1:8b als Standard',
-      'prof-full-3': 'Keine API-Kosten für lokale Aufgaben',
-      'prof-full-4': 'Hybrid: lokal + Cloud pro Agent',
-      'prof-full-5': 'Automatisch erkannt beim Installieren',
-      'prof-full-6': 'Referenz: GTX 1080 Ti, 11GB VRAM',
-      'prof-full-spec': '<strong>Empfohlen:</strong> 32 GB RAM · 1 TB Disk',
-      'hb-title': 'Projekt-System (v2)',
-      'hb-sub':   'Aus dem Handbuch — wie Projekte, Memory und Tools zusammenarbeiten.',
-      'hb-types-title': 'Projekt = Agent (v2)',
-      'hb-project': 'Jedes Projekt ist ein eigenständiger KI-Agent mit eigener Memory, LLM-Config und Zugangskontrolle. Keine Boss/Worker-Hierarchie.',
-      'hb-personal': 'Jeder Nutzer bekommt ein persönliches Projekt (personal_username) — immer verfügbar, von anderen Projekten getrennt.',
-      'hb-ask': 'Projekte können sich gegenseitig via ask_agent befragen — kollaborativ ohne geteilten State.',
-      'hb-skill-note': 'Hot-Reload. Kein Neustart nötig. Bei Keyword-Treffer in den System-Prompt injiziert.',
-      'hb-tools-title': 'v2 Core-Tools',
-      'tool-fr': '— Projektdateien lesen',
-      'tool-fw': '— Projektdateien schreiben',
-      'tool-ws': '— Im Web suchen',
-      'tool-hr': '— Externe APIs aufrufen',
-      'tool-fp': '— Gezielte Datei-Bearbeitung',
-      'tool-aa': '— Anderes Projekt befragen',
-      'df-title': 'Datenfluss A → Z',
-      'df-sub':   'Aus den technischen Docs — was passiert wenn eine Nachricht gesendet wird.',
-      'df1': 'POST /projects/{id}/message/stream → nginx (TLS-Terminierung) → FastAPI',
-      'df2-h': 'Auth', 'df2': 'JWT validiert, Projekt geladen, asyncio.Queue ausgewählt',
-      'df3': 'Memory-Dateien in System-Prompt injiziert (INDEX.md + alle memory/*.md)',
-      'df4': 'AGENT.md geladen, Ausführungs-Modus geprüft (safe/elevated/unrestricted)',
-      'df5': 'LLM-Provider routet zum konfigurierten Backend (Ollama / Claude / OpenAI), Streaming aktiv',
-      'df6': 'Tool-Calls abgefangen, über Registry ausgeführt (9 Core-Tools), Ergebnisse ans LLM zurückgegeben',
-      'df7': 'Bootstrap-Memory + AutoDream pflegen Projekt-Wissen über Sessions hinaus',
-      'df8-h': 'Antwort', 'df8': 'Finale Antwort in Session-History gespeichert, SSE-Stream geht weiter',
-      'df9': 'Core dequeuet Tokens → data: {"text":"..."} → Browser rendert Markdown',
-      'df-done-h': 'Fertig', 'df-done': 'data: {"done":true} → Stream geschlossen → Audit-Log geschrieben',
-      'qs-title':   'Schnellstart',
-      'qs-sub':     'Drei Befehle. Ein Browser-Tab. Läuft.',
-      'qs-comment': '# → https://<deine-ip> öffnen → Setup-Wizard → fertig',
-      'docs-title': 'Dokumentation',
-      'docs-sub':   'Alles zum Installieren, Nutzen und Erweitern von HydraHive.',
-      'doc1-h': 'Handbuch',          'doc1-p': 'Installation, Setup-Wizard, Agenten, Projekte, Chat, LLM-Config, Troubleshooting',
-      'doc2-h': 'Technische Docs',   'doc2-p': 'Architektur, Modul-Übersicht, Datenfluss A–Z, Fehlerbehandlung, bekannte Einschränkungen',
-      'doc3-h': 'API-Referenz',      'doc3-p': 'Alle REST-Endpunkte mit Request/Response-Beispielen — Agenten, Projekte, Webhooks, Audit',
-      'doc4-h': 'Entwickler-Guide',  'doc4-p': 'Tools, Skills, Endpunkte und Console-Seiten schreiben — HydraHive mit neuen Features erweitern',
-      'status-h': 'Produktionsreif — aktiv entwickelt',
-      'status-p': 'Core fertig · Console fertig · Doku fertig · API noch nicht stabil',
-      'footer-tagline': 'Selbst-gehostete KI-Agenten-Plattform',
-      'footer-slogan':  'Ein Hirn. Viele Köpfe. Grenzenlose Reichweite.',
-    }
-  };
-
-  let currentLang = localStorage.getItem('hh-lang') || 'en';
-
-  function applyLang(lang) {
-    const t = translations[lang];
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-      const key = el.getAttribute('data-i18n');
-      if (t[key] !== undefined) el.innerHTML = t[key];
-    });
-    document.getElementById('langBtn').textContent = lang === 'en' ? 'DE' : 'EN';
-    document.documentElement.lang = lang;
-  }
-
-  function toggleLang() {
-    currentLang = currentLang === 'en' ? 'de' : 'en';
-    localStorage.setItem('hh-lang', currentLang);
-    applyLang(currentLang);
-  }
-
-  // Beim Laden gespeicherte Sprache anwenden
-  if (currentLang === 'de') applyLang('de');
+function copyInstall(btn) {
+  navigator.clipboard.writeText('curl -sSL https://raw.githubusercontent.com/hydrahive/hydrahive/main/installer/install.sh | bash').then(() => {
+    btn.textContent = 'Kopiert!';
+    setTimeout(() => btn.textContent = 'Kopieren', 2000);
+  });
+}
 </script>
-
 </body>
 </html>
