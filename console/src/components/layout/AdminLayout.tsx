@@ -28,6 +28,9 @@ import {
   Plug,
   Code,
   ServerCog,
+  Workflow,
+  CalendarClock,
+  Network,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -246,11 +249,14 @@ export function AdminLayout() {
     { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
     { to: "/projects",       icon: FolderKanban,    label: t("nav.projects"),        hint: t("navHint.projects") },
     { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
+    { to: "/blueprint",      icon: Workflow,        label: t("nav.blueprint"),       hint: t("navHint.blueprint") },
     { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },
     { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
     { to: "/hub?tab=extensions", icon: Rocket,      label: t("nav.extensions"),      hint: t("navHint.extensions"), adminOnly: true },
+    { to: "/schedules",     icon: CalendarClock,  label: t("nav.schedules"),       hint: t("navHint.schedules"), adminOnly: true },
     { to: "/voice",          icon: MessageSquare,   label: t("nav.voice"),           hint: t("navHint.voice"), adminOnly: true },
     { to: "/target-systems", icon: ServerCog,       label: t("nav.targetSystems", { defaultValue: "Zielsysteme" }), hint: t("navHint.targetSystems", { defaultValue: "WKS und Root-/Remote-Server verwalten" }), adminOnly: true },
+    { to: "/federation",     icon: Network,          label: t("nav.federation"),      hint: t("navHint.federation"), adminOnly: true },
     { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
     { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
