@@ -3214,6 +3214,155 @@ registry.register(FileSearchTool())
 registry.register(WebSearchTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
+class DispatchTaskDagTool(BaseTool):
+    """DAG-gesteuerte Multi-Agent-Ausführung mit Abhängigkeiten (#885)."""
+
+    @property
+    def id(self) -> str: return "dispatch_task_dag"
+    @property
+    def name(self) -> str: return "Tasks mit Abhängigkeiten ausführen"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt mehrere Subagenten-Tasks in einem DAG (Directed Acyclic Graph) aus. "
+            "Unabhängige Tasks laufen parallel, abhängige Tasks warten auf ihre Vorgänger. "
+            "Bei Fehlschlag eines Tasks werden alle nachgelagerten Tasks ebenfalls als "
+            "fehlgeschlagen markiert (Cascade Failure). Gibt kombinierte Ergebnisse zurück."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "description": "Liste der auszuführenden Tasks",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id":         {"type": "string",  "description": "Eindeutige Task-ID (frei wählbar, z.B. 'analyse', 'review')"},
+                            "agent":      {"type": "string",  "description": "Ziel-Agent-ID"},
+                            "question":   {"type": "string",  "description": "Aufgabe/Frage an den Agenten"},
+                            "context":    {"type": "string",  "description": "Optionaler Kontext"},
+                            "depends_on": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "IDs der Tasks die zuerst abgeschlossen sein müssen (leer = sofort starten)",
+                            },
+                        },
+                        "required": ["id", "agent", "question"],
+                    },
+                },
+            },
+            "required": ["tasks"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, tasks: list[dict], **kwargs) -> dict:
+        import asyncio as _asyncio
+
+        # Validierung: IDs eindeutig?
+        ids = [t["id"] for t in tasks]
+        if len(ids) != len(set(ids)):
+            return {"error": "Task-IDs müssen eindeutig sein"}
+
+        # Topologische Sortierung + Cycle-Detection
+        deps: dict[str, list[str]] = {t["id"]: (t.get("depends_on") or []) for t in tasks}
+        task_map: dict[str, dict] = {t["id"]: t for t in tasks}
+
+        # Cycle-Detection via DFS
+        visited: set[str] = set()
+        rec_stack: set[str] = set()
+
+        def _has_cycle(node: str) -> bool:
+            visited.add(node)
+            rec_stack.add(node)
+            for dep in deps.get(node, []):
+                if dep not in visited:
+                    if _has_cycle(dep):
+                        return True
+                elif dep in rec_stack:
+                    return True
+            rec_stack.discard(node)
+            return False
+
+        for tid in ids:
+            if tid not in visited and _has_cycle(tid):
+                return {"error": f"Zyklus in Task-Abhängigkeiten erkannt (bei Task '{tid}')"}
+
+        # Ausführung: Welle für Welle (Tasks ohne offene Deps laufen parallel)
+        results: dict[str, str] = {}
+        failed: set[str] = set()
+        ask = AskAgentTool()
+
+        remaining = set(ids)
+        while remaining:
+            # Finde Tasks deren alle Deps erfüllt sind
+            ready = []
+            for tid in remaining:
+                task_deps = deps[tid]
+                if any(d in failed for d in task_deps):
+                    # Cascade Failure
+                    failed.add(tid)
+                    results[tid] = f"[Übersprungen] Abhängigkeit '{next(d for d in task_deps if d in failed)}' fehlgeschlagen"
+                    remaining.discard(tid)
+                elif all(d in results for d in task_deps):
+                    ready.append(tid)
+
+            if not ready:
+                # Nichts mehr startbar — alle verbliebenen haben failed deps oder Cycle-Rest
+                for tid in list(remaining):
+                    if tid not in results:
+                        failed.add(tid)
+                        results[tid] = "[Übersprungen] Keine ausführbaren Abhängigkeiten"
+                break
+
+            # Kontext aus Vorgänger-Ergebnissen zusammenstellen
+            async def _run_task(tid: str) -> tuple[str, str, bool]:
+                t = task_map[tid]
+                dep_ctx = ""
+                if deps[tid]:
+                    parts = [f"Ergebnis von '{d}':\n{results[d]}" for d in deps[tid] if d in results]
+                    if parts:
+                        dep_ctx = "Vorgänger-Ergebnisse:\n" + "\n".join(parts)
+                ctx = "\n\n".join(filter(None, [t.get("context", ""), dep_ctx]))
+                try:
+                    r = await ask.execute(
+                        agent_id=agent_id,
+                        project_id=project_id,
+                        target=t["agent"],
+                        question=t["question"],
+                        context=ctx,
+                    )
+                    ok = "error" not in r
+                    text = r.get("answer", r.get("error", str(r)))
+                    return tid, text, ok
+                except Exception as e:
+                    return tid, f"[Fehler] {e}", False
+
+            wave_results = await _asyncio.gather(*[_run_task(tid) for tid in ready])
+            for tid, text, ok in wave_results:
+                results[tid] = text
+                if not ok:
+                    failed.add(tid)
+                remaining.discard(tid)
+
+            if len(ready) > 1:
+                logger.info("DAG-Wave: %d Tasks parallel (%s)", len(ready), ", ".join(ready))
+
+        summary = []
+        for tid in ids:
+            status = "FEHLER" if tid in failed else "OK"
+            summary.append(f"[{status}] {tid}: {results.get(tid, '')[:300]}")
+
+        return {
+            "results":     results,
+            "failed_tasks": list(failed),
+            "summary":     "\n".join(summary),
+        }
+
+
+registry.register(DispatchTaskDagTool())
 registry.register(AskAgentTool())
 registry.register(HandOffToTeamMemberTool())
 registry.register(ToolSearchTool())
