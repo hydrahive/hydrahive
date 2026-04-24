@@ -509,16 +509,14 @@ export function AgentsPage() {
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 mb-1">Modell</label>
-                    <input
+                    <select
                       value={form.model}
                       onChange={e => setField("model", e.target.value)}
-                      list="model-examples"
-                      placeholder="claude-sonnet-4-6"
                       className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60"
-                    />
-                    <datalist id="model-examples">
-                      {modelExamples.map(m => <option key={m} value={m} />)}
-                    </datalist>
+                    >
+                      {!modelExamples.includes(form.model) && <option value={form.model}>{form.model}</option>}
+                      {modelExamples.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 mb-1">Soul / Persönlichkeit</label>

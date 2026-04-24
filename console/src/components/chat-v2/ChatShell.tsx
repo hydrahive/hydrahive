@@ -8,7 +8,7 @@ import {
   type ThreadMessage,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, Volume2, VolumeX, X } from "lucide-react";
+import { Bot, Check, History, ImagePlus, Loader2, Network, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
@@ -163,6 +163,79 @@ function ToolDataPart({ part }: { part: DataPart }) {
       </div>
     );
   }
+
+  // ── #888: dispatch_task_dag — hübsche Darstellung ───────────────────────
+  if (part.name === "tool_call" && data.tool_call === "dispatch_task_dag") {
+    let tasks: {id: string; agent: string; question: string}[] = [];
+    try {
+      const raw = typeof data.tool_input === "string" ? JSON.parse(data.tool_input) : data.tool_input;
+      tasks = raw.tasks ?? [];
+    } catch { tasks = []; }
+    return (
+      <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 px-4 py-3 text-sm">
+        <div className="flex items-center gap-2 mb-2">
+          <Network className="h-4 w-4 text-indigo-400 shrink-0" />
+          <span className="font-semibold text-indigo-300">Delegiere an Spezialisten</span>
+          <span className="text-xs text-indigo-400/60">{tasks.length} Tasks</span>
+        </div>
+        <div className="space-y-1.5">
+          {tasks.map((t: {id: string; agent: string; question: string}) => (
+            <div key={t.id} className="flex items-start gap-2 rounded-lg bg-zinc-800/60 px-3 py-1.5">
+              <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-mono text-indigo-300 shrink-0">{t.agent}</span>
+              <span className="text-xs text-white/70 truncate">{t.question.slice(0, 80)}{t.question.length > 80 ? "…" : ""}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (part.name === "tool_result") {
+    // Versuche dispatch_task_dag Ergebnis zu erkennen
+    let dagResult: {results?: Record<string, string>; summary?: string; failed_tasks?: string[]} | null = null;
+    try {
+      const rawStr = typeof data.tool_result === "string" ? JSON.parse(data.tool_result) : data.tool_result;
+      if (rawStr && typeof rawStr === "object" && "results" in rawStr && "summary" in rawStr) {
+        dagResult = rawStr as {results?: Record<string, string>; summary?: string; failed_tasks?: string[]};
+      }
+    } catch { /* kein JSON */ }
+    if (dagResult) {
+      const summaryText = dagResult.summary ?? "";
+      const summaryLines = summaryText.split("\n").filter(Boolean);
+      return (
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <Network className="h-4 w-4 text-indigo-400 shrink-0" />
+            <span className="font-semibold text-indigo-300">Spezialistent-Ergebnisse</span>
+          </div>
+          <div className="space-y-1">
+            {summaryLines.map((line: string, i: number) => {
+              const isOk = line.startsWith("[OK]");
+              const isFail = line.startsWith("[FEHLER]");
+              return (
+                <details key={i} className="rounded-lg border border-white/5 bg-zinc-800/40">
+                  <summary className={cn("cursor-pointer px-3 py-1.5 text-xs", isOk ? "text-emerald-400" : isFail ? "text-red-400" : "text-white/60")}>
+                    {line.slice(0, 120)}
+                  </summary>
+                  {dagResult.results && (
+                    <div className="px-3 pb-2 text-xs text-white/50">
+                      {Object.entries(dagResult.results).map(([tid, txt]) => (
+                        <div key={tid} className="mt-1">
+                          <span className="font-mono text-indigo-300">{tid}:</span>{" "}
+                          {String(txt).slice(0, 300)}{String(txt).length > 300 ? "…" : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </details>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+  }
+
   const title = part.name === "tool_call"
     ? `Tool: ${String(data.tool_call ?? "unknown")}`
     : part.name === "tool_result"

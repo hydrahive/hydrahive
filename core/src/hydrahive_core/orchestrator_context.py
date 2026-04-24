@@ -505,6 +505,43 @@ async def build_system_prompt(
                 if soul_path.exists():
                     channels.soul = soul_path.read_text(encoding="utf-8").strip()
 
+        # #888: Spezialisten/Worker in System-Prompt für Boss-Agenten
+        if boss_cfg.agent_dir:
+            try:
+                agents_base = Path(settings.agents_dir)
+                if agents_base.exists():
+                    specialists: list[tuple[str, str, str]] = []  # (id, identity, tagline)
+                    for _ag_dir in agents_base.iterdir():
+                        if not _ag_dir.is_dir():
+                            continue
+                        _ag_yaml = _ag_dir / "agent.yaml"
+                        if not _ag_yaml.exists():
+                            continue
+                        import yaml as _yaml_inspect
+                        _ag_data = _yaml_inspect.safe_load(_ag_yaml.read_text(encoding="utf-8"))
+                        if _ag_data and _ag_data.get("type") in ("specialist", "worker"):
+                            _ag_id = _ag_data.get("id", _ag_dir.name)
+                            _ag_identity = _ag_data.get("identity", _ag_id)
+                            _soul_md = _ag_dir / "soul.md"
+                            _tagline = ""
+                            if _soul_md.exists():
+                                _lines = _soul_md.read_text(encoding="utf-8").strip().split("\n")
+                                # Erste nicht-leere Zeile nach der Überschrift
+                                for _ln in _lines[1:]:
+                                    _ln_stripped = _ln.strip().lstrip("#*- ")
+                                    if _ln_stripped:
+                                        _tagline = _ln_stripped
+                                        break
+                            specialists.append((_ag_id, _ag_identity, _tagline))
+                    if specialists:
+                        _spec_lines = ["\n## Verfügbare Spezialisten\n"]
+                        for _sid, _sident, _stagline in sorted(specialists):
+                            _desc = f" — {_stagline}" if _stagline else ""
+                            _spec_lines.append(f"- **{_sident}** (`{_sid}`){_desc}")
+                        channels.agent_identity += "\n" + "\n".join(_spec_lines)
+            except Exception:
+                pass  # Graceful: Spezialisten-Block nicht kritisch
+
         if boss_cfg.agent_dir:
             memory_dir = boss_cfg.agent_dir / "memory"
             if memory_dir.exists():
