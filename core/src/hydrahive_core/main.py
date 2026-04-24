@@ -42,6 +42,7 @@ from .router_migration import register_migration_routes
 from .router_vpn import register_vpn_routes
 from .router_doctor import register_doctor_routes
 from .router_searxng import register_searxng_routes
+from .router_blueprints import register_blueprint_routes
 from .router_knowledge import register_knowledge_routes
 from .router_codeserver import register_codeserver_routes
 from .router_extensions import register_extension_routes
@@ -1871,6 +1872,7 @@ register_doctor_routes(
     project_loader=projects,
 )
 register_searxng_routes(admin_router, require_admin=require_admin)
+register_blueprint_routes(admin_router, require_admin=require_admin)
 register_knowledge_routes(admin_router, require_admin=require_admin)
 register_codeserver_routes(admin_router, require_admin=require_admin)
 register_extension_routes(admin_router, require_admin=require_admin)
