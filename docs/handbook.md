@@ -236,6 +236,54 @@ Nützlich zum Debugging und für Billing/Usage-Tracking.
 Sicherung der gesamten Konfiguration: Projekte, Agenten, Nutzer.  
 **Wichtig:** Regelmässig manuell sichern oder via Cron automatisieren.
 
+### 4.10 Virtuelle Server (`/vms`) — VM-Manager
+
+Erstelle und verwalte **KVM-basierte virtuelle Maschinen** direkt im Browser — ähnlich wie Proxmox, aber integriert in HydraHive.
+
+**Was du tun kannst:**
+- VM erstellen (Name, CPU, RAM, Disk, Boot-ISO wählbar)
+- VM starten / stoppen / löschen
+- **VNC-Konsole im Browser** öffnen (über den Konsolen-Button)
+- ISO-Dateien hochladen (max. 50 GB pro Datei)
+
+**VM erstellen — Schritt für Schritt:**
+1. Klicke auf **"VM erstellen"** oben rechts
+2. **Schritt 1 — Boot-ISO:** Wähle ein hochgeladenes ISO oder überspringe (leere Disk)
+3. **Schritt 2 — Konfiguration:** Name, vCPUs, RAM (MB), Disk (GB)
+4. **Schritt 3 — Bestätigung:** Prüfen und bestätigen
+
+**VNC-Konsole:**
+- Starte die VM und klicke auf den **Terminal-Button**
+- Die Konsole öffnet sich in einem neuen Tab (`/vms/<id>/console`)
+- Unterstützt Vollbild und `Ctrl+Alt+Del`
+- Setzt voraus, dass der websockify-Service läuft: `systemctl status hydrahive-websockify`
+
+**ISO-Verwaltung (Tab "ISOs"):**
+- ISOs hochladen, auflisten und löschen
+- Erlaubte Dateien: echte ISO-9660-Images (Magic Bytes werden geprüft)
+- Max. 50 GB pro ISO, max. 20 ISOs gesamt
+
+**Voraussetzungen (Installer `20_vm_manager.sh` erledigt das automatisch):**
+- `qemu-system-x86_64`, `qemu-utils`, `ovmf`, `websockify` installiert
+- User `hydrahive` in `kvm`-Gruppe
+- Verzeichnisse: `/var/lib/hydrahive/{isos,vms,vnc-tokens}`
+- Service `hydrahive-websockify` aktiv (Port 6080)
+
+**Agent-Tools (für fortgeschrittene Automatisierung):**
+
+| Tool | Beschreibung |
+|---|---|
+| `vm_list` | Alle VMs auflisten |
+| `vm_status` | Status einer VM prüfen |
+| `vm_create` | Neue VM erstellen |
+| `vm_start` | VM starten |
+| `vm_stop` | VM stoppen (graceful oder force) |
+
+Beispiel im Agenten-Chat:
+```
+Erstelle eine VM namens "test-ubuntu" mit 2 CPUs, 2 GB RAM und 20 GB Disk.
+```
+
 ---
 
 ## 5. Spezialisten-Katalog

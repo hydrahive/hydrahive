@@ -61,6 +61,9 @@ Web-Console (React) · Matrix · Discord · WhatsApp · Mail · Voice-Input · T
 ### 🖥️ Auf deiner Workstation
 Dein persönlicher Agent kann via SSH auf deinem Rechner arbeiten (mit Approval) · Workstation-eigenes Ollama einbinden · Samba-Share · individueller SSH-Port
 
+### 🖥️ Virtuelle Maschinen im Browser
+KVM/QEMU-VMs direkt verwalten — starten, stoppen, **VNC-Konsole im Browser** · ISO hochladen · Agenten können VMs via `vm_create`/`vm_start`/`vm_stop` steuern
+
 ### 🏠 Zuhause, nicht in der Cloud
 Läuft auf deiner Hardware (Homelab · NAS · Proxmox-VM) · **One-Click-Installer** · Self-hosted, self-owned · Updates per Konsole · SSH Host-Key-Pinning für Target-Systeme
 
