@@ -127,6 +127,17 @@ export function BlueprintCatalogTab() {
           {toast.ok ? "✓" : "✗"} {toast.msg}
         </div>
       )}
+      {/* Info block */}
+      <div className="mx-4 mt-4 mb-0 rounded-xl border border-white/10 bg-white/5 p-4 space-y-1.5 shrink-0">
+        <p className="text-xs font-semibold text-white">Blueprint-Katalog</p>
+        <p className="text-[0.7rem] text-white/50 leading-relaxed">
+          Blueprints sind gespeicherte Workflow-Vorlagen (Knoten + Kanten aus dem Automation-Editor).
+          Über <span className="text-white/70">Install →</span> weist du einen Blueprint einem Agenten zu —
+          er wird als <span className="text-white/70 font-mono">workflow_blueprint.json</span> in den Agenten-Ordner kopiert
+          und in jeden seiner System-Prompts injiziert.
+          Mit <span className="text-white/70">Promote</span> kannst du das aktuelle Arbeits-Scratchpad eines Agenten direkt als Blueprint speichern.
+        </p>
+      </div>
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
         <Bookmark className="h-4 w-4 text-indigo-400" />

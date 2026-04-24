@@ -1783,5 +1783,34 @@
     "noSelection": "Keine Bausteine ausgewählt.",
     "saveOk": "AGENT.md gespeichert ({{count}} Bausteine).{{backup}}",
     "saveBackup": "Vorheriger Stand liegt in AGENT.md.backup."
+  },
+  "teams": {
+    "infoTitle": "Agent-Teams",
+    "infoText": "Teams gruppieren mehrere Agenten zu einer Arbeitseinheit mit definierten Rollen. Ein Boss-Agent der einem Team angehört bekommt automatisch eine Übersicht seiner Teammitglieder in den System-Prompt injiziert — er kennt dann, welche Agenten er für welche Aufgaben einsetzen kann. Typisches Beispiel: Team 'dev' mit den Rollen coder, reviewer und tester.",
+    "title": "Teams",
+    "noTeams": "Keine Teams vorhanden",
+    "noTeamsHint": "Erstelle ein Team und weise ihm Agenten mit Rollen zu.",
+    "newTeam": "Neues Team",
+    "refresh": "Aktualisieren",
+    "editTeam": "Team bearbeiten",
+    "membersLabel": "Mitglieder",
+    "addMember": "Mitglied hinzufügen",
+    "agentIdPlaceholder": "Agent-ID (z.B. coder)",
+    "rolePlaceholder": "Rolle (z.B. coder)",
+    "teamIdLabel": "Team-ID (Slug)",
+    "teamIdPlaceholder": "z.B. dev-team",
+    "teamNameLabel": "Anzeigename",
+    "teamNamePlaceholder": "z.B. Development Team",
+    "teamIdHint": "Nur Kleinbuchstaben, Ziffern und Bindestriche. Wird nach dem Anlegen nicht mehr geändert.",
+    "membersHint": "Welche Agenten gehören zu diesem Team und welche Rolle haben sie? Der Boss-Agent sieht diese Liste in seinem System-Prompt.",
+    "deleteTitle": "Team löschen",
+    "deleteMessage": "Team '{{name}}' unwiderruflich löschen?"
+  },
+  "proactive": {
+    "infoTitle": "Proaktive Hintergrundaufgaben",
+    "infoText": "Proaktive Tasks lassen Agenten automatisch in regelmäßigen Abständen laufen — ohne dass ein Mensch einen Prompt schickt. Anwendungsbeispiele: täglicher Status-Report, stündliche Systemüberwachung, automatische Zusammenfassungen. Ein Task besteht aus Prompt, Agent, Projekt und einem Intervall in Sekunden.",
+    "title": "Proaktive Tasks",
+    "noTasks": "Keine proaktiven Tasks vorhanden",
+    "noTasksHint": "Erstelle einen Task über 'Neuer Task'."
   }
 }

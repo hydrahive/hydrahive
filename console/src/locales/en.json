@@ -1783,5 +1783,34 @@
     "noSelection": "No blocks selected.",
     "saveOk": "AGENT.md saved ({{count}} blocks).{{backup}}",
     "saveBackup": "Previous version available as AGENT.md.backup."
+  },
+  "teams": {
+    "infoTitle": "Agent Teams",
+    "infoText": "Teams group multiple agents into a working unit with defined roles. A boss agent that belongs to a team automatically receives an overview of its team members injected into the system prompt — it knows which agents it can delegate tasks to and what their roles are. Typical example: team 'dev' with roles coder, reviewer, and tester.",
+    "title": "Teams",
+    "noTeams": "No teams found",
+    "noTeamsHint": "Create a team and assign agents with roles.",
+    "newTeam": "New Team",
+    "refresh": "Refresh",
+    "editTeam": "Edit Team",
+    "membersLabel": "Members",
+    "addMember": "Add Member",
+    "agentIdPlaceholder": "Agent ID (e.g. coder)",
+    "rolePlaceholder": "Role (e.g. coder)",
+    "teamIdLabel": "Team ID (Slug)",
+    "teamIdPlaceholder": "e.g. dev-team",
+    "teamNameLabel": "Display Name",
+    "teamNamePlaceholder": "e.g. Development Team",
+    "teamIdHint": "Lowercase letters, digits and hyphens only. Cannot be changed after creation.",
+    "membersHint": "Which agents belong to this team and in what role? The boss agent sees this list in its system prompt.",
+    "deleteTitle": "Delete Team",
+    "deleteMessage": "Permanently delete team '{{name}}'?"
+  },
+  "proactive": {
+    "infoTitle": "Proactive Background Tasks",
+    "infoText": "Proactive tasks let agents run automatically at regular intervals — without a human sending a prompt. Use cases: daily status report, hourly system monitoring, automatic summaries. A task consists of: prompt, agent, project and interval in seconds.",
+    "title": "Proactive Tasks",
+    "noTasks": "No proactive tasks found",
+    "noTasksHint": "Create a task via 'New Task'."
   }
 }

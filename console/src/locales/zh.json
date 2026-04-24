@@ -1787,5 +1787,34 @@
   "wks": {
     "infoTitle": "工作站连接（WKS）",
     "infoText": "通过 SSH 将你的代理连接到远程计算机。让你的代理能在 PC 或服务器上运行命令、读写文件。输入 IP 地址，生成 SSH 密钥并将其复制到目标机器。"
+  },
+  "teams": {
+    "infoTitle": "智能体团队",
+    "infoText": "团队将多个智能体组合成具有明确角色的工作单元。属于团队的Boss智能体会自动在系统提示中获得团队成员概览，从而知道哪些智能体可以委派哪些任务。典型示例：团队dev，包含coder、reviewer和tester角色。",
+    "title": "团队",
+    "noTeams": "暂无团队",
+    "noTeamsHint": "点击新建团队创建一个团队并分配带角色的智能体。",
+    "newTeam": "新建团队",
+    "refresh": "刷新",
+    "editTeam": "编辑团队",
+    "membersLabel": "成员",
+    "addMember": "添加成员",
+    "agentIdPlaceholder": "智能体ID（如：coder）",
+    "rolePlaceholder": "角色（如：coder）",
+    "teamIdLabel": "团队ID",
+    "teamIdPlaceholder": "如：dev-team",
+    "teamNameLabel": "显示名称",
+    "teamNamePlaceholder": "如：开发团队",
+    "teamIdHint": "仅小写字母、数字和连字符。创建后不可更改。",
+    "membersHint": "哪些智能体属于此团队及其角色？Boss智能体将在系统提示中看到此列表。",
+    "deleteTitle": "删除团队",
+    "deleteMessage": "永久删除团队{{name}}？"
+  },
+  "proactive": {
+    "infoTitle": "主动后台任务",
+    "infoText": "主动任务让智能体定期自动运行，无需人工发送提示。用例：每日状态报告、每小时系统监控、自动摘要。一个任务包含：提示词、智能体、项目和间隔秒数。",
+    "title": "主动任务",
+    "noTasks": "暂无主动任务",
+    "noTasksHint": "点击新建任务创建一个任务。"
   }
 }

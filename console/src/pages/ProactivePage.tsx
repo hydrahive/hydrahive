@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Play, Pause, Plus, Trash2, Clock, Bot, RefreshCw, Loader2, CheckCircle, XCircle,
+  Play, Pause, Plus, Trash2, Clock, Bot, RefreshCw, Loader2, CheckCircle, XCircle, Info,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -117,11 +117,19 @@ export function ProactivePage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
+        {/* Info block */}
+        <div className="mb-4 rounded-xl border bg-muted/30 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h3 className="text-sm font-semibold">{t("proactive.infoTitle")}</h3>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("proactive.infoText")}</p>
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1">
               <Bot className="inline h-6 w-6 mr-2 text-primary" />
-              Proactive Tasks
+              {t("proactive.title")}
             </h1>
             <p className="text-xs text-muted-foreground">
               Agenten arbeiten autonom im Hintergrund — Monitoring, Code-Analyse, Reports
