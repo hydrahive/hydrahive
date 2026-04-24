@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bookmark, Plus, Trash2, Download, Upload, Loader2 } from "lucide-react";
+import { Bookmark, Plus, Trash2, Download, Upload, Loader2, Rocket } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,10 @@ export function BlueprintCatalogTab() {
   const [bps, setBps] = useState<BlueprintSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [agents, setAgents] = useState<string[]>([]);
+  const [installFor, setInstallFor] = useState<string | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importId, setImportId] = useState("");
   const [importData, setImportData] = useState("");
@@ -37,6 +41,24 @@ export function BlueprintCatalogTab() {
   }
 
   useEffect(() => { load(); }, []);
+
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function doInstall(bpId: string, agentId: string) {
+    setInstalling(bpId);
+    setInstallFor(null);
+    try {
+      await api.blueprintInstall(bpId, agentId);
+      showToast(`Installiert auf ${agentId}`, true);
+    } catch (e: any) {
+      showToast("Install fehlgeschlagen: " + (e.message ?? "Unbekannt"), false);
+    } finally {
+      setInstalling(null);
+    }
+  }
 
   async function doDelete(bpId: string) {
     setDeleting(bpId);
@@ -79,6 +101,12 @@ export function BlueprintCatalogTab() {
 
   return (
     <div className="flex h-full flex-col">
+      {toast && (
+        <div className={cn("fixed top-4 right-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-xl",
+          toast.ok ? "bg-green-900/90 text-green-200 border border-green-700" : "bg-red-900/90 text-red-200 border border-red-700")}>
+          {toast.ok ? "✓" : "✗"} {toast.msg}
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
         <Bookmark className="h-4 w-4 text-indigo-400" />
