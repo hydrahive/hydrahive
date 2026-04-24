@@ -185,6 +185,7 @@ def register_project_routes(
                 "filesystem": cfg.effective_filesystem_path(),
                 "system_user": cfg.effective_system_user(),
                 "members": list(getattr(cfg, "members", [])),
+                "agents": {"boss": cfg.agents.boss, "workers": list(cfg.agents.workers)},
             }
             for pid, cfg in projects.projects.items()
             if allowed is None or pid in allowed

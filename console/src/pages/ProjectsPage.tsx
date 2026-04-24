@@ -48,6 +48,7 @@ interface ProjectEntry {
   filesystem: string;
   system_user: string;
   show_swarm: boolean;
+  agents?: { boss: string; workers: string[] };
 }
 
 interface CreateForm {
@@ -489,8 +490,8 @@ function ProjectsContent() {
                     <span className="font-semibold">{proj.name}</span>
                     <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">{id}</span>
                     {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
-                    {(proj as any).agents?.boss && <span className="rounded-full bg-indigo-900/40 px-1.5 py-0.5 text-[11px] text-indigo-300">Agent: {(proj as any).agents.boss}</span>}
-                    {!(proj as any).agents?.boss && <span className="text-muted-foreground/50">Kein Agent</span>}
+                    {proj.agents?.boss && <span className="rounded-full bg-indigo-900/40 px-1.5 py-0.5 text-[11px] text-indigo-300">Agent: {proj.agents.boss}</span>}
+                    {!proj.agents?.boss && <span className="text-muted-foreground/50">Kein Agent</span>}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(proj.members || []).length || 1} {(proj.members || []).length === 1 ? "Mitglied" : "Mitglieder"}</span>
