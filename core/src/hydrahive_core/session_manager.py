@@ -714,10 +714,15 @@ class SessionManager:
                 _total = 0
                 for _raw in reversed(all_lines):
                     _d = json.loads(_raw)
+                    _content = _d.get("content") or ""
+                    _role_str = _d.get("role", "assistant")
+                    # Leere assistant-Messages (nur tool_calls, kein Text) überspringen
+                    if not _content.strip() and _role_str == "assistant":
+                        continue
                     _msg = Message(
                         msg_id=_d.get("id", uuid.uuid4().hex[:8]),
-                        role=MessageRole(_d.get("role", "assistant")),
-                        content=_d.get("content") or "",
+                        role=MessageRole(_role_str),
+                        content=_content,
                         timestamp=_d.get("ts", datetime.now(timezone.utc).isoformat()),
                         tool_calls=_d.get("tool_calls"),
                         tool_call_id=_d.get("tool_call_id"),
@@ -731,10 +736,14 @@ class SessionManager:
             else:
                 for _line in all_lines:
                     _d = json.loads(_line)
+                    _content = _d.get("content") or ""
+                    _role_str = _d.get("role", "assistant")
+                    if not _content.strip() and _role_str == "assistant":
+                        continue
                     msgs.append(Message(
                         msg_id=_d.get("id", uuid.uuid4().hex[:8]),
-                        role=MessageRole(_d.get("role", "assistant")),
-                        content=_d.get("content") or "",
+                        role=MessageRole(_role_str),
+                        content=_content,
                         timestamp=_d.get("ts", datetime.now(timezone.utc).isoformat()),
                         tool_calls=_d.get("tool_calls"),
                         tool_call_id=_d.get("tool_call_id"),
