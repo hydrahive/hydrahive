@@ -101,6 +101,8 @@ class UpdateProjectSettingsRequest(BaseModel):
     messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
     risk_policy: str | None = None  # interactive | trusted — trusted nur durch Admin setzbar
     github_repo: str | None = None  # #859: nachträglich änderbar
+    agents_boss: str | None = None        # Boss-Agent ID (leer = Projekt-eigener Agent)
+    agents_workers: list[str] | None = None  # Worker-Agent IDs
 
 
 # #641-Fix: ToolConfirmRequest MUSS Module-Scope sein, damit FastAPI mit
@@ -639,6 +641,14 @@ def register_project_routes(
         # #859: github_repo nachträglich ändern
         if req.github_repo is not None:
             config_data["github_repo"] = req.github_repo
+
+        # agents_boss / agents_workers Zuweisung
+        if req.agents_boss is not None or req.agents_workers is not None:
+            agents_cfg = config_data.setdefault("agents", {})
+            if req.agents_boss is not None:
+                agents_cfg["boss"] = req.agents_boss
+            if req.agents_workers is not None:
+                agents_cfg["workers"] = req.agents_workers
 
         config_data["version"] = "2.0.0"
 

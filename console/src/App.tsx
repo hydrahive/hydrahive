@@ -28,6 +28,7 @@ const ProjectCreatePage = lazy(() => import("@/pages/ProjectCreatePage").then((m
 const SystemPage        = lazy(() => import("@/pages/SystemPage").then((m) => ({ default: m.SystemPage })));
 const ChatPage          = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AgentChatPage     = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
+const AgentsPage        = lazy(() => import("@/pages/AgentsPage").then((m) => ({ default: m.AgentsPage })));
 const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
@@ -113,7 +114,7 @@ export default function App() {
           <Route path="/" element={<ProtectedRoute><CapabilitiesProvider><OnboardingGuard><AdminLayout /></OnboardingGuard></CapabilitiesProvider></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
-            <Route path="agents"            element={<Navigate to="/projects" replace />} />
+            <Route path="agents"            element={<AgentsPage />} />
             <Route path="activity"          element={<Navigate to="/dashboard?tab=activity" replace />} />
             <Route path="usage"             element={<Navigate to="/dashboard?tab=usage" replace />} />
             <Route path="projects"          element={<ProjectsPage />} />

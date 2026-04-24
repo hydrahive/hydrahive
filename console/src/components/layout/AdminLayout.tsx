@@ -250,6 +250,7 @@ export function AdminLayout() {
   const allNavItems: NavItem[] = [
     { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
     { to: "/projects",       icon: FolderKanban,    label: t("nav.projects"),        hint: t("navHint.projects") },
+    { to: "/agents",         icon: Bot,             label: t("nav.agents", { defaultValue: "Agenten" }),       hint: t("navHint.agents", { defaultValue: "Alle Agenten verwalten" }), adminOnly: true },
     { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
     { to: "/blueprint",      icon: Workflow,        label: t("nav.blueprint"),       hint: t("navHint.blueprint") },
     { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },

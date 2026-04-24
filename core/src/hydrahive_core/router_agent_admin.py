@@ -30,6 +30,8 @@ class CreateAgentRequest(BaseModel):
     heartbeat_on_failure: str = "restart"
     ollama_base_url: str | None = None
     risk_policy: Literal["interactive", "trusted"] = "interactive"
+    team_id: str | None = None
+    team_role: str | None = None
 
 
 def build_agent_admin_llm_data(req: CreateAgentRequest) -> dict:
@@ -68,6 +70,10 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         agent_data.setdefault("execution_modes", {})["default"] = req.execution_mode_default
     if req.risk_policy != "interactive":
         agent_data["risk_policy"] = req.risk_policy
+    if req.team_id:
+        agent_data["team_id"] = req.team_id
+    if req.team_role:
+        agent_data["team_role"] = req.team_role
     return agent_data
 
 
