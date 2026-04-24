@@ -28,6 +28,7 @@ import {
   Calendar,
   Settings,
   Phone,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -91,6 +92,7 @@ function ProjectsContent() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ name: "", description: "", members: "" });
+  const [creatingAgent, setCreatingAgent] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editErr, setEditErr] = useState("");
   const [sambaCreds, setSambaCreds] = useState<Record<string, {username: string; password: string} | null>>({});
@@ -163,6 +165,25 @@ function ProjectsContent() {
       setShowSambaPw(s => ({...s, [id]: true}));
     } catch { /* ignore */ } finally {
       setSambaResetting(null);
+    }
+  }
+
+  async function createAgentForProject(projectId: string, projectName: string) {
+    setCreatingAgent(projectId);
+    try {
+      await api.post("/admin/agents", {
+        id: projectId,
+        identity: projectName,
+        type: "boss",
+      });
+      await api.put(`/projects/${projectId}/settings`, {
+        agents_boss: projectId,
+      });
+      await load();
+    } catch (e) {
+      alert("Agent anlegen fehlgeschlagen: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setCreatingAgent(null);
     }
   }
 
@@ -491,7 +512,16 @@ function ProjectsContent() {
                     <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">{id}</span>
                     {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
                     {proj.agents?.boss && <span className="rounded-full bg-indigo-900/40 px-1.5 py-0.5 text-[11px] text-indigo-300">Agent: {proj.agents.boss}</span>}
-                    {!proj.agents?.boss && <span className="text-muted-foreground/50">Kein Agent</span>}
+                    {!proj.agents?.boss && (
+                      <button
+                        onClick={() => createAgentForProject(id, proj.name)}
+                        disabled={creatingAgent === id}
+                        className="flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/30 px-1.5 py-0.5 text-[11px] text-muted-foreground/50 hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40"
+                      >
+                        {creatingAgent === id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                        Agent anlegen
+                      </button>
+                    )}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(proj.members || []).length || 1} {(proj.members || []).length === 1 ? "Mitglied" : "Mitglieder"}</span>
