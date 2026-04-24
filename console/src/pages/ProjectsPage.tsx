@@ -171,7 +171,7 @@ function ProjectsContent() {
   async function createAgentForProject(projectId: string, projectName: string) {
     setCreatingAgent(projectId);
     try {
-      await api.post("/admin/agents", {
+      await api.post("/agents", {
         id: projectId,
         identity: projectName,
         type: "boss",

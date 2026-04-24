@@ -153,7 +153,7 @@ export function AgentsPage() {
         max_tool_rounds: form.max_tool_rounds ? parseInt(form.max_tool_rounds) : null,
       };
       if (isNew) {
-        await api.post("/admin/agents", payload);
+        await api.post("/agents", payload);
       } else {
         await api.put(`/agents/${formId.trim()}`, payload);
       }
