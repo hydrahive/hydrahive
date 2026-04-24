@@ -4,7 +4,7 @@
 # Auth: USER + PASS als ENV (default admin/admin)
 # Usage: USER=admin PASS=admin ./seed-specialists.sh
 
-set -euo pipefail
+set -uo pipefail
 
 HOST="${HOST:-http://localhost:8765}"
 USER="${USER:-admin}"
