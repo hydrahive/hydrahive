@@ -1,7 +1,7 @@
 """Tests für tool_sequence_guard.py (#820)"""
 
 import unittest
-from core.src.hydrahive_core.tool_sequence_guard import check_sequence_guard
+from hydrahive_core.tool_sequence_guard import check_sequence_guard
 
 
 class TestToolSequenceGuard(unittest.TestCase):
