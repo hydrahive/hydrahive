@@ -18,6 +18,7 @@ Playwright muss einmalig installiert werden:
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 import base64
 import ipaddress
 import logging
@@ -376,11 +377,44 @@ class BrowserScreenshotTool(BaseTool):
 
             b64 = base64.b64encode(png).decode()
             logger.info("browser_screenshot: agent=%s selector=%r size=%d bytes", agent_id, selector, len(png))
-            return {
-                "image_base64": b64,
+
+            result = {
+                "image_base64": b64,     # backwards-kompatibel
                 "format": "png",
                 "size_bytes": len(png),
             }
+
+            # #804: Artifact + signed URL wenn job_service verfügbar
+            if BrowserScreenshotTool._job_service and project_id:
+                from .jobs_service import (
+                    _artifact_signed_url, JobMeta, _new_job_id, _now_iso
+                )
+                _svc = BrowserScreenshotTool._job_service
+                _job_id = _new_job_id()
+                _now = _now_iso()
+                _fname = f"{_job_id}__screenshot.png"
+                _meta = JobMeta(
+                    job_id=_job_id,
+                    type="browser_screenshot",
+                    provider="browser",
+                    status="done",
+                    created_at=_now,
+                    updated_at=_now,
+                    created_by=agent_id,
+                    project_id=project_id,
+                    agent_id=None,
+                    artifacts=[],
+                )
+                _svc._write_meta(_meta)
+                _svc._record_artifact(_job_id, png, _fname, "image/png")
+                _signed = _artifact_signed_url(_job_id, _fname, agent_id, ttl_seconds=86400)
+                if _signed:
+                    result["job_id"] = _job_id
+                    result["artifacts"] = [
+                        {"mime": "image/png", "download_url": _signed, "filename": _fname}
+                    ]
+
+            return result
         except Exception as e:
             return {"error": str(e)}
 
