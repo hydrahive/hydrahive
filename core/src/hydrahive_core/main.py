@@ -75,6 +75,7 @@ from .router_github import register_github_routes
 # v2: Plugin-System entfernt — alles über shell_exec
 from .router_tailscale import register_tailscale_routes
 from .router_servers import register_server_routes
+from .router_vms import register_vm_routes
 from .router_repos import register_repo_routes
 from .router_config_map import register_config_map_routes
 # v2: plugin_manager entfernt
@@ -1907,6 +1908,11 @@ register_tailscale_routes(admin_router, require_admin=require_admin)
 register_repo_routes(admin_router, require_admin=require_admin)
 register_config_map_routes(admin_router, require_admin=require_admin)
 register_server_routes(
+    auth_router, admin_router,
+    require_auth=require_auth,
+    require_admin=require_admin,
+)
+register_vm_routes(
     auth_router, admin_router,
     require_auth=require_auth,
     require_admin=require_admin,
