@@ -46,11 +46,8 @@ def test_unknown_category_allowed_in_full_worktree():
     # SHELL
     ("server_shell",     "shell"),
     ("wks_shell_exec",   "shell"),
-    # WRITE — Media + Remote-File-Write
+    # WRITE — Remote-File-Write
     ("server_file_write", "write"),
-    ("image_generate",    "write"),
-    ("video_generate",    "write"),
-    ("music_generate",    "write"),
     # READ — Remote-File-Read
     ("server_file_read",  "read"),
 ])
@@ -68,7 +65,8 @@ _CORE_TOOL_IDS_FROM_REGISTRY: list[str] = [
     "shell_exec", "file_read", "file_write", "file_patch", "file_search",
     "web_search", "read_memory", "write_memory", "ask_agent", "tool_search",
     "server_shell", "server_file_read", "server_file_write", "wks_shell_exec",
-    "image_generate", "video_generate", "music_generate",
+    # ---tot seit da28675 (mmx-CLI替代)---
+    # shell_exec: direkt via mmx-CLI
 ]
 
 

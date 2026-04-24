@@ -91,14 +91,13 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "git_status":       ToolCategory.READ,
     "git_log":          ToolCategory.READ,
     "git_diff":         ToolCategory.READ,
-    # WRITE (lokal + remote + Media-Tools die Files produzieren)
+    # WRITE (lokal + remote)
     "file_write":        ToolCategory.WRITE,
     "file_patch":        ToolCategory.WRITE,
     "write_memory":      ToolCategory.WRITE,
     "server_file_write": ToolCategory.WRITE,
-    "image_generate":    ToolCategory.WRITE,
-    "video_generate":    ToolCategory.WRITE,
-    "music_generate":    ToolCategory.WRITE,
+    # ---tot seit da28675 (mmx-CLI替代)---
+    # shell_exec: direkt via mmx-CLI
     # SHELL (lokal + remote + workspace)
     "shell_exec":     ToolCategory.SHELL,
     "server_shell":   ToolCategory.SHELL,
