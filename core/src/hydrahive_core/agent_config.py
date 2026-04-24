@@ -118,6 +118,10 @@ class AgentConfig(BaseModel):
     risk_policy: Literal["interactive", "trusted"] = "interactive"
     # v2: Plugin-System entfernt — alles über shell_exec
 
+    # #789: Team-Mitgliedschaft
+    team_id:   str | None = None   # Team-ID (z.B. "dev-team")
+    team_role: str | None = None   # Rolle im Team (z.B. "coder", "reviewer", "doku")
+
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
     # #659: Bei v2-Projekt-Agenten (Bridge agent_config_from_project) wird

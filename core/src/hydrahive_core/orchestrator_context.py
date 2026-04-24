@@ -667,6 +667,23 @@ async def build_system_prompt(
             if agent_wf:
                 channels.workflow = agent_wf
 
+            # #789: Team-Rollen-Kontext injizieren
+            if boss_cfg.team_id and boss_cfg.team_role:
+                from .agent_teams import get_team as _get_team
+                _team = _get_team(boss_cfg.team_id)
+                if _team:
+                    _member_list = "\n".join(
+                        f"- {m.agent_id} ({m.role})"
+                        for m in _team.members.values()
+                        if m.agent_id != boss_cfg.id
+                    )
+                    channels.team_context = (
+                        f"## Team-Mitgliedschaft\n\n"
+                        f"Du bist **{boss_cfg.team_role}** im Team \"{_team.name}\":\n\n"
+                        f"Team-Mitglieder:\n{_member_list}\n\n"
+                        f"Nach Abschluss deines Tasks: trigger den zuständigen Team-Member via hand_off_to_team_member()."
+                    )
+
         static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
             h = _prompt_cache_hash(

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
+import yaml
+from pathlib import Path
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -78,24 +80,46 @@ class AgentTeam:
         }
 
 
-# ── Team Registry ──────────────────────────────────────────────────────────────
+# ── TeamService: YAML-Persistenz (#789) ───────────────────────────────────────
 
-_teams: dict[str, AgentTeam] = {}
-
-
-def get_or_create_team(name: str) -> AgentTeam:
-    if name not in _teams:
-        _teams[name] = AgentTeam(name=name)
-    return _teams[name]
+TEAMS_DIR = Path("/etc/hydrahive/teams")
 
 
-def get_team(name: str) -> AgentTeam | None:
-    return _teams.get(name)
+def _ensure_teams_dir() -> None:
+    TEAMS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def list_teams() -> list[dict]:
-    return [t.summary() for t in _teams.values()]
+def get_team(team_id: str) -> AgentTeam | None:
+    """Lädt Team aus /etc/hydrahive/teams/<team_id>.yaml oder None."""
+    path = TEAMS_DIR / f"{team_id}.yaml"
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        team = AgentTeam(name=data.get("name", team_id))
+        for m in data.get("members", []):
+            team.add_member(m["agent_id"], role=m.get("role", "worker"))
+        return team
+    except Exception as e:
+        logger.warning("Fehler beim Laden von Team %s: %s", team_id, e)
+        return None
 
 
-def delete_team(name: str) -> bool:
-    return _teams.pop(name, None) is not None
+def list_teams() -> list[str]:
+    """Gibt alle Team-IDs zurück."""
+    _ensure_teams_dir()
+    return [p.stem for p in TEAMS_DIR.glob("*.yaml")]
+
+
+def save_team(team_id: str, team: AgentTeam) -> None:
+    """Speichert Team nach /etc/hydrahive/teams/<team_id>.yaml."""
+    _ensure_teams_dir()
+    data = {
+        "name": team.name,
+        "members": [
+            {"agent_id": m.agent_id, "role": m.role}
+            for m in team.members.values()
+        ],
+    }
+    path = TEAMS_DIR / f"{team_id}.yaml"
+    path.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")

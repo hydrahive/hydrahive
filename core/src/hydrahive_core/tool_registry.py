@@ -2580,6 +2580,77 @@ def _score_deferred_match(tool: "BaseTool", query: str) -> int:
     return score
 
 
+# ── #789: Team-Hand-Off ────────────────────────────────────────────────────────
+
+
+class HandOffToTeamMemberTool(BaseTool):
+    """Übergibt einen Task an einen Team-Member basierend auf dessen Rolle."""
+
+    @property
+    def id(self) -> str: return "hand_off_to_team_member"
+    @property
+    def name(self) -> str: return "An Team-Member übergeben"
+    @property
+    def description(self) -> str:
+        return (
+            "Übergibt einen Task an einen anderen Team-Member basierend auf seiner Rolle. "
+            "Nutzt den Team-Kontext (team_id, team_role) des aktuellen Agents. "
+            "Der Ziel-Agent erhält den Team-Rollen-Kontext automatisch."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "target_role": {
+                    "type": "string",
+                    "description": "Ziel-Rolle im Team (z.B. 'reviewer', 'doku', 'coder')",
+                },
+                "task": {
+                    "type": "string",
+                    "description": "Beschreibung was der andere Agent tun soll",
+                },
+            },
+            "required": ["target_role", "task"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        target_role: str, task: str, **kwargs,
+    ) -> dict:
+        from .agent_teams import get_team
+        from . import agent_discovery as _ad
+
+        cfg = _ad.discovery.get(agent_id)
+        if not cfg or not cfg.team_id:
+            return {"error": f"Agent {agent_id} gehört keinem Team an"}
+
+        team = get_team(cfg.team_id)
+        if not team:
+            return {"error": f"Team {cfg.team_id} nicht gefunden"}
+
+        target_agent: str | None = None
+        for m in team.members.values():
+            if m.role == target_role and m.agent_id != agent_id:
+                target_agent = m.agent_id
+                break
+        if not target_agent:
+            return {"error": f"Kein Team-Member mit Rolle '{target_role}' gefunden"}
+
+        ask = AskAgentTool()
+        ctx = f"[Team {team.name}] Rolle: {target_role}. Task: {task}"
+        return await ask.execute(
+            agent_id=agent_id,
+            project_id=project_id,
+            target=target_agent,
+            question=task,
+            context=ctx,
+            **kwargs,
+        )
+
+
+
 class ToolSearchTool(BaseTool):
     """
     Meta-Tool: Lädt JSON-Schemas deferred Tools on-demand.
@@ -3144,6 +3215,7 @@ registry.register(WebSearchTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
 registry.register(AskAgentTool())
+registry.register(HandOffToTeamMemberTool())
 registry.register(ToolSearchTool())
 # #584-C: Projekt-Target-Tools
 registry.register(ServerShellTool())
