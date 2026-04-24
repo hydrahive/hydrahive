@@ -939,6 +939,61 @@ def _apply_anthropic_history_cache_breakpoints(
     return filtered
 
 
+def _micro_compact_tool_results(
+    messages: list[dict],
+    keep_recent_turns: int = 6,
+    max_chars: int = 200,
+) -> list[dict]:
+    """Kürzt Tool-Result-Content in älteren Turns auf max_chars.
+
+    Tool-Results in den letzten keep_recent_turns Nachrichten bleiben unverändert.
+    Ältere Tool-Results werden auf max_chars gekürzt — der vollständige Text ist
+    für den Agenten nach N Turns nicht mehr handlungsrelevant, kostet aber Tokens.
+    OpenClaw-Pattern: Micro-Compaction vor Full-Compaction (#883).
+    """
+    if len(messages) <= keep_recent_turns:
+        return messages
+
+    cutoff = len(messages) - keep_recent_turns
+    result = []
+    for idx, msg in enumerate(messages):
+        if idx >= cutoff:
+            result.append(msg)
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            result.append(msg)
+            continue
+        new_blocks = []
+        changed = False
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                inner = block.get("content", "")
+                if isinstance(inner, str) and len(inner) > max_chars:
+                    trimmed = inner[:max_chars] + f" … [Tool-Output gekürzt: {len(inner)} Zeichen]"
+                    new_blocks.append({**block, "content": trimmed})
+                    changed = True
+                elif isinstance(inner, list):
+                    new_inner = []
+                    for ib in inner:
+                        if isinstance(ib, dict) and ib.get("type") == "text":
+                            txt = ib.get("text", "")
+                            if len(txt) > max_chars:
+                                new_inner.append({**ib, "text": txt[:max_chars] + f" … [Tool-Output gekürzt: {len(txt)} Zeichen]"})
+                                changed = True
+                            else:
+                                new_inner.append(ib)
+                        else:
+                            new_inner.append(ib)
+                    new_blocks.append({**block, "content": new_inner})
+                else:
+                    new_blocks.append(block)
+            else:
+                new_blocks.append(block)
+        result.append({**msg, "content": new_blocks} if changed else msg)
+    return result
+
+
 def _convert_openai_tools_to_anthropic(tools: list[dict] | None) -> list[dict] | None:
     """Wandelt OpenAI-Tool-Schemas in Anthropic-Format um.
 
@@ -1199,6 +1254,7 @@ async def _anthropic_oauth_call(
 
     # #865: geteilter Helper — setzt ephemeral cache_control auf bis zu
     # 3 ältere Messages (Anthropic-Limit: 1 System + 3 History = 4 Breakpoints).
+    filtered = _micro_compact_tool_results(filtered)
     filtered = _apply_anthropic_history_cache_breakpoints(filtered, max_breakpoints=3)
 
     # #515: Model-spezifische max_tokens — neuere Modelle können mehr Output
@@ -1321,6 +1377,7 @@ async def _minimax_anthropic_call(
 
     # #865-Helper: ephemeral cache_control auf ältere History-Messages.
     # MiniMax akzeptiert cache_control genauso wie Claude (Anthropic-Protokoll).
+    filtered = _micro_compact_tool_results(filtered)
     filtered = _apply_anthropic_history_cache_breakpoints(filtered, max_breakpoints=3)
 
     # Safety: mindestens eine Message.

@@ -169,7 +169,7 @@ _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     # Meta Llama 3.3 — 128k.
     "llama":    128_000,
 }
-_MAX_HISTORY_SHARE = 0.50  # max 50% des Kontextfensters für History (#820/Folge: 0.30 war zu eng)
+_MAX_HISTORY_SHARE = 0.35  # max 35% des Kontextfensters für History (OpenClaw: 30%, #884)
 _RESERVE_TOKENS_FLOOR = 20_000  # Immer 20k frei für Response (OpenClaw: reserveTokensFloor)
 
 

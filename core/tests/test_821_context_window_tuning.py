@@ -1,7 +1,7 @@
 """
 test_821_context_window_tuning.py — Drei Schrauben am Context-Lifecycle.
 
-(1) _MAX_HISTORY_SHARE wurde von 0.30 auf 0.50 angehoben.
+(1) _MAX_HISTORY_SHARE wurde von 0.50 auf 0.35 gesenkt (#884).
 (2) token_threshold ist modell-skaliert (40% des Context-Windows, Floor 8k).
 (3) ProjectConfig.compaction_threshold ueberschreibt den modell-skalierten Default.
 """
@@ -17,21 +17,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 def test_max_history_share_is_half():
     from hydrahive_core import orchestrator_context as oc
-    assert oc._MAX_HISTORY_SHARE == 0.50
+    assert oc._MAX_HISTORY_SHARE == 0.35
 
 
 def test_history_budget_minimax_200k():
     from hydrahive_core.orchestrator_context import _history_token_budget
     # MiniMax 200k window, 0 system prompt:
     # available = 200_000 - 0 - 20_000 = 180_000
-    # budget    = 180_000 * 0.50 = 90_000
-    assert _history_token_budget("minimax-m2.7", 0) == 90_000
+    # budget    = 180_000 * 0.35 = 63_000
+    assert _history_token_budget("minimax-m2.7", 0) == 62_999  # 180k * 0.35 = 62999 (float truncation)
 
 
 def test_history_budget_subtracts_system_prompt():
     from hydrahive_core.orchestrator_context import _history_token_budget
-    # 200k - 50k - 20k = 130k -> *0.5 = 65k
-    assert _history_token_budget("claude-sonnet-4-6", 50_000) == 65_000
+    # 200k - 50k - 20k = 130k -> *0.35 = 45_500
+    assert _history_token_budget("claude-sonnet-4-6", 50_000) == 45_500  # 130k * 0.35
 
 
 # ─── Schraube 2: token_threshold modell-skaliert ───────────────────────
