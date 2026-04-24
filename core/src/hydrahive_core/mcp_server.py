@@ -74,6 +74,24 @@ MCP_TOOLS = [
             "required": ["agent_id"],
         },
     },
+    {
+        "name": "hydrahive_web_search",
+        "description": "Sucht im Web nach aktuellen Informationen. Nutzt SearXNG mit DuckDuckGo-Fallback.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Suchanfrage",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max. Ergebnisse (Standard: 8)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 
@@ -431,6 +449,21 @@ async def _execute_mcp_tool(
             "execution_mode": cfg.execution_modes.default if cfg.execution_modes else "legacy",
             "status": status,
         }, indent=2, ensure_ascii=False)
+
+    elif tool_name == "hydrahive_web_search":
+        query = args.get("query", "")
+        max_results = args.get("max_results", 8)
+        if not query:
+            raise ValueError("query ist ein Pflichtfeld")
+        from .tool_registry import WebSearchTool
+        tool = WebSearchTool()
+        result = await tool.execute(
+            agent_id="mcp",
+            project_id="mcp",
+            query=query,
+            max_results=max_results,
+        )
+        return json.dumps(result, indent=2, ensure_ascii=False)
 
     else:
         raise ValueError(f"Unbekanntes Tool: {tool_name}")
