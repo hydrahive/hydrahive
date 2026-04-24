@@ -38,6 +38,7 @@ dependencies = [
     # SQLite-Persistence, die sich an FastAPI mounten lässt.
     "pycrdt~=0.12",
     "pycrdt-websocket~=0.16",
+    "aiosqlite~=0.20",   # VM-Manager (#895)
     # #749: Bounded + thread-safe TTL-Cache für den permission_classifier.
     "cachetools~=5.5",
 ]
