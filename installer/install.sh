@@ -169,6 +169,11 @@ if [ -f "${MODULES_DIR}/17_sysinfo_scan.sh" ]; then
     bash "${MODULES_DIR}/17_sysinfo_scan.sh" || true
 fi
 
+# Modul 20: VM-Manager (QEMU/KVM + websockify)
+if [ -f "${MODULES_DIR}/20_vm_manager.sh" ]; then
+    source "${MODULES_DIR}/20_vm_manager.sh"
+fi
+
 # Update-Script nach /opt/hydrahive/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
 chmod +x "${HYDRAHIVE_DIR}/update.sh"

@@ -381,6 +381,16 @@ class HydraHiveSettings(BaseSettings):
     boss_policy_enabled: bool = False      # Auto-Verification nach Mutations
     worktree_isolation: bool = False       # Git-Worktrees für Worker-Tasks
 
+    # #895: VM-Manager Settings
+    vm_enabled: bool = True
+    vm_max_count: int = 10
+    vm_max_cpu: int = 16
+    vm_max_ram_mb: int = 32768             # 32 GB
+    vm_max_disk_gb: int = 500
+    vm_max_isos: int = 20
+    vm_iso_max_size_gb: int = 50
+    vm_storage_base: str = "/var/lib/hydrahive"
+
     # #760: CORS allow-list für Direktzugriff auf Port 8765 (bypass nginx).
     # Leer (Default) = nur same-origin; Dev-Setups mit Vite: ["http://localhost:5173"]
     cors_allowed_origins: list[str] = []

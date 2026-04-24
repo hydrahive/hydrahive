@@ -410,6 +410,52 @@
       margin: 0 2rem;
     }
 
+    /* ── WHY ─────────────────────────────────────────── */
+    .why-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    @media (max-width: 720px) {
+      .why-grid { grid-template-columns: 1fr; gap: 2rem; }
+    }
+    .why-p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 0.9rem;
+      line-height: 1.7;
+    }
+    .why-p em { color: var(--text); font-style: normal; font-weight: 600; }
+    .why-honest {
+      font-size: 0.78rem;
+      color: var(--dim);
+      border-left: 2px solid var(--border);
+      padding-left: 0.75rem;
+      margin-top: 1.2rem;
+    }
+    .why-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      position: relative;
+    }
+    .why-quote {
+      font-size: 4rem;
+      line-height: 1;
+      color: var(--accent);
+      opacity: 0.3;
+      font-family: Georgia, serif;
+      margin-bottom: 0.5rem;
+    }
+    .why-card p {
+      font-size: 1rem;
+      color: var(--text);
+      line-height: 1.7;
+      font-style: italic;
+    }
+
     /* ── FEATURES GRID ───────────────────────────────── */
     .features-grid {
       display: grid;
@@ -649,6 +695,38 @@
     </div>
   </div>
 </div>
+
+<hr class="divider">
+
+<!-- WHY -->
+<section class="section" id="warum">
+  <div class="why-grid">
+    <div class="why-text">
+      <div class="section-label">Warum gibt es das?</div>
+      <h2 class="section-title" style="text-align:left">Aus einer einfachen Frage.</h2>
+      <p class="why-p">
+        <em>Warum muss mein Rechner laufen, damit die Familie einen Assistenten hat?</em>
+      </p>
+      <p class="why-p">
+        HydraHive ist kein Produkt, keine Enterprise-Plattform, kein SaaS.
+        Es ist ein Self-Hosted-AI-Backbone, der für meine Familie entstanden ist
+        und jetzt auch für andere offen ist.
+      </p>
+      <p class="why-p">
+        Der Core läuft seit Monaten stabil 24/7 — aber Features wachsen schnell,
+        Breaking-Changes passieren, Support ist Community-basiert.
+        Wer etwas Enterprise-fertiges sucht: falsche Adresse — noch.
+      </p>
+      <p class="why-p why-honest">
+        Bastelprojekt. Keine Firma. Keine SLAs. Herzlich willkommen.
+      </p>
+    </div>
+    <div class="why-card">
+      <div class="why-quote">"</div>
+      <p>Familien, Teams oder Einzelne sollen ihr eigenes AI-Ökosystem bauen können — mit dem LLM ihrer Wahl, ohne Cloud-Vendor-Lock-in, mit eigenen Tools und eigenen Daten.</p>
+    </div>
+  </div>
+</section>
 
 <hr class="divider">
 

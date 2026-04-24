@@ -298,6 +298,32 @@ def _m005_consolidate_agent_memory():
             settings.projects_dir,
         )
 
+def _m006_create_vm_table():
+    """Legt die vms-Tabelle für VM-Manager an (#895)."""
+    from .settings import settings
+    db_path = Path(settings.vm_storage_base) / "vms.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(db_path))
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS vms (
+            vm_id         TEXT PRIMARY KEY,
+            name          TEXT NOT NULL,
+            cpu           INTEGER NOT NULL,
+            ram_mb        INTEGER NOT NULL,
+            disk_gb       INTEGER NOT NULL,
+            iso_file      TEXT,
+            status        TEXT NOT NULL DEFAULT 'created',
+            pid           INTEGER,
+            vnc_port      INTEGER,
+            vnc_token     TEXT,
+            owner         TEXT NOT NULL,
+            created_at    REAL NOT NULL,
+            disk_path     TEXT NOT NULL
+        )
+    """)
+    con.close()
+    logger.info("Migration 006: vms-Tabelle in %s angelegt", db_path)
+
 
 # ── Registry ──────────────────────────────────────────────────────────────────
 
@@ -307,6 +333,7 @@ MIGRATIONS = [
     ("003_cleanup_stale_locks", _m003_cleanup_stale_locks),
     ("004_json_to_sqlite", _m004_json_to_sqlite),
     ("005_consolidate_agent_memory", _m005_consolidate_agent_memory),
+    ("006_create_vm_table", _m006_create_vm_table),
 ]
 
 
