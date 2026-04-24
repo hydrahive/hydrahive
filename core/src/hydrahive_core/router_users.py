@@ -107,6 +107,7 @@ class MyAgentUpdateRequest(BaseModel):
     mcp_servers: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None
     risk_policy: Literal["interactive", "trusted"] = "interactive"
+    execution_mode: Literal["safe", "elevated", "unrestricted"] = "elevated"
 
 
 def build_personal_agent_llm_data(req: MyAgentUpdateRequest) -> dict:
@@ -132,7 +133,7 @@ def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
     agent_data["tools"] = list(req.tools)
-    agent_data["execution_modes"] = default_personal_agent_execution_modes()
+    agent_data["execution_modes"] = {"default": req.execution_mode}
     if req.risk_policy != "interactive":
         agent_data["risk_policy"] = req.risk_policy
     return agent_data

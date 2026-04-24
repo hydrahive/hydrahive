@@ -1083,6 +1083,9 @@ function SettingsPanel({
   const [fallbacks,      setFallbacks]      = useState<string[]>(cfg.llm?.fallback_models ?? []);
   const [fbInput,        setFbInput]        = useState("");
   const [tools,          setTools]          = useState<string[]>(cfg.tools ?? []);
+  const [execMode,       setExecMode]       = useState<string>(
+    (cfg as any).execution_modes?.default ?? "elevated",
+  );
   const [riskPolicy,     setRiskPolicy]     = useState<"interactive" | "trusted">(
     (cfg as any).risk_policy === "trusted" ? "trusted" : "interactive",
   );
@@ -1106,6 +1109,7 @@ function SettingsPanel({
     setMaxTokens(c.llm?.max_tokens ?? 4096);
     setFallbacks(c.llm?.fallback_models ?? []);
     setTools(c.tools ?? []);
+    setExecMode((c as any).execution_modes?.default ?? "elevated");
     setRiskPolicy((c as any).risk_policy === "trusted" ? "trusted" : "interactive");
   }, [agentInfo]);
 
@@ -1134,6 +1138,7 @@ function SettingsPanel({
         fallback_models: allFallbacks,
         tools,
         risk_policy: riskPolicy,
+        execution_mode: execMode,
         ollama_base_url,
       });
       setSaveMsg(t("myAgent.settingsSaved"));
@@ -1245,6 +1250,23 @@ function SettingsPanel({
 
         {/* #645 Profile-Composer */}
         <ProfileComposer />
+
+        {/* Execution Mode */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">Berechtigungen</h2>
+          <select
+            value={execMode}
+            onChange={(e) => setExecMode(e.target.value)}
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="safe">Safe — Blocklist aktiv, kein sudo</option>
+            <option value="elevated">Elevated — erweiterte Rechte</option>
+            <option value="unrestricted">Unrestricted — volle Rechte, sudo erlaubt</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Auf TrueNAS/VM ohne User-Namespaces: Unrestricted setzen, da bwrap-Sandbox dort nicht funktioniert.
+          </p>
+        </section>
 
         {/* Risk Policy — Trusted-Agent ohne CONFIRM-Klicks (Admin-only) */}
         <section className="space-y-3">
