@@ -1067,12 +1067,41 @@ class ShellExecTool(BaseTool):
             if len(err) > max_out:
                 err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
 
+            # #791: Image-Handling — erstes gefundenes Bild als data-URI.
+            _image_data_uri: str | None = None
+            import re as _re
+            _img_paths = _re.findall(r"\S+\.(?:jpg|jpeg|png|webp|gif)\b", out)
+            if _img_paths:
+                import mimetypes as _mt, pathlib as _pathlib
+                for _img_path in _img_paths:
+                    _p = _pathlib.Path(_img_path)
+                    try:
+                        _root = str(workspace_root(project_id)) if project_id else ""
+                        _allowed = (
+                            str(_p).startswith("/tmp") or
+                            str(_p).startswith("/home") or
+                            (_root and str(_p).startswith(_root))
+                        )
+                        if not _allowed or not _p.exists() or not _p.is_file():
+                            continue
+                        if _p.stat().st_size > 5 * 1024 * 1024:
+                            continue
+                        _mime, _ = _mt.guess_type(str(_p))
+                        if _mime and _mime.startswith("image/"):
+                            import base64 as _b64
+                            _data = _b64.b64encode(_p.read_bytes()).decode()
+                            _image_data_uri = f"data:{_mime};base64,{_data}"
+                            break
+                    except Exception:
+                        continue
+
             # #635: Auto-Push nach git commit entfernt.
             # Hing am Shell-Tool, kannte das Workspace-Modell nicht, war ein
             # versteckter Fremdeffekt. Wer pushen will, ruft `git_push`.
             return {
                 "stdout": out, "stderr": err,
                 "exit_code": proc.returncode, "command": command,
+                "image_data_uri": _image_data_uri,
             }
         except Exception as e:
             return {"error": str(e), "command": command, "exit_code": -1}
