@@ -693,17 +693,43 @@ class SessionManager:
             restored, ghosts_ended,
         )
 
-    def _load_session_from_jsonl(self, jsonl_path: Path, project_id: str) -> Session | None:
+    def _load_session_from_jsonl(self, jsonl_path: Path, project_id: str, token_budget: int = 0) -> Session | None:
         """Lädt Session aus JSONL-Datei. Gibt None zurück wenn Datei nicht existiert oder kaputt ist."""
         if not jsonl_path.exists():
             return None
         try:
             msgs: list[Message] = []
+            all_lines = []
             with jsonl_path.open(encoding="utf-8") as _f:
                 for _line in _f:
                     _line = _line.strip()
-                    if not _line:
-                        continue
+                    if _line:
+                        all_lines.append(_line)
+            if not all_lines:
+                return None
+            # #892: Budget-Loading — von hinten akkumulieren
+            if token_budget > 0:
+                from .token_estimation import estimate_tokens as _et
+                _acc: list[Message] = []
+                _total = 0
+                for _raw in reversed(all_lines):
+                    _d = json.loads(_raw)
+                    _msg = Message(
+                        msg_id=_d.get("id", uuid.uuid4().hex[:8]),
+                        role=MessageRole(_d.get("role", "assistant")),
+                        content=_d.get("content") or "",
+                        timestamp=_d.get("ts", datetime.now(timezone.utc).isoformat()),
+                        tool_calls=_d.get("tool_calls"),
+                        tool_call_id=_d.get("tool_call_id"),
+                    )
+                    _cost = _et(_msg.content or "", "")
+                    if _total + _cost > token_budget and _acc:
+                        break
+                    _acc.append(_msg)
+                    _total += _cost
+                msgs = list(reversed(_acc))
+            else:
+                for _line in all_lines:
                     _d = json.loads(_line)
                     msgs.append(Message(
                         msg_id=_d.get("id", uuid.uuid4().hex[:8]),
@@ -735,7 +761,7 @@ class SessionManager:
                 pass
             if _settings and _settings.session_backend == "jsonl":
                 _jsonl_path = self._projects_dir / project_id / "session.jsonl"
-                _loaded = self._load_session_from_jsonl(_jsonl_path, project_id)
+                _loaded = self._load_session_from_jsonl(_jsonl_path, project_id, token_budget=40_000)
                 if _loaded:
                     self._active[project_id] = _loaded
                     return _loaded

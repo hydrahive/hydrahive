@@ -170,6 +170,7 @@ _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "llama":    128_000,
 }
 _MAX_HISTORY_SHARE = 0.35  # max 35% des Kontextfensters für History (OpenClaw: 30%, #884)
+_MICRO_COMPACT_KEEP_TURNS = 6  # letzte N Turns von Micro-Compaction ausschliessen (#882)
 _RESERVE_TOKENS_FLOOR = 20_000  # Immer 20k frei für Response (OpenClaw: reserveTokensFloor)
 
 
@@ -504,6 +505,18 @@ async def build_system_prompt(
                 soul_path = boss_cfg.agent_dir / boss_cfg.soul
                 if soul_path.exists():
                     channels.soul = soul_path.read_text(encoding="utf-8").strip()
+
+        # #881: Workspace-Files — TOOLS.md, AGENTS.md, USER.md, HEARTBEAT.md
+        if boss_cfg.agent_dir:
+            for _fname, _attr in [
+                ("TOOLS.md", "tools_doc"),
+                ("AGENTS.md", "agents_overview"),
+                ("USER.md", "user_profile"),
+                ("HEARTBEAT.md", "heartbeat"),
+            ]:
+                _fpath = boss_cfg.agent_dir / _fname
+                if _fpath.exists():
+                    setattr(channels, _attr, _fpath.read_text(encoding="utf-8").strip())
 
         # #888: Spezialisten/Worker in System-Prompt für Boss-Agenten
         if boss_cfg.agent_dir:
@@ -1388,6 +1401,41 @@ async def _compact_call(
     return resp.choices[0].message.content or ""
 
 
+
+def _micro_compact_tool_results(messages: list, keep_last_n: int = _MICRO_COMPACT_KEEP_TURNS) -> list:
+    """Kürzt Tool-Result-Content älterer Turns auf 200 Zeichen (#882).
+
+    Die letzten keep_last_n Messages bleiben vollständig. Ältere TOOL-Messages
+    werden auf 200 Zeichen gekürzt — der vollständige Text ist nach N Runden
+    nicht mehr entscheidungsrelevant, kostet aber Tokens.
+    OpenClaw-Pattern: Micro-Compaction vor Full-Compaction.
+    """
+    if len(messages) <= keep_last_n:
+        return messages
+
+    from .session_manager import MessageRole
+    cutoff = len(messages) - keep_last_n
+    result = []
+    for idx, m in enumerate(messages):
+        if idx >= cutoff:
+            result.append(m)
+            continue
+        # Nur TOOL-Messages kompaktieren
+        if not (hasattr(m, "role") and m.role == MessageRole.TOOL):
+            result.append(m)
+            continue
+        raw = getattr(m, "content", "") or ""
+        if len(raw) <= 200:
+            result.append(m)
+            continue
+        # Replacement: Message mit gekürztem Content
+        import copy
+        compacted = copy.copy(m)
+        compacted.content = raw[:200] + f"\n[Tool-Output gekürzt — {len(raw)} Zeichen]"
+        result.append(compacted)
+    return result
+
+
 async def _compact_if_needed(
     sessions,
     project_id: str,
@@ -1414,6 +1462,14 @@ async def _compact_if_needed(
     """
     from .session_manager import MessageRole
 
+    # #893: JSONL-Backend übernimmt Budget-Management — Full-Compaction überspringen
+    try:
+        from .settings import get_settings as _gs
+        if _gs().session_backend == "jsonl":
+            return
+    except Exception:
+        pass
+
     # #416: Full-Compaction bei 80% des Context-Windows
     ctx_window = _context_window_for_model(boss_cfg.llm.model)
     full_compaction_threshold = int(ctx_window * 0.80)
@@ -1433,6 +1489,11 @@ async def _compact_if_needed(
     compact_model = boss_cfg.llm.model
     if compact_model.startswith("openai-codex/"):
         compact_model = "claude-haiku-4-5-20251001"
+
+    # #882 Micro-Compaction: Tool-Results älterer Turns kürzen, BEVOR Full-Compaction greift
+    session = sessions.get_active(project_id)
+    if session:
+        session.messages = _micro_compact_tool_results(session.messages)
 
     if sessions.estimated_tokens(project_id) < token_threshold:
         return

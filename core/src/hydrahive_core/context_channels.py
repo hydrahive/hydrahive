@@ -48,6 +48,10 @@ class ContextChannels:
     policies: str = ""             # statische Verhaltens-/Memory-Regeln
     metadata: str = ""            # Projekt-Metadaten: Name, Workspace, github_repo, execution_mode (#860)
     team_context: str = ""        # #789: Team-Mitgliedschaft + Rollen-Kontext
+    tools_doc: str = ""        # TOOLS.md — Tool-Dokumentation für den Agenten
+    agents_overview: str = ""  # AGENTS.md — Multi-Agent-Übersicht
+    user_profile: str = ""     # USER.md — User-Profil und Präferenzen
+    heartbeat: str = ""        # HEARTBEAT.md — aktueller Health/Status
 
     # ── Dynamic (query-abhängig, nicht cacheable) ───────────────────
     runtime: str = ""              # tatsächlich konfiguriertes Runtime-Modell
@@ -68,7 +72,7 @@ class ContextChannels:
     _STATIC_SLOTS = (
         "agent_identity", "onboarding", "soul", "memory_index", "learning",
         "sources", "repos", "servers", "handbook", "blueprint", "workflow", "policies",
-        "metadata", "team_context",
+        "metadata", "team_context", "tools_doc", "agents_overview", "user_profile", "heartbeat",
     )
     _DYNAMIC_SLOTS = (
         "runtime", "memory_hits", "amem_hits", "working_state",
