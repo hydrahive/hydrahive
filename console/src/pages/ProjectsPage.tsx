@@ -175,6 +175,7 @@ function ProjectsContent() {
         id: projectId,
         identity: projectName,
         type: "boss",
+        model: "claude-sonnet-4-6",
       });
       await api.put(`/projects/${projectId}/settings`, {
         agents_boss: projectId,
