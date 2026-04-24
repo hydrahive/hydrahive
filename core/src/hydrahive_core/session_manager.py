@@ -823,6 +823,21 @@ class SessionManager:
             )
             session.append(message)
             self._db_insert_message(session.id, message, len(session.messages) - 1)
+            # #890: JSONL-Session-Persistenz (Backup zum SQLite-Primary)
+            try:
+                _jsonl_path = self._projects_dir / project_id / "session.jsonl"
+                _jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+                with _jsonl_path.open("a", encoding="utf-8") as _f:
+                    _f.write(json.dumps({
+                        "id": message.id,
+                        "role": message.role.value,
+                        "content": message.content or "",
+                        "ts": message.created_at,
+                        "tool_calls": message.tool_calls,
+                        "tool_call_id": message.tool_call_id,
+                    }, ensure_ascii=False) + "\n")
+            except Exception as _e:
+                logger.warning("JSONL-Write fehlgeschlagen für %s: %s", project_id, _e)
             # Preview aktualisieren: erste User-Message die ankommt wenn preview noch leer
             if role == MessageRole.USER:
                 row = self._db.execute(
