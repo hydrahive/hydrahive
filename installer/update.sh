@@ -649,9 +649,11 @@ PY
         info "Aktualisiere SearXNG..."
         (
             sudo -u searxng git -C /opt/searxng pull --ff-only --quiet 2>/dev/null || true
-            # msgspec wird beim Build von searx benötigt, muss vorher installiert sein
-            /opt/searxng/venv/bin/pip install --quiet msgspec 2>/dev/null || true
-            /opt/searxng/venv/bin/pip install --quiet --no-build-isolation -e /opt/searxng
+            # pip install -e nur wenn searx noch nicht als Paket bekannt (Erstinstall)
+            # Bei Folge-Updates reicht git pull — editable install ist bereits aktiv
+            if ! /opt/searxng/venv/bin/pip show searx >/dev/null 2>&1; then
+                /opt/searxng/venv/bin/pip install --quiet --no-build-isolation -e /opt/searxng || true
+            fi
             systemctl restart searxng
         ) && success "SearXNG aktualisiert" \
           || warn "SearXNG Update fehlgeschlagen — wird übersprungen"
