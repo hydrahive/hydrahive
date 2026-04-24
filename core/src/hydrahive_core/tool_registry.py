@@ -27,7 +27,7 @@ import shlex as _shlex_shell
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, ClassVar, Union
 
 from .settings import settings
 
@@ -832,6 +832,13 @@ def _safe_memory_filename(filename: str) -> str:
 
 class ShellExecTool(BaseTool):
 
+    _bwrap_works: ClassVar[bool | None] = None
+    _job_service: ClassVar = None      # #791 Phase 3: injected via set_job_service()
+
+    @classmethod
+    def set_job_service(cls, svc) -> None:
+        cls._job_service = svc
+
     @property
     def id(self) -> str: return "shell_exec"
     @property
@@ -1098,10 +1105,81 @@ class ShellExecTool(BaseTool):
             # #635: Auto-Push nach git commit entfernt.
             # Hing am Shell-Tool, kannte das Workspace-Modell nicht, war ein
             # versteckter Fremdeffekt. Wer pushen will, ruft `git_push`.
+            # #791 Phase 3: Audio/Video-Artifact-Handling
+            _media_path: str | None = None
+            _media_mime: str | None = None
+            import re as _re2
+            _media_paths = _re2.findall(r"\S+\.(?:mp3|wav|ogg|flac|mp4|webm|mov)\b", out)
+            if _media_paths:
+                import mimetypes as _mt2, pathlib as _pathlib2
+                for _mp in _media_paths:
+                    _mp_p = _pathlib2.Path(_mp)
+                    try:
+                        _mp_root = str(workspace_root(project_id)) if project_id else ""
+                        _mp_allowed = (
+                            str(_mp_p).startswith("/tmp") or
+                            str(_mp_p).startswith("/home") or
+                            (_mp_root and str(_mp_p).startswith(_mp_root))
+                        )
+                        if not _mp_allowed or not _mp_p.exists() or not _mp_p.is_file():
+                            continue
+                        if _mp_p.stat().st_size > 50 * 1024 * 1024:
+                            continue
+                        _mp_mime, _ = _mt2.guess_type(str(_mp_p))
+                        if not _mp_mime or not (
+                            _mp_mime.startswith("audio/") or _mp_mime.startswith("video/")
+                        ):
+                            continue
+                        _media_path = _mp
+                        _media_mime = _mp_mime
+                        break
+                    except Exception:
+                        continue
+
+            _artifacts: list[dict] = []
+            _audio_data_uri: str | None = None
+            if _media_path and _media_mime:
+                if ShellExecTool._job_service is None or not project_id:
+                    # Kein job_service oder kein Projekt → Audio <5MB als base64, Video skip
+                    if _media_mime.startswith("audio/") and _pathlib2.Path(_media_path).stat().st_size <= 5 * 1024 * 1024:
+                        import base64 as _b642
+                        _audio_data = _b642.b64encode(_pathlib2.Path(_media_path).read_bytes()).decode()
+                        _audio_data_uri = f"data:{_media_mime};base64,{_audio_data}"
+                else:
+                    # job_service vorhanden → echten JobMeta-Eintrag anlegen + Artifact
+                    from .jobs_service import (
+                        _artifact_signed_url, JobMeta, _new_job_id, _now_iso
+                    )
+                    _svc = ShellExecTool._job_service
+                    _mp_job_id = _new_job_id()
+                    _now = _now_iso()
+                    _mp_filename = _pathlib2.Path(_media_path).name
+                    _mp_meta = JobMeta(
+                        job_id=_mp_job_id,
+                        type="shell_exec_artifact",
+                        provider="shell",
+                        status="done",
+                        created_at=_now,
+                        updated_at=_now,
+                        created_by=agent_id or "agent",
+                        project_id=project_id,
+                        agent_id=None,
+                        artifacts=[],
+                    )
+                    _svc._write_meta(_mp_meta)
+                    _svc._record_artifact(_mp_job_id, _pathlib2.Path(_media_path), _mp_filename, _media_mime)
+                    _mp_signed = _artifact_signed_url(
+                        _mp_job_id, _mp_filename, agent_id or "agent", ttl_seconds=86400
+                    )
+                    if _mp_signed:
+                        _artifacts = [{"mime": _media_mime, "download_url": _mp_signed, "filename": _mp_filename}]
+
             return {
                 "stdout": out, "stderr": err,
                 "exit_code": proc.returncode, "command": command,
                 "image_data_uri": _image_data_uri,
+                "audio_data_uri": _audio_data_uri,
+                "artifacts": _artifacts,
             }
         except Exception as e:
             return {"error": str(e), "command": command, "exit_code": -1}

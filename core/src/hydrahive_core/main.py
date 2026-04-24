@@ -329,6 +329,9 @@ async def lifespan(app: FastAPI):
     _tr._admin_runtime = runtime
     logger.info("Internal-Secret geladen")
 
+    # #791 Phase 3: ShellExecTool job_service-Injektion
+    _tr.ShellExecTool.set_job_service(job_service)
+
     # Audit-Log-Pfad vorbereiten
     _ensure_audit_log_path()
 
