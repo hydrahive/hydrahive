@@ -143,6 +143,12 @@ class DreamConfigRequest(BaseModel):
     summary_model: str | None = None
 
 
+class MigrateSessionsResponse(BaseModel):
+    migrated: int
+    skipped: int
+    errors: list[str]
+
+
 _restart_lock = asyncio.Lock()
 _UPDATE_HEAD_CACHE: dict[str, object] = {
     "checked_at": datetime.fromtimestamp(0, tz=timezone.utc),
@@ -1049,3 +1055,51 @@ def register_system_routes(
                 "last_sessions_reviewed": state.get("last_sessions_reviewed", 0),
             })
         return {"agents": statuses, "total": len(statuses)}
+
+    @admin_router.post("/admin/sessions/migrate-to-jsonl", response_model=MigrateSessionsResponse)
+    def migrate_sessions_to_jsonl():
+        """Migriert alle Sessions von SQLite nach JSONL (#894). Idempotent — existierende JSONL-Dateien werden übersprungen."""
+        migrated = 0
+        skipped = 0
+        errors: list[str] = []
+        try:
+            rows = sessions._db.execute("SELECT DISTINCT project_id FROM sessions").fetchall()
+        except Exception as e:
+            raise HTTPException(500, f"SQLite-Query fehlgeschlagen: {e}")
+        for row in rows:
+            project_id = row["project_id"]
+            jsonl_path = Path(projects_dir) / project_id / "session.jsonl"
+            if jsonl_path.exists():
+                skipped += 1
+                continue
+            try:
+                sess_rows = sessions._db.execute(
+                    "SELECT id FROM sessions WHERE project_id = ? ORDER BY started_at DESC LIMIT 1",
+                    (project_id,)
+                ).fetchall()
+                if not sess_rows:
+                    skipped += 1
+                    continue
+                session_id = sess_rows[0]["id"]
+                msg_rows = sessions._db.execute(
+                    "SELECT msg_id, role, content, timestamp "
+                    "FROM messages WHERE session_id = ? ORDER BY seq ASC",
+                    (session_id,)
+                ).fetchall()
+                jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+                with jsonl_path.open("w", encoding="utf-8") as _f:
+                    for m in msg_rows:
+                        _f.write(json.dumps({
+                            "id": m["msg_id"],
+                            "role": m["role"],
+                            "content": m["content"] or "",
+                            "ts": m["timestamp"],
+                            "tool_calls": None,
+                            "tool_call_id": None,
+                        }, ensure_ascii=False) + "\n")
+                migrated += 1
+                logger.info("Session migriert: %s (%d Messages)", project_id, len(msg_rows))
+            except Exception as e:
+                logger.warning("Migration fehlgeschlagen für %s: %s", project_id, e)
+                errors.append(f"{project_id}: {e}")
+        return MigrateSessionsResponse(migrated=migrated, skipped=skipped, errors=errors)
