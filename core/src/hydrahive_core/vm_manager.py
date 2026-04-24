@@ -22,6 +22,8 @@ from typing import AsyncIterator
 
 import aiosqlite
 
+from .vnc_proxy import VNCProxy
+
 logger = logging.getLogger(__name__)
 
 # ── Status-Konstanten ─────────────────────────────────────────────────────────
@@ -62,6 +64,7 @@ class VMManager:
         self._vnc_token_dir = storage_base / "vnc-tokens"
         self._db_path = db_path
         self._db: aiosqlite.Connection | None = None
+        self._vnc_proxy = VNCProxy(self._vnc_token_dir)
 
     async def _init_db(self) -> None:
         if self._db is not None:
@@ -182,12 +185,8 @@ class VMManager:
         vnc_port = self._find_free_vnc_port()
         vnc_display = vnc_port - 5900  # display number
 
-        # Token generieren und Datei schreiben
-        token = secrets.token_hex(16)
-        token_file = self._vnc_token_dir / f"{vm_id}.token"
-        self._vnc_token_dir.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(f"{vm_id} 127.0.0.1:{vnc_display}\n", encoding="utf-8")
-        token_file.chmod(0o600)
+        # Token über VNCProxy registrieren
+        token = self._vnc_proxy.register(vm_id, vnc_port)
 
         # QEMU-Kommando bauen und starten
         cmd = self._build_qemu_cmd(vm, vnc_display)
@@ -254,10 +253,7 @@ class VMManager:
                 logger.warning("stop_vm %s: signal fehlgeschlagen: %s", vm_id, e)
 
         # VNC-Token aufräumen
-        if vm.vnc_token:
-            token_file = self._vnc_token_dir / f"{vm_id}.token"
-            if token_file.exists():
-                token_file.unlink()
+        self._vnc_proxy.unregister(vm_id)
 
         await self._db.execute(
             "UPDATE vms SET status=?, pid=NULL, vnc_port=NULL, vnc_token=NULL WHERE vm_id=?",
@@ -287,9 +283,8 @@ class VMManager:
         vm_dir = self._vms_dir / vm_id
         if vm_dir.exists():
             shutil.rmtree(vm_dir)
-        token_file = self._vnc_token_dir / f"{vm_id}.token"
-        if token_file.exists():
-            token_file.unlink()
+        # VNC-Token aufräumen (auch ohne aktive VM)
+        self._vnc_proxy.unregister(vm_id)
         await self._db.execute("DELETE FROM vms WHERE vm_id = ?", (vm_id,))
         await self._db.commit()
         logger.info("VM gelöscht: %s", vm_id)

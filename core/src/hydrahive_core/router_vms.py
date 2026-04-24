@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from .iso_manager import ISOManager
 from .settings import settings
 from .vm_manager import VMManager
+from .vnc_proxy import VNCProxy
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class VNCInfoResponse(BaseModel):
     websocket_url: str
     token: str
     vnc_port: int
+    websockify_ok: bool
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -199,22 +201,23 @@ def register_vm_routes(
     @admin_router.get("/admin/vms/{vm_id}/vnc")
     async def get_vnc_info(vm_id: str, request: Request, _=_admin):
         """VNC-Verbindungsinfo für VM (nur wenn running)."""
-        from fastapi import Request as FastAPIRequest
         mgr = _get_vm_manager()
         vm = await mgr.get_vm(vm_id)
         if not vm:
             raise HTTPException(404, f"VM nicht gefunden: {vm_id}")
         if vm.status != "running":
             raise HTTPException(409, f"VM ist nicht running (status={vm.status})")
-        if not vm.vnc_token or not vm.vnc_port:
-            raise HTTPException(409, "VM hat keine VNC-Session (noch nicht gestartet?)")
+        proxy = VNCProxy(Path(settings.vm_storage_base) / "vnc-tokens")
+        token_str = proxy.get_token(vm_id)
         host = request.headers.get("host", "localhost").split(":")[0]
-        ws_url = f"ws://{host}/ws/vnc/?token={vm.vnc_token}"
+        ws_url = proxy.get_websocket_url(vm_id, host) or f"ws://{host}/ws/vnc/?token={token_str or ''}"
+        ws_ok = VNCProxy.check_websockify()
         return VNCInfoResponse(
             vm_id=vm_id,
             websocket_url=ws_url,
-            token=vm.vnc_token,
-            vnc_port=vm.vnc_port,
+            token=token_str or "",
+            vnc_port=vm.vnc_port or 0,
+            websockify_ok=ws_ok,
         )
 
     # ── ISO ───────────────────────────────────────────────────────────────────
