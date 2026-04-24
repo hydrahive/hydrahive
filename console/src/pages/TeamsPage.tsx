@@ -7,9 +7,12 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 interface TeamMember { agent_id: string; role: string }
 interface Team { id: string; name: string; members: TeamMember[] }
 
+const ROLE_SUGGESTIONS = ["boss", "coder", "reviewer", "tester", "writer", "researcher", "analyst", "deployer", "architect", "specialist"];
+
 export function TeamsPage() {
   const { t } = useTranslation();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [agentIds, setAgentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<Team | null>(null);
@@ -38,7 +41,12 @@ export function TeamsPage() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get<Record<string, unknown>>("/agents")
+      .then(d => setAgentIds(Object.keys(d ?? {})))
+      .catch(() => {});
+  }, []);
 
   function openNew() {
     setFormId(""); setFormName(""); setFormMembers([{ agent_id: "", role: "" }]);
@@ -203,17 +211,30 @@ export function TeamsPage() {
                 </button>
               </div>
               <p className="text-[0.65rem] text-muted-foreground">{t("teams.membersHint")}</p>
+              <datalist id="role-suggestions">
+                {ROLE_SUGGESTIONS.map(r => <option key={r} value={r} />)}
+              </datalist>
               <div className="space-y-2">
                 {formMembers.map((m, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <input value={m.agent_id}
-                      onChange={e => updateMember(i, "agent_id", e.target.value)}
-                      placeholder={t("teams.agentIdPlaceholder")}
-                      className="flex-1 rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                    {agentIds.length > 0 ? (
+                      <select value={m.agent_id}
+                        onChange={e => updateMember(i, "agent_id", e.target.value)}
+                        className="flex-1 rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="">— Agent wählen —</option>
+                        {agentIds.map(id => <option key={id} value={id}>{id}</option>)}
+                      </select>
+                    ) : (
+                      <input value={m.agent_id}
+                        onChange={e => updateMember(i, "agent_id", e.target.value)}
+                        placeholder={t("teams.agentIdPlaceholder")}
+                        className="flex-1 rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                    )}
                     <input value={m.role}
                       onChange={e => updateMember(i, "role", e.target.value)}
+                      list="role-suggestions"
                       placeholder={t("teams.rolePlaceholder")}
-                      className="w-32 rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                      className="w-36 rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
                     <button onClick={() => removeMember(i)}
                       className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
                       <X className="h-3.5 w-3.5" />
