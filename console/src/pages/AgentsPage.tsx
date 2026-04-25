@@ -43,6 +43,7 @@ interface FormState {
   compaction_threshold: string;
   project_assignments: Record<string, string>;
   mcp_servers: string[];
+  libre_enabled: boolean;
 }
 
 const emptyForm = (): FormState => ({
@@ -52,6 +53,7 @@ const emptyForm = (): FormState => ({
   max_tool_rounds: "", compaction_threshold: "",
   project_assignments: {},
   mcp_servers: [],
+  libre_enabled: false,
 });
 
 function slugify(s: string) {
@@ -139,6 +141,7 @@ export function AgentsPage() {
       compaction_threshold: "",
       project_assignments: {},
       mcp_servers: agAny.mcp_servers ?? [],
+      libre_enabled: agAny.libre_enabled ?? false,
     });
     setActiveTab("basis");
     setDialogOpen(true);
@@ -160,6 +163,7 @@ export function AgentsPage() {
         risk_policy: form.risk_policy,
         max_tool_rounds: form.max_tool_rounds ? parseInt(form.max_tool_rounds) : null,
         mcp_servers: form.mcp_servers,
+        libre_enabled: form.libre_enabled,
       };
       if (isNew) {
         await api.post("/agents", payload);
@@ -671,6 +675,29 @@ export function AgentsPage() {
                       className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60"
                     />
                   </div>
+                  {/* Erweiterungen */}
+                  <div>
+                    <label className="block text-xs text-white/40 mb-2">Erweiterungen</label>
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, libre_enabled: !p.libre_enabled }))}
+                      className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
+                        form.libre_enabled
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-white"
+                          : "border-white/10 bg-zinc-800/50 text-white/40 hover:text-white/70"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🩸</span>
+                        <span>FreeStyle Libre 3</span>
+                        <span className="text-[10px] opacity-50">Glukose-Tab im Chat</span>
+                      </span>
+                      <span className={`text-[10px] font-medium ${form.libre_enabled ? "text-emerald-400" : "text-white/20"}`}>
+                        {form.libre_enabled ? "AN" : "AUS"}
+                      </span>
+                    </button>
+                  </div>
+
                   {mcpServers.length > 0 && (
                     <div>
                       <label className="flex items-center gap-1.5 text-xs text-white/40 mb-2">

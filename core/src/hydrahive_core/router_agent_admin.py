@@ -32,6 +32,7 @@ class CreateAgentRequest(BaseModel):
     risk_policy: Literal["interactive", "trusted"] = "interactive"
     team_id: str | None = None
     team_role: str | None = None
+    libre_enabled: bool = False
 
 
 def build_agent_admin_llm_data(req: CreateAgentRequest) -> dict:
@@ -74,6 +75,7 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         agent_data["team_id"] = req.team_id
     if req.team_role:
         agent_data["team_role"] = req.team_role
+    agent_data["libre_enabled"] = req.libre_enabled
     return agent_data
 
 

@@ -112,6 +112,7 @@ class AgentConfig(BaseModel):
     execution_modes: ExecutionModesConfig | None = None
     ephemeral: bool = False   # Wenn True: Agent wird beim nächsten Core-Start gelöscht
     hooks: dict | None = None  # #472: Hook-System (before_tool, after_tool)
+    libre_enabled: bool = False  # #912: FreeStyle Libre 3 Tab im Agent-Chat
     # Risiko-Policy: "interactive" = jeder RiskLevel.CONFIRM braucht User-Klick;
     # "trusted" = CONFIRM wird automatisch genehmigt (DENY bleibt blockiert).
     # Bewusste Admin-Entscheidung; Default konservativ.

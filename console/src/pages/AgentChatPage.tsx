@@ -27,7 +27,7 @@ export function AgentChatPage() {
   const [showDebug, setShowDebug] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<"info" | "libre">("info");
-  const [libreConfigured, setLibreConfigured] = useState(false);
+  const [libreEnabled, setLibreEnabled] = useState(false);
 
   // Slash commands
   const SLASH_COMMANDS = [
@@ -192,9 +192,8 @@ export function AgentChatPage() {
         if (cfg?.identity) setAgentName(cfg.identity);
         if (cfg?.llm) setAgentModel(cfg.llm);
         if (cfg?.tools && Array.isArray(cfg.tools)) setAgentTools(cfg.tools.map((t: any) => typeof t === "string" ? t : t.name ?? ""));
+        if (cfg?.libre_enabled) setLibreEnabled(true);
       }).catch(() => {});
-    api.get<{ configured: boolean }>("/libre/status")
-      .then(r => setLibreConfigured(r?.configured ?? false)).catch(() => {});
   }, [id]);
 
   // #726 K1: Auto-Resume letzte Session aus localStorage (analog ChatPage).
@@ -327,7 +326,7 @@ export function AgentChatPage() {
             >
               <Info className="h-3.5 w-3.5" /> Info
             </button>
-            {libreConfigured && (
+            {libreEnabled && (
               <button
                 onClick={() => setSidebarTab("libre")}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-xs transition-colors ${sidebarTab === "libre" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
