@@ -211,6 +211,8 @@ def register_vm_routes(
             return VMActionResponse(vm_id=vm_id, status=vm.status, message=f"VM {vm_id} gestartet")
         except ValueError as e:
             raise HTTPException(400, str(e))
+        except FileNotFoundError:
+            raise HTTPException(503, "qemu-system-x86_64 nicht gefunden — bitte QEMU installieren (sudo apt-get install qemu-system-x86)")
         except RuntimeError as e:
             raise HTTPException(500, str(e))
 

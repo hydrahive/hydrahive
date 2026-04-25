@@ -6,7 +6,7 @@ info "Installiere QEMU/KVM + VM-Manager..."
 
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
 
-DEPS=(qemu-system-x86_64 qemu-utils ovmf websockify cpu-checker)
+DEPS=(qemu-system-x86 qemu-utils ovmf websockify cpu-checker)
 MISSING=()
 for dep in "${DEPS[@]}"; do
   if ! dpkg -l "$dep" 2>/dev/null | grep -q "^ii"; then

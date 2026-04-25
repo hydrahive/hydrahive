@@ -229,7 +229,7 @@ main() {
     # --- 3b. System-Dependencies nachrüsten (idempotent) ---
     # bubblewrap (bwrap) ist PFLICHT fuer shell_exec safe/elevated-Sandbox (#605)
     # qemu-utils/qemu-system-x86_64 für VM-Manager (#895)
-    for pkg in ffmpeg jq tree bubblewrap qemu-utils qemu-system-x86_64; do
+    for pkg in ffmpeg jq tree bubblewrap qemu-utils qemu-system-x86 websockify; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
             info "Installiere fehlende Abhängigkeit: $pkg"
             apt-get install -y -qq "$pkg" || warn "$pkg konnte nicht installiert werden"
@@ -827,6 +827,58 @@ PYEOF
                 warn "#554 H5: nginx -t nach Collab-Patch fehlgeschlagen — Rollback aus ${_backup_collab}"
                 cp "${_backup_collab}" "${_nginx_cfg}"
             fi
+        fi
+    fi
+
+    # #895: ISO-Upload-Location in nginx-Config einfügen (client_max_body_size 0 für große ISOs)
+    _nginx_cfg_iso=""
+    for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+        if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then
+            _nginx_cfg_iso="${_cand}"
+            break
+        elif [ -f "${_cand}" ]; then
+            _nginx_cfg_iso=$(readlink -f "${_cand}")
+            break
+        fi
+    done
+    if [ -n "${_nginx_cfg_iso}" ] && ! grep -q "admin/vms/isos/upload" "${_nginx_cfg_iso}"; then
+        info "#895: ISO-Upload-Location in nginx einfügen (client_max_body_size 0)"
+        _backup_iso="${_nginx_cfg_iso}.bak-iso-$(date +%s)"
+        cp "${_nginx_cfg_iso}" "${_backup_iso}"
+        python3 <<PYEOF
+import re, sys
+p = "${_nginx_cfg_iso}"
+txt = open(p).read()
+if "admin/vms/isos/upload" in txt:
+    sys.exit(0)
+block = (
+    "    # VM-Manager ISO-Upload (#895) — vor /api/ damit client_max_body_size greift\n"
+    "    location = /api/admin/vms/isos/upload {\n"
+    "        include /etc/nginx/snippets/hydrahive-security-headers.conf;\n"
+    "        proxy_pass         http://127.0.0.1:8765/admin/vms/isos/upload;\n"
+    "        proxy_http_version 1.1;\n"
+    "        proxy_set_header   Host              \$host;\n"
+    "        proxy_set_header   X-Real-IP         \$remote_addr;\n"
+    "        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;\n"
+    "        proxy_set_header   Connection        \"\";\n"
+    "        proxy_read_timeout    7200s;\n"
+    "        proxy_connect_timeout 5s;\n"
+    "        client_max_body_size  0;\n"
+    "        proxy_request_buffering off;\n"
+    "    }\n\n"
+)
+new_txt, count = re.subn(r"(\s*location /api/ \{)", "\n" + block + r"\1", txt, count=1)
+if count == 0:
+    sys.exit("marker 'location /api/ {' nicht gefunden")
+open(p, "w").write(new_txt)
+PYEOF
+        if nginx -t 2>&1 | head -5; then
+            systemctl reload nginx 2>&1 | head -3 && \
+                info "#895: nginx ISO-Upload-Location aktiv (client_max_body_size 0)" || \
+                warn "#895: nginx reload fehlgeschlagen"
+        else
+            warn "#895: nginx -t fehlgeschlagen nach ISO-Patch — Rollback aus ${_backup_iso}"
+            cp "${_backup_iso}" "${_nginx_cfg_iso}"
         fi
     fi
 
