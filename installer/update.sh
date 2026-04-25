@@ -290,44 +290,8 @@ WSEOF
         fi
     fi
 
-    # #895: Bridge br0 automatisch einrichten für VM Bridge-Networking (idempotent)
-    # In LXC-Containern übersprungen — netplan apply würde Host-Netzwerk zerstören
-    if grep -qai "container=lxc" /proc/1/environ 2>/dev/null || \
-       grep -qai "lxc" /proc/self/cgroup 2>/dev/null; then
-        info "Bridge-Setup: LXC-Container erkannt — übersprungen (Bridge muss am Proxmox-Host eingerichtet werden)"
-    else
-        _primary_nic=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
-        if [ -z "$_primary_nic" ]; then
-            warn "Bridge-Setup: Primäres Interface nicht erkennbar — übersprungen"
-        elif ip link show br0 >/dev/null 2>&1; then
-            info "Bridge br0 bereits vorhanden — übersprungen"
-        elif command -v netplan >/dev/null 2>&1 && [ -d /etc/netplan ]; then
-            info "Bridge br0 einrichten (${_primary_nic} → br0) via netplan..."
-            cat > /etc/netplan/99-hydrahive-bridge.yaml << NPEOF
-network:
-  version: 2
-  ethernets:
-    ${_primary_nic}:
-      dhcp4: false
-  bridges:
-    br0:
-      interfaces: [${_primary_nic}]
-      dhcp4: true
-      parameters:
-        stp: false
-        forward-delay: 0
-NPEOF
-            chmod 600 /etc/netplan/99-hydrahive-bridge.yaml
-            if netplan apply 2>/dev/null; then
-                info "Bridge br0 eingerichtet (kurze Netz-Unterbrechung ist normal)"
-            else
-                warn "netplan apply fehlgeschlagen — Bridge manuell prüfen"
-                rm -f /etc/netplan/99-hydrahive-bridge.yaml
-            fi
-        else
-            warn "netplan nicht verfügbar — Bridge br0 manuell einrichten oder bridge-utils nutzen"
-        fi
-    fi
+    # Bridge br0 wird NICHT automatisch eingerichtet — zu riskant auf Produktionsservern.
+    # Manuell: sudo bash installer/modules/20_vm_manager_bridge.sh
 
     # #895: /ws/vnc/ WebSocket-Location in nginx einfügen falls fehlend
     _nginx_cfg_vnc=""
