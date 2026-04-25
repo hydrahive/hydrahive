@@ -382,10 +382,12 @@ class VMManager:
             "-drive", f"file={vm.disk_path},format=qcow2",
             "-vnc", f"127.0.0.1:{vnc_display}",
         ]
+        # pc (i440FX/PIIX) ist kompatibler mit importierten VMs (VirtualBox-Standard-Chipsatz).
+        # q35 (ICH9) ist moderner aber bricht FreeBSD/ältere Gäste beim Import.
         if kvm:
-            cmd += ["-enable-kvm", "-machine", "type=q35,accel=kvm", "-cpu", "host"]
+            cmd += ["-enable-kvm", "-machine", "type=pc,accel=kvm", "-cpu", "host"]
         else:
-            cmd += ["-machine", "type=q35", "-cpu", "qemu64"]
+            cmd += ["-machine", "type=pc", "-cpu", "qemu64"]
         cmd += [
             "-device", "virtio-net-pci,netdev=net0",
             "-netdev", "user,id=net0",
