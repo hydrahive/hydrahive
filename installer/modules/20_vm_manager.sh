@@ -1,9 +1,7 @@
 #!/bin/bash
 # Modul 20 — QEMU/KVM VM-Manager + websockify VNC-Proxy (#895)
 # Kann standalone als root ausgeführt werden: sudo bash 20_vm_manager.sh
-#────────────────────────────────────────────────────────────────────────────
 
-# Helper-Funktionen falls nicht vom Haupt-Installer definiert
 if ! declare -f info >/dev/null 2>&1; then
   GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; NC="\033[0m"
   info()    { echo -e "${BLUE}[Info]${NC} $1"; }
@@ -31,7 +29,18 @@ else
   success "QEMU/KVM-Pakete installiert: ${MISSING[*]}"
 fi
 
-# ── KVM-Kernel-Modul laden und persistent machen ───────────────────────
+# ── TUN-Kernelmodul laden (für Bridge-Networking zwingend) ──────────────────
+modprobe tun 2>/dev/null && success "tun-Modul geladen" || warn "tun-Modul konnte nicht geladen werden"
+if ! grep -qx "tun" /etc/modules-load.d/tun.conf 2>/dev/null; then
+  echo "tun" > /etc/modules-load.d/tun.conf
+fi
+if [ -e /dev/net/tun ]; then
+  chmod 0666 /dev/net/tun 2>/dev/null && success "/dev/net/tun: Zugriffsrechte gesetzt" || warn "/dev/net/tun: chmod fehlgeschlagen"
+else
+  warn "/dev/net/tun existiert nicht — tun-Modul nicht geladen?"
+fi
+
+# ── KVM-Kernel-Modul laden und persistent machen ───────────────────────────
 if [ ! -e /dev/kvm ]; then
   if grep -qE "vmx|svm" /proc/cpuinfo 2>/dev/null; then
     _cpu_vendor=$(grep -m1 "vendor_id" /proc/cpuinfo 2>/dev/null | awk '{print $3}')
@@ -50,15 +59,14 @@ else
   success "KVM bereits aktiv (/dev/kvm)"
 fi
 
-# ── User zur kvm-Gruppe hinzufügen ──────────────────────────────────────
+# ── User zur kvm-Gruppe hinzufügen ──────────────────────────────────────────
 if id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm"; then
   success "hydrahive bereits in kvm-Gruppe"
 else
-  usermod -aG kvm hydrahive 2>/dev/null && success "hydrahive zu kvm-Gruppe hinzugefügt" || warn "kvm-Gruppe konnte nicht gesetzt werden (非 kritisch)"
+  usermod -aG kvm hydrahive 2>/dev/null && success "hydrahive zu kvm-Gruppe hinzugefügt" || warn "kvm-Gruppe konnte nicht gesetzt werden"
 fi
 
-# ── Storage-Verzeichnisse anlegen ───────────────────────────────────────
-# Basis-Verzeichnis muss hydrahive gehören damit vms.db erstellt werden kann
+# ── Storage-Verzeichnisse anlegen ───────────────────────────────────────────
 chown hydrahive:hydrahive /var/lib/hydrahive
 for dir in isos vms vnc-tokens disk-imports; do
   target="/var/lib/hydrahive/${dir}"
@@ -71,7 +79,7 @@ for dir in isos vms vnc-tokens disk-imports; do
 done
 success "Storage-Verzeichnisse (/var/lib/hydrahive/{isos,vms,vnc-tokens,disk-imports}) erstellt"
 
-# ── websockify systemd-Service ────────────────────────────────────────────
+# ── websockify systemd-Service ────────────────────────────────────────────────
 cat > /etc/systemd/system/hydrahive-websockify.service << 'EOF'
 [Unit]
 Description=HydaHive VNC WebSocket Proxy
@@ -94,26 +102,24 @@ else
   warn "websockify-Service konnte nicht gestartet werden — manuell prüfen: systemctl status hydrahive-websockify"
 fi
 
-# ── /etc/qemu/bridge.conf vorbereiten (Bridge-Networking) ─────────────────
-# Erlaubt qemu-bridge-helper br0 zu nutzen — ohne diese Datei verweigert
-# QEMU Bridge-Mode auch wenn br0 existiert.
+# ── /etc/qemu/bridge.conf + qemu-bridge-helper setuid ────────────────────────
 mkdir -p /etc/qemu
 if [ ! -f /etc/qemu/bridge.conf ]; then
-  echo "allow br0" > /etc/qemu/bridge.conf
+  printf 'allow br0\n' > /etc/qemu/bridge.conf
+  chmod 644 /etc/qemu/bridge.conf
   success "/etc/qemu/bridge.conf angelegt (allow br0)"
 elif ! grep -q "^allow br0" /etc/qemu/bridge.conf 2>/dev/null; then
-  echo "allow br0" >> /etc/qemu/bridge.conf
+  printf 'allow br0\n' >> /etc/qemu/bridge.conf
   success "/etc/qemu/bridge.conf: br0 hinzugefügt"
 else
   success "/etc/qemu/bridge.conf: br0 bereits erlaubt"
 fi
-# qemu-bridge-helper braucht setuid-root für unprivilegierte Bridge-Nutzung
-_qbh=$(dpkg -L qemu-system-x86 2>/dev/null | grep qemu-bridge-helper || true)
-if [ -z "$_qbh" ]; then
-  _qbh=$(find /usr -name qemu-bridge-helper 2>/dev/null | head -1)
-fi
+
+_qbh=$(find /usr -name qemu-bridge-helper 2>/dev/null | head -1)
 if [ -n "$_qbh" ] && [ -f "$_qbh" ]; then
-  chmod u+s "$_qbh" 2>/dev/null && success "qemu-bridge-helper: setuid gesetzt" || warn "qemu-bridge-helper setuid fehlgeschlagen"
+  chmod u+s "$_qbh" 2>/dev/null && success "qemu-bridge-helper: setuid gesetzt ($_qbh)" || warn "qemu-bridge-helper setuid fehlgeschlagen"
+else
+  warn "qemu-bridge-helper nicht gefunden"
 fi
 
 success "VM-Manager installiert (QEMU/KVM + websockify)"
