@@ -186,7 +186,7 @@ class VMManager:
             raise ValueError(f"VM nicht gefunden: {vm_id}")
 
         vm = self._row_to_vm(vm_row)
-        if vm.status not in (VM_STATUS_CREATED, VM_STATUS_STOPPED):
+        if vm.status not in (VM_STATUS_CREATED, VM_STATUS_STOPPED, VM_STATUS_ERROR):
             raise RuntimeError(f"VM {vm_id} kann nicht gestartet werden (status={vm.status})")
 
         # VNC-Port finden

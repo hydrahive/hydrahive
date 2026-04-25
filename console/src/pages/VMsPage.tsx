@@ -661,7 +661,7 @@ export function VMsPage() {
                       </button>
                     </>
                   )}
-                  {vm.status === "stopped" || vm.status === "created" ? (
+                  {vm.status === "stopped" || vm.status === "created" || vm.status === "error" ? (
                     <>
                       <button
                         className="btn btn-sm btn-primary flex items-center gap-1"
