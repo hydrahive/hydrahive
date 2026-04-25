@@ -163,6 +163,74 @@ class DiskImportManager:
         safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", stem)[:64] or "disk"
         return safe
 
+    async def start_import_from_path(self, server_path: str) -> DiskImportJob:
+        """Import a disk image that's already on the server filesystem (no upload needed)."""
+        src = Path(server_path).resolve()
+        if not src.exists():
+            raise FileNotFoundError(f"Datei nicht gefunden: {server_path}")
+        if not src.is_file():
+            raise ValueError(f"Kein reguläres File: {server_path}")
+
+        filename = src.name
+        if _is_vma_filename(filename):
+            ext = ".vma"
+        else:
+            ext = src.suffix.lower()
+            if ext not in SUPPORTED_EXTENSIONS:
+                raise ValueError(f"Nicht unterstütztes Format '{ext}'")
+
+        job_id = uuid.uuid4().hex
+        job = DiskImportJob(job_id=job_id, filename=filename, size_bytes=src.stat().st_size)
+        self._jobs[job_id] = job
+        job.status = "converting"
+
+        if ext == ".vma":
+            asyncio.create_task(self._extract_vma(job_id, src, _vma_compression(filename),
+                                                   keep_source=True))
+        else:
+            asyncio.create_task(self._convert_from_path(job_id, src, ext))
+        return job
+
+    async def _convert_from_path(self, job_id: str, src: Path, src_ext: str) -> None:
+        """qemu-img convert for server-side file (source not deleted)."""
+        job = self._jobs.get(job_id)
+        if not job:
+            return
+        out_path = self._import_dir / f"{job_id}.qcow2"
+        fmt = src_ext.lstrip(".")
+        if fmt == "vhd":
+            fmt = "vpc"
+        elif fmt in ("img", "raw"):
+            fmt = "raw"
+        cmd = ["qemu-img", "convert", "-p", "-f", fmt, "-O", "qcow2", str(src), str(out_path)]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stderr_buf: list[str] = []
+            assert proc.stderr is not None
+            while True:
+                chunk = await proc.stderr.read(256)
+                if not chunk:
+                    break
+                text = chunk.decode(errors="replace")
+                stderr_buf.append(text)
+                m = _PROGRESS_RE.search(text)
+                if m:
+                    self._set_progress(job_id, min(99, int(float(m.group(1)))))
+            await proc.wait()
+            if proc.returncode != 0:
+                raise RuntimeError("".join(stderr_buf).strip()[-300:])
+            job.output_path = str(out_path)
+            job.progress_pct = 100
+            job.status = "done"
+        except Exception as e:
+            job.status = "error"
+            job.error = str(e)[:500]
+            if out_path.exists():
+                out_path.unlink()
+        logger.info("Import-from-path %s: %s", job_id, job.status)
+
     async def start_import(self, filename: str, chunks: AsyncIterator[bytes]) -> DiskImportJob:
         if _is_vma_filename(filename):
             ext = ".vma"
@@ -200,7 +268,8 @@ class DiskImportManager:
             asyncio.create_task(self._convert(job_id, tmp_path, ext))
         return job
 
-    async def _extract_vma(self, job_id: str, tmp_path: Path, compression: str | None) -> None:
+    async def _extract_vma(self, job_id: str, tmp_path: Path, compression: str | None,
+                           keep_source: bool = False) -> None:
         """Proxmox VMA backup extractor — decompresses if needed, then parses VMA format."""
         job = self._jobs.get(job_id)
         if not job:
@@ -279,7 +348,7 @@ class DiskImportManager:
             if out_path.exists():
                 out_path.unlink()
         finally:
-            if tmp_path.exists():
+            if not keep_source and tmp_path.exists():
                 tmp_path.unlink()
             # cleanup decompressed temp
             dec = self._import_dir / f"{job_id}_dec.vma"

@@ -409,10 +409,13 @@ interface ImportVMModalProps {
 }
 
 type ImportStep = "params" | "uploading" | "converting" | "creating" | "error";
+type ImportSource = "upload" | "path";
 
 function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
   const [step, setStep] = useState<ImportStep>("params");
+  const [source, setSource] = useState<ImportSource>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [serverPath, setServerPath] = useState("");
   const [name, setName] = useState("");
   const [cpu, setCpu] = useState(2);
   const [ramMb, setRamMb] = useState(2048);
@@ -428,12 +431,31 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
 
+  async function startImportFromPath() {
+    setStep("converting");
+    try {
+      const res = await fetch("/api/admin/vms/import/from-path", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: serverPath.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
+      setJobId(d.job_id);
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setStep("error");
+    }
+  }
+
   async function startImport() {
-    if (!file || !name.trim()) return;
+    if (!name.trim()) return;
+    if (source === "path") { await startImportFromPath(); return; }
+    if (!file) return;
     setStep("uploading");
     setUploadPct(0);
 
-    // XHR Upload mit Fortschrittsbalken
     const formData = new FormData();
     formData.append("file", file);
 
@@ -542,16 +564,40 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
         {/* Step: params */}
         {step === "params" && (
           <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Disk-Image (.vdi, .vmdk, .vhd, .vhdx, .raw, .img, .qcow2, .vma, .vma.gz, .vma.zst)</label>
-              <input
-                type="file"
-                accept=".vdi,.vmdk,.vhd,.vhdx,.raw,.img,.qcow2,.vma,.gz,.zst"
-                className="w-full text-sm"
-                onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }}
-              />
-              {file && <p className="text-xs text-muted-foreground mt-1">{file.name} ({(file.size / 1024 / 1024 / 1024).toFixed(2)} GB)</p>}
+            {/* Source tabs */}
+            <div className="flex rounded-lg border overflow-hidden text-sm">
+              <button
+                className={`flex-1 py-1.5 ${source === "upload" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground"}`}
+                onClick={() => setSource("upload")}
+              >Datei hochladen</button>
+              <button
+                className={`flex-1 py-1.5 ${source === "path" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground"}`}
+                onClick={() => setSource("path")}
+              >Serverpfad</button>
             </div>
+            {source === "upload" ? (
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Disk-Image (.vdi, .vmdk, .vhd, .vhdx, .raw, .img, .qcow2, .vma, .vma.gz, .vma.zst)</label>
+                <input
+                  type="file"
+                  accept=".vdi,.vmdk,.vhd,.vhdx,.raw,.img,.qcow2,.vma,.gz,.zst"
+                  className="w-full text-sm"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }}
+                />
+                {file && <p className="text-xs text-muted-foreground mt-1">{file.name} ({(file.size / 1024 / 1024 / 1024).toFixed(2)} GB)</p>}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Absoluter Pfad auf dem Server</label>
+                <input
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                  value={serverPath}
+                  onChange={e => setServerPath(e.target.value)}
+                  placeholder="/home/backup.vma.zst"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Unterstützt: .vma, .vma.zst, .vma.gz, .vdi, .vmdk, .qcow2, .raw</p>
+              </div>
+            )}
             <div>
               <label className="block text-xs text-muted-foreground mb-1">VM-Name</label>
               <input
@@ -595,7 +641,8 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
             )}
             <div className="flex justify-between pt-2">
               <button className="btn" onClick={onClose}>Abbrechen</button>
-              <button className="btn btn-primary flex items-center gap-2" onClick={startImport} disabled={!file || !name.trim()}>
+              <button className="btn btn-primary flex items-center gap-2" onClick={startImport}
+                disabled={!name.trim() || (source === "upload" ? !file : !serverPath.trim())}>
                 <Upload className="w-4 h-4" /> Importieren
               </button>
             </div>

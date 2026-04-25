@@ -246,6 +246,24 @@ def register_vm_routes(
             logger.error("Disk-Import fehlgeschlagen: %s", e)
             raise HTTPException(500, str(e))
 
+    class ImportFromPathRequest(BaseModel):
+        path: str = Field(..., description="Absoluter Pfad auf dem Server")
+
+    @admin_router.post("/admin/vms/import/from-path")
+    async def import_disk_from_path(req: ImportFromPathRequest, _=_admin):
+        """Disk-Image das bereits auf dem Server liegt importieren (kein Upload nötig)."""
+        mgr = _get_disk_import_manager()
+        try:
+            job = await mgr.start_import_from_path(req.path)
+            return {"job_id": job.job_id, "filename": job.filename, "size_bytes": job.size_bytes}
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            logger.error("Disk-Import-from-path fehlgeschlagen: %s", e)
+            raise HTTPException(500, str(e))
+
     @admin_router.get("/admin/vms/import/{job_id}/status")
     async def import_disk_status(job_id: str, _=_admin):
         """Konvertierungs-Status abfragen."""
