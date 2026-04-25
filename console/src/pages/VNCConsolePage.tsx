@@ -92,8 +92,8 @@ type ConnState = "loading" | "error" | "not_running" | "connected" | "disconnect
 export function VNCConsolePage() {
   const { vm_id } = useParams<{ vm_id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const token = user?.token ?? "";
+
+
 
   const [connState, setConnState] = useState<ConnState>("loading");
   const [vm, setVm] = useState<VMInfo | null>(null);
@@ -112,7 +112,7 @@ export function VNCConsolePage() {
       try {
         // Fetch VM info
         const vmRes = await fetch(`/api/admin/vms/${vm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (!vmRes.ok) {
           const d = await vmRes.json().catch(() => ({}));
@@ -129,7 +129,7 @@ export function VNCConsolePage() {
 
         // Fetch VNC info
         const vncRes = await fetch(`/api/admin/vms/${vm_id}/vnc`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (!vncRes.ok) {
           const d = await vncRes.json().catch(() => ({}));
@@ -147,7 +147,7 @@ export function VNCConsolePage() {
     }
 
     load();
-  }, [vm_id, token]);
+  }, [vm_id]);
 
   // Update VM status while viewing (poll every 10s for running state)
   useEffect(() => {
@@ -155,7 +155,7 @@ export function VNCConsolePage() {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/admin/vms/${vm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (res.ok) {
           const data = await res.json() as VMInfo;
@@ -167,7 +167,7 @@ export function VNCConsolePage() {
       } catch { /* ignore poll errors */ }
     }, 10_000);
     return () => clearInterval(interval);
-  }, [vm_id, token, connState]);
+  }, [vm_id, connState]);
 
   function handleDisconnect() {
     setDisconnectReason("Verbindung zum VNC-Server verloren");
@@ -184,7 +184,7 @@ export function VNCConsolePage() {
     try {
       const res = await fetch(`/api/admin/vms/${vm_id}/start`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -192,13 +192,13 @@ export function VNCConsolePage() {
       }
       // Reload to get fresh vnc info
       const vmRes = await fetch(`/api/admin/vms/${vm_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       const vmData = await vmRes.json() as VMInfo;
       setVm(vmData);
       if (vmData.status === "running") {
         const vncRes = await fetch(`/api/admin/vms/${vm_id}/vnc`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         const vncData = await vncRes.json() as VNCInfo;
         setVncInfo(vncData);

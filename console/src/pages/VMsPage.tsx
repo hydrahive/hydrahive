@@ -54,7 +54,6 @@ interface CreateVMModalProps {
   isos: ISOInfo[];
   onClose: () => void;
   onCreated: () => void;
-  token: string;
 }
 
 const RAM_OPTIONS = [
@@ -67,7 +66,7 @@ const RAM_OPTIONS = [
   { label: "32 GB",   value: 32768 },
 ];
 
-function CreateVMModal({ isos, onClose, onCreated, token }: CreateVMModalProps) {
+function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
   const [step, setStep] = useState(1);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -83,10 +82,8 @@ function CreateVMModal({ isos, onClose, onCreated, token }: CreateVMModalProps) 
     try {
       const res = await fetch("/api/admin/vms", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           cpu,
@@ -218,8 +215,7 @@ function CreateVMModal({ isos, onClose, onCreated, token }: CreateVMModalProps) 
 
 // ── VMsPage ────────────────────────────────────────────────────────────────────
 export function VMsPage() {
-  const { user, isAdmin } = useAuth();
-  const token = user?.token ?? "";
+  const { isAdmin } = useAuth();
 
   const [vms, setVms] = useState<VMInfo[]>([]);
   const [isos, setIsos] = useState<ISOInfo[]>([]);
@@ -234,25 +230,25 @@ export function VMsPage() {
 
   const fetchVms = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/vms", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch("/api/admin/vms", { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setVms(Array.isArray(data) ? data : data.vms ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [token]);
+  }, []);
 
   const fetchIsos = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/vms/isos", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch("/api/admin/vms/isos", { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setIsos(Array.isArray(data) ? data : data.isos ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -276,7 +272,7 @@ export function VMsPage() {
     try {
       const method: Record<string, string> = { start: "POST", stop: "POST", poweroff: "POST", delete: "DELETE" };
       const url = action === "delete" ? `/api/admin/vms/${vmId}` : `/api/admin/vms/${vmId}/${action}`;
-      const res = await fetch(url, { method: method[action], headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url, { method: method[action], credentials: "include" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail || `HTTP ${res.status}`);
@@ -292,7 +288,7 @@ export function VMsPage() {
   async function handleDeleteIso(filename: string) {
     if (!window.confirm(`ISO "${filename}" wirklich löschen?`)) return;
     try {
-      const res = await fetch(`/api/admin/vms/isos/${encodeURIComponent(filename)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/admin/vms/isos/${encodeURIComponent(filename)}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail || `HTTP ${res.status}`);
@@ -321,7 +317,7 @@ export function VMsPage() {
     });
     xhr.addEventListener("error", () => { setUploadProgress(null); setUploadError("Netzwerkfehler beim Upload"); });
     xhr.open("POST", "/api/admin/vms/isos/upload");
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.withCredentials = true;
     const form = new FormData();
     form.append("file", file);
     xhr.send(form);
@@ -522,7 +518,6 @@ export function VMsPage() {
       {showCreateModal && (
         <CreateVMModal
           isos={isos}
-          token={token}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => { setShowCreateModal(false); fetchVms(); }}
         />
