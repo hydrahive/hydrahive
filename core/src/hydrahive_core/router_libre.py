@@ -6,6 +6,7 @@ Config: /etc/hydrahive/freestyle_libre.json
 """
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 import time
@@ -66,7 +67,8 @@ def _http(method: str, url: str, body: dict | None = None,
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=15) as resp:
         raw = resp.read()
-        # gzip handled automatically by urllib
+        if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
         return json.loads(raw)
 
 
