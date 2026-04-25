@@ -356,6 +356,24 @@ def register_vm_routes(
 
     # ── VNC ───────────────────────────────────────────────────────────────────
 
+    @admin_router.get("/admin/vms/{vm_id}/log")
+    async def get_vm_log(vm_id: str, lines: int = 100, _=_admin):
+        """Letzte N Zeilen des QEMU-Logs zurückgeben."""
+        mgr = _get_vm_manager()
+        vm = await mgr.get_vm(vm_id)
+        if not vm:
+            raise HTTPException(404, f"VM nicht gefunden: {vm_id}")
+        log_path = Path(settings.vm_storage_base) / "vms" / vm_id / "qemu.log"
+        if not log_path.exists():
+            return {"vm_id": vm_id, "lines": [], "size_bytes": 0}
+        try:
+            text = log_path.read_text(errors="replace")
+            all_lines = text.splitlines()
+            tail = all_lines[-min(lines, len(all_lines)):]
+            return {"vm_id": vm_id, "lines": tail, "size_bytes": log_path.stat().st_size}
+        except OSError as e:
+            raise HTTPException(500, f"Log nicht lesbar: {e}")
+
     @admin_router.get("/admin/vms/{vm_id}/vnc")
     async def get_vnc_info(vm_id: str, request: Request, _=_admin):
         """VNC-Verbindungsinfo für VM (nur wenn running)."""

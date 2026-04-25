@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Play, Square, Trash2, Upload, Loader2,
   Monitor, Server, HardDrive, Cpu, Activity,
-  X, ChevronRight, AlertCircle, Network, Pencil,
+  X, ChevronRight, AlertCircle, Network, Pencil, ScrollText, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -55,6 +55,62 @@ function StatusBadge({ status }: { status: string }) {
       <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
       {c.label}
     </span>
+  );
+}
+
+// ── VMLogModal ─────────────────────────────────────────────────────────────────
+function VMLogModal({ vm, onClose }: { vm: VMInfo; onClose: () => void }) {
+  const [lines, setLines] = useState<string[]>([]);
+  const [sizeBytes, setSizeBytes] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  async function fetchLog() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/vms/${vm.vm_id}/log?lines=200`, { credentials: "include" });
+      if (res.ok) {
+        const d = await res.json();
+        setLines(d.lines ?? []);
+        setSizeBytes(d.size_bytes ?? 0);
+      }
+    } finally {
+      setLoading(false);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }
+
+  useEffect(() => { fetchLog(); }, [vm.vm_id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="card w-full max-w-3xl mx-4 flex flex-col" style={{ maxHeight: "80vh" }}>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <ScrollText className="w-4 h-4" /> Log — {vm.name}
+            <span className="text-xs text-muted-foreground font-normal">({(sizeBytes / 1024).toFixed(1)} KB)</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-sm flex items-center gap-1" onClick={fetchLog} disabled={loading}>
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button className="btn btn-sm" onClick={onClose}><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+        <div className="overflow-auto flex-1 bg-black rounded-lg p-3 font-mono text-xs text-green-400 min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Lade Log…
+            </div>
+          ) : lines.length === 0 ? (
+            <span className="text-muted-foreground">Noch kein Log vorhanden — VM starten um Ausgabe zu sehen.</span>
+          ) : (
+            lines.map((l, i) => <div key={i} className="leading-5 whitespace-pre-wrap break-all">{l}</div>)
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -594,6 +650,7 @@ export function VMsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [editNetworkVm, setEditNetworkVm] = useState<VMInfo | null>(null);
+  const [logVm, setLogVm] = useState<VMInfo | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -813,9 +870,16 @@ export function VMsPage() {
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />{vm.status === "starting" ? "Startet…" : "Stoppt…"}
                     </span>
                   )}
+                  <button
+                    className="btn btn-sm flex items-center gap-1 ml-auto"
+                    title="QEMU-Log anzeigen"
+                    onClick={() => setLogVm(vm)}
+                  >
+                    <ScrollText className="w-3.5 h-3.5" />
+                  </button>
                   {(vm.status === "stopped" || vm.status === "created" || vm.status === "error") && (
                     <button
-                      className="btn btn-sm flex items-center gap-1 ml-auto"
+                      className="btn btn-sm flex items-center gap-1"
                       title="Netzwerk ändern"
                       onClick={() => setEditNetworkVm(vm)}
                       disabled={busy(vm.vm_id)}
@@ -923,6 +987,9 @@ export function VMsPage() {
           onCreated={() => { setShowImportModal(false); fetchVms(); }}
         />
       )}
+
+      {/* Log Modal */}
+      {logVm && <VMLogModal vm={logVm} onClose={() => setLogVm(null)} />}
 
       {/* Edit Network Modal */}
       {editNetworkVm && (
