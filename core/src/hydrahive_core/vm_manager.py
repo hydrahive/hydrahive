@@ -198,29 +198,32 @@ class VMManager:
 
         # QEMU-Kommando bauen und starten
         cmd = self._build_qemu_cmd(vm, vnc_display)
-        pidfile = Path(vm.disk_path).parent / "qemu.pid"
+        vm_dir = Path(vm.disk_path).parent
+        pidfile = vm_dir / "qemu.pid"
+        log_path = vm_dir / "qemu.log"
 
-        with open(pidfile, "w") as pf:
-            pass  # create empty pidfile
-
+        # Log-Datei statt PIPE: QEMU überlebt Core-Neustarts (kein SIGPIPE bei geschlossener Pipe)
+        log_fd = open(log_path, "wb")
         full_cmd = cmd + ["-pidfile", str(pidfile)]
         proc = await asyncio.create_subprocess_exec(
             *full_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_fd,
+            stderr=log_fd,
+            start_new_session=True,  # eigene Session → kein SIGHUP bei Parent-Tod
         )
+        log_fd.close()  # Parent schließt seinen Fd; QEMU hält seinen offen
+
         # 1.5s warten und prüfen ob QEMU noch lebt
         await asyncio.sleep(1.5)
         if proc.returncode is not None:
-            _, stderr_data = await proc.communicate()
-            err = stderr_data.decode(errors="replace").strip()
+            err = log_path.read_text(errors="replace").strip()[-300:] if log_path.exists() else "unbekannter Fehler"
             self._vnc_proxy.unregister(vm_id)
             await self._db.execute(
                 "UPDATE vms SET status=? WHERE vm_id=?",
                 (VM_STATUS_ERROR, vm_id),
             )
             await self._db.commit()
-            raise RuntimeError(f"QEMU beendet sich sofort (rc={proc.returncode}): {err[:300]}")
+            raise RuntimeError(f"QEMU beendet sich sofort (rc={proc.returncode}): {err}")
 
         pid_str = pidfile.read_text().strip() if pidfile.exists() else ""
         pid = int(pid_str) if pid_str.isdigit() else proc.pid
