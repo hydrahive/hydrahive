@@ -1,6 +1,15 @@
 #!/bin/bash
 # Modul 20 — QEMU/KVM VM-Manager + websockify VNC-Proxy (#895)
+# Kann standalone als root ausgeführt werden: sudo bash 20_vm_manager.sh
 #────────────────────────────────────────────────────────────────────────────
+
+# Helper-Funktionen falls nicht vom Haupt-Installer definiert
+if ! declare -f info >/dev/null 2>&1; then
+  GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; NC="\033[0m"
+  info()    { echo -e "${BLUE}[Info]${NC} $1"; }
+  success() { echo -e "${GREEN}[OK]${NC} $1"; }
+  warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+fi
 
 info "Installiere QEMU/KVM + VM-Manager..."
 
