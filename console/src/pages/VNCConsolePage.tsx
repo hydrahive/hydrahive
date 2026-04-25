@@ -38,9 +38,11 @@ function VNCCanvas({ wsUrl, onDisconnect, onConnect }: VNCCanvasProps) {
   useEffect(() => {
     if (!containerRef.current || !wsUrl) return;
 
-    // Dynamic import to avoid SSR issues
-    import("@novnc/novnc/lib/rfb").then(({ RFB }) => {
-      if (!containerRef.current) return;
+    // RFB is the default export of @novnc/novnc
+    import("@novnc/novnc/lib/rfb").then((mod) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const RFB = (mod.default ?? mod) as any;
+      if (!containerRef.current || !RFB) return;
 
       const rfb = new RFB(containerRef.current, wsUrl, {
         scaleViewport: true,

@@ -53,7 +53,8 @@ const VMsPage            = lazy(() => import("@/pages/VMsPage").then((m) => ({ d
 const VNCConsolePage     = lazy(() => import("@/pages/VNCConsolePage").then((m) => ({ default: m.VNCConsolePage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <GuardLoading />;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 

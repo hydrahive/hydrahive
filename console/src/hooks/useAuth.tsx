@@ -6,6 +6,7 @@ interface AuthCtx  {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  loading: boolean;
   permissions: GroupPermissions;
   hasPageAccess(pageId: string): boolean;
   login(u: string, p: string): Promise<void>;
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // #770: Kein localStorage fuer Token mehr. Auth-State kommt nach Mount
   // von GET /auth/me (Cookie-auth) — kein Bearer noetig.
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Nach Mount: Cookie-basierte /auth/me-Abfrage fuer Wiederherstellung
   // des Auth-State nach Page-Reload (F5).
@@ -31,17 +33,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled || !res.ok) return;
         const data = await res.json();
         if (cancelled) return;
-        // Token nicht mehr aus /auth/me — wir speichern ihn nur in React-State.
-        // login() setzt den Cookie, danach holt restore() den State.
-        // Fuer die Session brauchen wir keinen persistenten Token mehr.
         setUser({
           username: data.username,
-          token: "",  // nicht mehr persistent
+          token: "",
           role: data.role,
           group: data.group ?? "standard",
           permissions: data.permissions ?? ALL_PERMS,
         });
       } catch { /* offline / not logged in */ }
+      finally { if (!cancelled) setLoading(false); }
     }
     restore();
     return () => { cancelled = true; };
@@ -103,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: !!user,
       isAdmin,
+      loading,
       permissions: perms,
       hasPageAccess,
       login,
