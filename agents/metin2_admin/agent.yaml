@@ -1,0 +1,28 @@
+id: metin2_admin
+identity: Metin2 Server Admin
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  fallback_models: []
+  temperature: 0.3
+  max_tokens: 4096
+
+execution_modes:
+  default: elevated
+
+heartbeat:
+  interval: 60s
+  timeout: 300s
+  on_failure: ignore
+
+tools:
+- shell_exec
+- file_read
+- read_memory
+- write_memory
+- web_search
+
+mcp_servers: []
+allowed_agents: []

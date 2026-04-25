@@ -543,10 +543,10 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
         {step === "params" && (
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Disk-Image (.vdi, .vmdk, .vhd, .vhdx, .raw, .img, .qcow2)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Disk-Image (.vdi, .vmdk, .vhd, .vhdx, .raw, .img, .qcow2, .vma, .vma.gz, .vma.zst)</label>
               <input
                 type="file"
-                accept=".vdi,.vmdk,.vhd,.vhdx,.raw,.img,.qcow2"
+                accept=".vdi,.vmdk,.vhd,.vhdx,.raw,.img,.qcow2,.vma,.gz,.zst"
                 className="w-full text-sm"
                 onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }}
               />
