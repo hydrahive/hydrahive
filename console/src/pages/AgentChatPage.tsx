@@ -5,12 +5,13 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, Clock, Bug, Zap, Cpu, X, Sparkles, Terminal, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ArrowLeft, Bot, Clock, Bug, Zap, Cpu, X, Sparkles, Terminal, PanelRightClose, PanelRightOpen, Activity, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
 import { ChatShell } from "@/components/chat-v2/ChatShell";
 import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
+import { LibreSidebarPanel } from "@/components/LibreSidebarPanel";
 
 export function AgentChatPage() {
   const { t } = useTranslation();
@@ -25,6 +26,8 @@ export function AgentChatPage() {
   // Debug
   const [showDebug, setShowDebug] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<"info" | "libre">("info");
+  const [libreConfigured, setLibreConfigured] = useState(false);
 
   // Slash commands
   const SLASH_COMMANDS = [
@@ -190,6 +193,8 @@ export function AgentChatPage() {
         if (cfg?.llm) setAgentModel(cfg.llm);
         if (cfg?.tools && Array.isArray(cfg.tools)) setAgentTools(cfg.tools.map((t: any) => typeof t === "string" ? t : t.name ?? ""));
       }).catch(() => {});
+    api.get<{ configured: boolean }>("/libre/status")
+      .then(r => setLibreConfigured(r?.configured ?? false)).catch(() => {});
   }, [id]);
 
   // #726 K1: Auto-Resume letzte Session aus localStorage (analog ChatPage).
@@ -313,7 +318,28 @@ export function AgentChatPage() {
 
       {/* Info-Sidebar (Desktop only) */}
       {showSidebar && (
-        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto">
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 overflow-y-auto">
+          {/* Tab-Switcher */}
+          <div className="flex border-b border-white/5 flex-shrink-0">
+            <button
+              onClick={() => setSidebarTab("info")}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs transition-colors ${sidebarTab === "info" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Info className="h-3.5 w-3.5" /> Info
+            </button>
+            {libreConfigured && (
+              <button
+                onClick={() => setSidebarTab("libre")}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs transition-colors ${sidebarTab === "libre" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Activity className="h-3.5 w-3.5" /> Libre
+              </button>
+            )}
+          </div>
+          <div className="p-4 space-y-4">
+          {sidebarTab === "libre" ? (
+            <LibreSidebarPanel />
+          ) : (
           <div className="space-y-4">
             {/* Live Panel */}
             <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
@@ -377,6 +403,8 @@ export function AgentChatPage() {
                 ))}
               </div>
             </div>
+          </div>
+          )}
           </div>
         </aside>
       )}
