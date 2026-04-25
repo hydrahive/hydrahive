@@ -394,14 +394,7 @@ class VMManager:
             iso_path = Path(vm.iso_file)
             if iso_path.exists():
                 cmd += ["-cdrom", str(iso_path), "-boot", "order=dc"]
-        # OVMF-BIOS falls vorhanden
-        bios_paths = [
-            "/usr/share/ovmf/OVMF.fd",
-            "/usr/share/qemu/ovmf-x86_64-code.bin",
-        ]
-        for bp in bios_paths:
-            if Path(bp).exists():
-                cmd += ["-bios", bp]
-                break
+        # SeaBIOS (QEMU-Default) — kompatibler mit importierten Legacy-BIOS-Disks (VDI/VMDK).
+        # OVMF nur wenn explizit angefordert (zukünftiges VM-Setting).
         logger.info("QEMU-Cmd (kvm=%s): %s", kvm, " ".join(cmd))
         return cmd
