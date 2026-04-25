@@ -271,17 +271,20 @@ def register_vm_routes(
             raise HTTPException(404, f"VM nicht gefunden: {vm_id}")
         if vm.status != "running":
             raise HTTPException(409, f"VM ist nicht running (status={vm.status})")
-        proxy = VNCProxy(Path(settings.vm_storage_base) / "vnc-tokens")
-        token_str = proxy.get_token(vm_id)
+        # Token kommt aus DB (vm.vnc_token) — kein neues VNCProxy-Objekt nötig,
+        # dessen In-Memory-Map leer wäre.
+        token_str = vm.vnc_token or ""
         host = request.headers.get("host", "localhost").split(":")[0]
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-        ws_scheme = "wss" if proto == "https" else "ws"
-        ws_url = proxy.get_websocket_url(vm_id, host, ws_scheme) or f"{ws_scheme}://{host}/ws/vnc/?token={token_str or ''}"
+        # nginx setzt kein X-Forwarded-Proto; HydraHive läuft immer mit TLS →
+        # default wss, nur wenn Proto explizit "http" → ws.
+        proto = request.headers.get("x-forwarded-proto", "https")
+        ws_scheme = "wss" if proto != "http" else "ws"
+        ws_url = f"{ws_scheme}://{host}/ws/vnc/?token={token_str}"
         ws_ok = VNCProxy.check_websockify()
         return VNCInfoResponse(
             vm_id=vm_id,
             websocket_url=ws_url,
-            token=token_str or "",
+            token=token_str,
             vnc_port=vm.vnc_port or 0,
             websockify_ok=ws_ok,
         )
