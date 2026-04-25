@@ -94,19 +94,22 @@ class DiskImportManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            # qemu-img -p schreibt Progress auf stderr
-            stderr_lines = []
+            # qemu-img -p schreibt Progress mit \r, nicht \n — daher Chunks lesen
+            stderr_buf = []
             assert proc.stderr is not None
-            async for line in proc.stderr:
-                text = line.decode(errors="replace")
-                stderr_lines.append(text)
+            while True:
+                chunk = await proc.stderr.read(256)
+                if not chunk:
+                    break
+                text = chunk.decode(errors="replace")
+                stderr_buf.append(text)
                 m = _PROGRESS_RE.search(text)
                 if m and job_id in self._jobs:
                     self._jobs[job_id].progress_pct = min(99, int(float(m.group(1))))
 
             await proc.wait()
             if proc.returncode != 0:
-                raise RuntimeError("".join(stderr_lines).strip()[-300:])
+                raise RuntimeError("".join(stderr_buf).strip()[-300:])
 
             job.output_path = str(out_path)
             job.progress_pct = 100
