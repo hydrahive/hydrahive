@@ -31,15 +31,23 @@ else
   success "QEMU/KVM-Pakete installiert: ${MISSING[*]}"
 fi
 
-# ── KVM-Verfügbarkeit prüfen ───────────────────────────────────────────
-if command -v kvm-ok >/dev/null 2>&1; then
-  if kvm-ok 2>/dev/null | grep -q "KVM acceleration can be used"; then
-    success "KVM-Verfügbarkeit: OK"
+# ── KVM-Kernel-Modul laden und persistent machen ───────────────────────
+if [ ! -e /dev/kvm ]; then
+  if grep -qE "vmx|svm" /proc/cpuinfo 2>/dev/null; then
+    _cpu_vendor=$(grep -m1 "vendor_id" /proc/cpuinfo 2>/dev/null | awk '{print $3}')
+    if [ "$_cpu_vendor" = "AuthenticAMD" ]; then
+      modprobe kvm-amd 2>/dev/null && success "kvm-amd Modul geladen" || warn "kvm-amd konnte nicht geladen werden"
+      echo "kvm-amd" > /etc/modules-load.d/kvm.conf
+    else
+      modprobe kvm-intel 2>/dev/null && success "kvm-intel Modul geladen" || warn "kvm-intel konnte nicht geladen werden"
+      echo "kvm-intel" > /etc/modules-load.d/kvm.conf
+    fi
+    [ -e /dev/kvm ] && chmod 666 /dev/kvm && success "KVM aktiviert (/dev/kvm)" || warn "KVM-Modul geladen aber /dev/kvm fehlt — Reboot nötig"
   else
-    warn "KVM nicht verfügbar — VM-Manager startet trotzdem (QEMU kann ohne KVM laufen)"
+    warn "CPU unterstützt keine Hardware-Virtualisierung (kein vmx/svm) — KVM nicht möglich, QEMU läuft in TCG-Modus"
   fi
 else
-  warn "kvm-ok nicht gefunden — Hardware-Virtualisierung kann nicht geprüft werden"
+  success "KVM bereits aktiv (/dev/kvm)"
 fi
 
 # ── User zur kvm-Gruppe hinzufügen ──────────────────────────────────────

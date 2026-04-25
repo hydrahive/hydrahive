@@ -248,6 +248,24 @@ main() {
         mkdir -p "$_t" && chown hydrahive:hydrahive "$_t" && chmod 750 "$_t"
         id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm" || \
             usermod -aG kvm hydrahive 2>/dev/null || true
+        # KVM-Kernel-Modul laden und persistent machen (#895)
+        if [ ! -e /dev/kvm ]; then
+            _cpu_vendor=$(grep -m1 "vendor_id" /proc/cpuinfo 2>/dev/null | awk '{print $3}')
+            if grep -qE "vmx|svm" /proc/cpuinfo 2>/dev/null; then
+                if [ "$_cpu_vendor" = "AuthenticAMD" ]; then
+                    modprobe kvm-amd 2>/dev/null && info "kvm-amd Modul geladen" || warn "kvm-amd konnte nicht geladen werden"
+                    echo "kvm-amd" > /etc/modules-load.d/kvm.conf
+                else
+                    modprobe kvm-intel 2>/dev/null && info "kvm-intel Modul geladen" || warn "kvm-intel konnte nicht geladen werden"
+                    echo "kvm-intel" > /etc/modules-load.d/kvm.conf
+                fi
+                [ -e /dev/kvm ] && chmod 666 /dev/kvm && info "KVM aktiviert (/dev/kvm)" || warn "KVM-Modul geladen aber /dev/kvm fehlt noch — Reboot nötig"
+            else
+                warn "CPU unterstützt keine Hardware-Virtualisierung (kein vmx/svm) — KVM nicht möglich"
+            fi
+        else
+            info "KVM bereits aktiv (/dev/kvm)"
+        fi
         # websockify systemd-Service (idempotent)
         if [ -x /usr/bin/websockify ] || [ -x /usr/local/bin/websockify ]; then
             info "#895: websockify-Service einrichten..."
