@@ -103,9 +103,9 @@ def test_env_override_allows_root_fallback(monkeypatch):
     assert "error" not in result, f"Unexpected error: {result}"
     # Subprocess wurde gestartet
     subproc_mock.assert_called_once()
-    # Mit sudo bash -c (root) — nicht sudo -u proj_user
+    # bash -c direkt (kein sudo nötig, Prozess läuft als hydrahive) — nicht sudo -u proj_user
     exec_cmd = subproc_mock.call_args.args[0]
-    assert "sudo bash -c" in exec_cmd
+    assert "bash -c" in exec_cmd
     assert "-u proj_" not in exec_cmd
 
 

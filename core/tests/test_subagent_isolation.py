@@ -24,9 +24,9 @@ def test_allowed_modes_exact():
     )
 
 
-def test_default_is_full_worktree():
-    assert DEFAULT_ISOLATION_MODE == IsolationMode.FULL_WORKTREE
-    assert DEFAULT_ISOLATION_MODE.value == "full_worktree"
+def test_default_is_read_only():
+    assert DEFAULT_ISOLATION_MODE == IsolationMode.READ_ONLY
+    assert DEFAULT_ISOLATION_MODE.value == "read_only"
 
 
 # ── validate_isolation_mode ──────────────────────────────────────────────────
