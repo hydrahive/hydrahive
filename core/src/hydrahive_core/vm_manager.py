@@ -427,11 +427,10 @@ class VMManager:
         else:
             cmd += ["-machine", "type=pc", "-cpu", "qemu64"]
         if vm.network_mode == "bridge":
-            # Bridge-Networking: VM bekommt IP vom Router-DHCP
-            # Voraussetzung: Bridge-Interface (br0) auf dem Host existiert
-            # und /etc/qemu/bridge.conf erlaubt es (via qemu-bridge-helper)
+            # e1000 statt virtio: VDI-Imports aus VirtualBox/VMware erwarten
+            # em0 (Intel e1000) — vtnet0 (virtio) würde im Guest nicht greifen
             cmd += [
-                "-device", "virtio-net-pci,netdev=net0",
+                "-device", "e1000,netdev=net0",
                 "-netdev", f"bridge,id=net0,br={vm.bridge_iface}",
             ]
         else:
