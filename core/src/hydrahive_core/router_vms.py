@@ -149,8 +149,16 @@ def register_vm_routes(
     async def upload_iso(file: UploadFile = File(...), _=_admin):
         """ISO-Datei hochladen (Streaming, max size limitiert)."""
         mgr = _get_iso_manager()
+
+        async def _chunks():
+            while True:
+                data = await file.read(65536)
+                if not data:
+                    break
+                yield data
+
         try:
-            info = await mgr.save_iso(file.filename, file.stream())
+            info = await mgr.save_iso(file.filename, _chunks())
             return {"filename": info.filename, "size_human": info.size_human, "path": info.path}
         except ValueError as e:
             msg = str(e)
