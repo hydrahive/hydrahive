@@ -928,7 +928,7 @@ class ShellExecTool(BaseTool):
         # #605: Nutzt dieselbe Mount-Topologie wie die echte Sandbox unten,
         # damit der Test nicht "ok-wenn-/bin-Symlink-auf-/usr/bin"-faelschlich
         # positiv oder negativ ausfaellt.
-        if not hasattr(ShellExecTool, "_bwrap_works"):
+        if ShellExecTool._bwrap_works is None:
             ShellExecTool._bwrap_works = False
             if shutil.which("bwrap"):
                 try:
