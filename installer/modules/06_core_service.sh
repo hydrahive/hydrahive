@@ -267,6 +267,7 @@ ExecStart=${VENV_DIR}/bin/uvicorn hydrahive_core.main:app --host 127.0.0.1 --por
 Restart=always
 RestartSec=3
 TimeoutStopSec=10
+KillMode=process
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
