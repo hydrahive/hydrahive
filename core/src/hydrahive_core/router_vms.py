@@ -78,6 +78,10 @@ class VMUpdateRequest(BaseModel):
     bridge_iface: str | None = Field(None, pattern=r"^[a-zA-Z0-9_\-]{1,15}$")
 
 
+class ImportFromPathRequest(BaseModel):
+    path: str
+
+
 class VMActionResponse(BaseModel):
     vm_id: str
     status: str
@@ -245,9 +249,6 @@ def register_vm_routes(
         except Exception as e:
             logger.error("Disk-Import fehlgeschlagen: %s", e)
             raise HTTPException(500, str(e))
-
-    class ImportFromPathRequest(BaseModel):
-        path: str = Field(..., description="Absoluter Pfad auf dem Server")
 
     @admin_router.post("/admin/vms/import/from-path")
     async def import_disk_from_path(req: ImportFromPathRequest, _=_admin):
