@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown, ImagePlus } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown, ImagePlus, Activity } from "lucide-react";
+import { LibreSidebarPanel } from "@/components/LibreSidebarPanel";
 import { cn } from "@/lib/utils";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
@@ -26,6 +27,7 @@ interface AgentCfg {
     default?: "safe" | "elevated" | "root" | "unrestricted";
   };
   soul?:           string;
+  libre_enabled?:  boolean;
 }
 interface AgentInfo { agent_id: string; config: AgentCfg; }
 
@@ -214,11 +216,13 @@ export function MyAgentPage() {
           { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
           { id: "butler",    label: "Butler",                   icon: Workflow },
           { id: "account",   label: "Mein Konto",               icon: KeyRound },
+          // #912: FreeStyle Libre 3 Tab — nur wenn libre_enabled gesetzt
+          ...(agentInfo?.config?.libre_enabled ? [{ id: "libre", label: "🩸 Glukose", icon: Activity }] : []),
           // Dynamische User-App Tabs
           ...userApps.filter(a => a.enabled).map(a => ({
             id: `app-${a.id}`,
             label: a.tab.label,
-            icon: Puzzle, // Default Icon für User-Apps
+            icon: Puzzle,
           })),
         ];
         const activeTab = TAB_LIST.find(t => t.id === tab);
@@ -474,6 +478,13 @@ export function MyAgentPage() {
       )}
 
       {tab === "account" && <AccountTab />}
+
+      {/* #912: FreeStyle Libre 3 Tab */}
+      {tab === "libre" && (
+        <div className="p-4 max-w-lg mx-auto">
+          <LibreSidebarPanel />
+        </div>
+      )}
 
       {/* Dynamische User-App Tabs */}
       {tab.startsWith("app-") && (
