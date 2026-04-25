@@ -41,6 +41,8 @@ else
 fi
 
 # ── Storage-Verzeichnisse anlegen ───────────────────────────────────────
+# Basis-Verzeichnis muss hydrahive gehören damit vms.db erstellt werden kann
+chown hydrahive:hydrahive /var/lib/hydrahive
 for dir in isos vms vnc-tokens; do
   target="/var/lib/hydrahive/${dir}"
   mkdir -p "$target"
