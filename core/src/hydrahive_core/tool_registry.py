@@ -852,7 +852,10 @@ class ShellExecTool(BaseTool):
             "Nutze dieses Tool für: Git, System-Befehle, Pakete, SSH, curl, etc. "
             "Timeout bis 600s. cwd Standard: /tmp. "
             "Für Datei-Inhalt file_read oder file_search nutzen, nicht cat/head/tail; "
-            "mehrere Lookups in einem Befehl bündeln."
+            "mehrere Lookups in einem Befehl bündeln. "
+            "Mediengenerierung: `mmx image generate --prompt '...'` (Bilder), "
+            "`mmx video generate --prompt '...'` (Videos), "
+            "`mmx music generate --prompt '...'` (Musik) — mmx ist global installiert."
         )
 
     @property

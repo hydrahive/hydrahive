@@ -691,6 +691,24 @@ async def build_system_prompt(
         ]
         channels.policies = "\n\n".join(p for p in _policy_parts if p)
 
+        # Mediengenerierung via mmx CLI — hint nur wenn shell_exec verfügbar
+        # (tools=[] → alle Tools; oder shell_exec explizit gelistet)
+        _agent_tools = list(getattr(boss_cfg, "tools", None) or [])
+        if not _agent_tools or "shell_exec" in _agent_tools:
+            _mmx_hint = (
+                "\n\n## Mediengenerierung\n\n"
+                "Für Bilder, Videos und Musik steht das `mmx` CLI via `shell_exec` bereit:\n"
+                "- Bild: `mmx image generate --prompt 'Beschreibung' --aspect-ratio 16:9`\n"
+                "- Video: `mmx video generate --prompt 'Beschreibung'` (async, dauert Minuten)\n"
+                "- Musik: `mmx music generate --prompt 'Genre und Stimmung'`\n"
+                "- Bild beschreiben/verstehen: `mmx vision describe --image path_oder_url`\n\n"
+                "`mmx` ist global installiert. Ausgabepfad mit `--out-dir /tmp/` angeben."
+            )
+            if channels.policies:
+                channels.policies += _mmx_hint
+            else:
+                channels.policies = _mmx_hint.strip()
+
         # #860: Projekt-Metadaten injecten — github_repo, execution_mode etc.
         # damit der Agent weiss zu welchem GitHub-Repo er gehört und welchen
         # Execution-Mode das Projekt hat (safe/elevated/unrestricted).
