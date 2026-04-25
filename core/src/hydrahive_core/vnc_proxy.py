@@ -49,12 +49,12 @@ class VNCProxy:
         """Gibt Token für eine VM zurück, oder None."""
         return self._map.get(vm_id)
 
-    def get_websocket_url(self, vm_id: str, host: str) -> str | None:
+    def get_websocket_url(self, vm_id: str, host: str, scheme: str = "wss") -> str | None:
         """Gibt vollständigen WebSocket-URL zurück, oder None."""
         token = self._map.get(vm_id)
         if not token:
             return None
-        return f"ws://{host}/ws/vnc/?token={token}"
+        return f"{scheme}://{host}/ws/vnc/?token={token}"
 
     @staticmethod
     def check_websockify(port: int = _VNC_PROXY_DEFAULT_PORT) -> bool:

@@ -274,7 +274,9 @@ def register_vm_routes(
         proxy = VNCProxy(Path(settings.vm_storage_base) / "vnc-tokens")
         token_str = proxy.get_token(vm_id)
         host = request.headers.get("host", "localhost").split(":")[0]
-        ws_url = proxy.get_websocket_url(vm_id, host) or f"ws://{host}/ws/vnc/?token={token_str or ''}"
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        ws_scheme = "wss" if proto == "https" else "ws"
+        ws_url = proxy.get_websocket_url(vm_id, host, ws_scheme) or f"{ws_scheme}://{host}/ws/vnc/?token={token_str or ''}"
         ws_ok = VNCProxy.check_websockify()
         return VNCInfoResponse(
             vm_id=vm_id,
