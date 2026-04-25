@@ -94,4 +94,26 @@ else
   warn "websockify-Service konnte nicht gestartet werden — manuell prüfen: systemctl status hydrahive-websockify"
 fi
 
+# ── /etc/qemu/bridge.conf vorbereiten (Bridge-Networking) ─────────────────
+# Erlaubt qemu-bridge-helper br0 zu nutzen — ohne diese Datei verweigert
+# QEMU Bridge-Mode auch wenn br0 existiert.
+mkdir -p /etc/qemu
+if [ ! -f /etc/qemu/bridge.conf ]; then
+  echo "allow br0" > /etc/qemu/bridge.conf
+  success "/etc/qemu/bridge.conf angelegt (allow br0)"
+elif ! grep -q "^allow br0" /etc/qemu/bridge.conf 2>/dev/null; then
+  echo "allow br0" >> /etc/qemu/bridge.conf
+  success "/etc/qemu/bridge.conf: br0 hinzugefügt"
+else
+  success "/etc/qemu/bridge.conf: br0 bereits erlaubt"
+fi
+# qemu-bridge-helper braucht setuid-root für unprivilegierte Bridge-Nutzung
+_qbh=$(dpkg -L qemu-system-x86 2>/dev/null | grep qemu-bridge-helper || true)
+if [ -z "$_qbh" ]; then
+  _qbh=$(find /usr -name qemu-bridge-helper 2>/dev/null | head -1)
+fi
+if [ -n "$_qbh" ] && [ -f "$_qbh" ]; then
+  chmod u+s "$_qbh" 2>/dev/null && success "qemu-bridge-helper: setuid gesetzt" || warn "qemu-bridge-helper setuid fehlgeschlagen"
+fi
+
 success "VM-Manager installiert (QEMU/KVM + websockify)"

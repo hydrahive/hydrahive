@@ -80,6 +80,8 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
   const [cpu, setCpu] = useState(2);
   const [ramMb, setRamMb] = useState(2048);
   const [diskGb, setDiskGb] = useState(20);
+  const [networkMode, setNetworkMode] = useState<"user" | "bridge">("user");
+  const [bridgeIface, setBridgeIface] = useState("br0");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +99,8 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
           ram_mb: ramMb,
           disk_gb: diskGb,
           iso_file: selectedIso,
+          network_mode: networkMode,
+          bridge_iface: bridgeIface,
         }),
       });
       if (!res.ok) {
@@ -183,6 +187,26 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
               <label className="block text-xs text-muted-foreground mb-1">Disk (GB)</label>
               <input type="number" className="w-full px-3 py-2 border rounded-lg text-sm" value={diskGb} min={5} max={500} onChange={e => setDiskGb(Number(e.target.value))} />
             </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Netzwerk</label>
+              <select className="w-full px-3 py-2 border rounded-lg text-sm" value={networkMode} onChange={e => setNetworkMode(e.target.value as "user" | "bridge")}>
+                <option value="user">NAT (intern, 10.0.2.x)</option>
+                <option value="bridge">Bridge (Router-DHCP, eigene IP)</option>
+              </select>
+            </div>
+            {networkMode === "bridge" && (
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Bridge-Interface</label>
+                <input
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                  value={bridgeIface}
+                  onChange={e => setBridgeIface(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, ""))}
+                  placeholder="br0"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Bridge muss auf dem Host existieren (z.B. br0)</p>
+              </div>
+            )}
             <div className="flex justify-between pt-2">
               <button className="btn" onClick={() => setStep(1)}>Zurück</button>
               <button className="btn btn-primary" onClick={() => setStep(3)} disabled={!name.trim()}>Weiter</button>
@@ -199,6 +223,7 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
               <div className="flex justify-between"><span className="text-muted-foreground">RAM</span><span>{RAM_OPTIONS.find(o => o.value === ramMb)?.label ?? `${ramMb} MB`}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Disk</span><span>{diskGb} GB</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">ISO</span><span>{selectedIso ?? "— (keine)"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Netzwerk</span><span>{networkMode === "bridge" ? `Bridge (${bridgeIface})` : "NAT (10.0.2.x)"}</span></div>
             </div>
             {error && (
               <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 rounded p-2">
@@ -236,6 +261,8 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
   const [ramMb, setRamMb] = useState(2048);
   const [uploadPct, setUploadPct] = useState(0);
   const [convertPct, setConvertPct] = useState(0);
+  const [networkMode, setNetworkMode] = useState<"user" | "bridge">("user");
+  const [bridgeIface, setBridgeIface] = useState("br0");
   const [jobId, setJobId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -328,6 +355,8 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
           ram_mb: ramMb,
           disk_gb: 20, // wird vom Backend aus der tatsächlichen Disk-Größe ermittelt
           import_job_id: jid,
+          network_mode: networkMode,
+          bridge_iface: bridgeIface,
         }),
       });
       if (!res.ok) {
@@ -388,6 +417,25 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
                 </select>
               </div>
             </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Netzwerk</label>
+              <select className="w-full px-3 py-2 border rounded-lg text-sm" value={networkMode} onChange={e => setNetworkMode(e.target.value as "user" | "bridge")}>
+                <option value="user">NAT (intern, 10.0.2.x)</option>
+                <option value="bridge">Bridge (Router-DHCP, eigene IP)</option>
+              </select>
+            </div>
+            {networkMode === "bridge" && (
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Bridge-Interface</label>
+                <input
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                  value={bridgeIface}
+                  onChange={e => setBridgeIface(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, ""))}
+                  placeholder="br0"
+                  maxLength={15}
+                />
+              </div>
+            )}
             <div className="flex justify-between pt-2">
               <button className="btn" onClick={onClose}>Abbrechen</button>
               <button className="btn btn-primary flex items-center gap-2" onClick={startImport} disabled={!file || !name.trim()}>

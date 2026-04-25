@@ -50,6 +50,8 @@ class VMConfig:
     owner: str
     created_at: float
     disk_path: str
+    network_mode: str = "user"    # "user" (NAT) oder "bridge"
+    bridge_iface: str = "br0"     # Bridge-Interface für network_mode=bridge
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -85,9 +87,17 @@ class VMManager:
                 vnc_token     TEXT,
                 owner         TEXT NOT NULL,
                 created_at    REAL NOT NULL,
-                disk_path     TEXT NOT NULL
+                disk_path     TEXT NOT NULL,
+                network_mode  TEXT NOT NULL DEFAULT 'user',
+                bridge_iface  TEXT NOT NULL DEFAULT 'br0'
             )
         """)
+        # Migration: Spalten nachrüsten falls DB älter ist
+        for col, default in [("network_mode", "'user'"), ("bridge_iface", "'br0'")]:
+            try:
+                await self._db.execute(f"ALTER TABLE vms ADD COLUMN {col} TEXT NOT NULL DEFAULT {default}")
+            except Exception:
+                pass
         await self._db.commit()
 
     def _row_to_vm(self, row: aiosqlite.Row) -> VMConfig:
@@ -105,6 +115,8 @@ class VMManager:
             owner=row["owner"],
             created_at=row["created_at"],
             disk_path=row["disk_path"],
+            network_mode=row["network_mode"] if "network_mode" in row.keys() else "user",
+            bridge_iface=row["bridge_iface"] if "bridge_iface" in row.keys() else "br0",
         )
 
     async def create_vm(
@@ -116,6 +128,8 @@ class VMManager:
         iso_file: str | None,
         owner: str,
         import_disk_path: str | None = None,
+        network_mode: str = "user",
+        bridge_iface: str = "br0",
     ) -> VMConfig:
         """Erstellt eine neue VM mit QCOW2-Disk."""
         await self._init_db()
@@ -164,14 +178,17 @@ class VMManager:
             owner=owner,
             created_at=time.time(),
             disk_path=str(disk_path),
+            network_mode=network_mode,
+            bridge_iface=bridge_iface,
         )
 
         await self._db.execute(
             """INSERT INTO vms
-               (vm_id, name, cpu, ram_mb, disk_gb, iso_file, status, pid, vnc_port, vnc_token, owner, created_at, disk_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (vm_id, name, cpu, ram_mb, disk_gb, iso_file, status, pid, vnc_port, vnc_token, owner, created_at, disk_path, network_mode, bridge_iface)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (vm.vm_id, vm.name, vm.cpu, vm.ram_mb, vm.disk_gb, vm.iso_file,
-             vm.status, vm.pid, vm.vnc_port, vm.vnc_token, vm.owner, vm.created_at, vm.disk_path),
+             vm.status, vm.pid, vm.vnc_port, vm.vnc_token, vm.owner, vm.created_at, vm.disk_path,
+             vm.network_mode, vm.bridge_iface),
         )
         await self._db.commit()
         logger.info("VM erstellt: %s (%s)", name, vm_id)
@@ -388,10 +405,20 @@ class VMManager:
             cmd += ["-enable-kvm", "-machine", "type=pc,accel=kvm", "-cpu", "host"]
         else:
             cmd += ["-machine", "type=pc", "-cpu", "qemu64"]
-        cmd += [
-            "-device", "virtio-net-pci,netdev=net0",
-            "-netdev", "user,id=net0",
-        ]
+        if vm.network_mode == "bridge":
+            # Bridge-Networking: VM bekommt IP vom Router-DHCP
+            # Voraussetzung: Bridge-Interface (br0) auf dem Host existiert
+            # und /etc/qemu/bridge.conf erlaubt es (via qemu-bridge-helper)
+            cmd += [
+                "-device", "virtio-net-pci,netdev=net0",
+                "-netdev", f"bridge,id=net0,br={vm.bridge_iface}",
+            ]
+        else:
+            # user (NAT): QEMU-internes Netz 10.0.2.x — kein Router-Zugriff
+            cmd += [
+                "-device", "virtio-net-pci,netdev=net0",
+                "-netdev", "user,id=net0",
+            ]
         if vm.iso_file:
             iso_path = Path(vm.iso_file)
             if iso_path.exists():

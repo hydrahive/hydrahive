@@ -66,6 +66,8 @@ class VMCreateRequest(BaseModel):
     disk_gb: int = Field(20, ge=5, le=500)
     iso_file: str | None = None
     import_job_id: str | None = None
+    network_mode: str = Field("user", pattern=r"^(user|bridge)$")
+    bridge_iface: str = Field("br0", pattern=r"^[a-zA-Z0-9_\-]{1,15}$")
 
 
 class VMActionResponse(BaseModel):
@@ -154,6 +156,8 @@ def register_vm_routes(
                 iso_file=iso_path,
                 owner="admin",
                 import_disk_path=import_disk_path,
+                network_mode=req.network_mode,
+                bridge_iface=req.bridge_iface,
             )
             return vm.to_dict()
         except ValueError as e:
