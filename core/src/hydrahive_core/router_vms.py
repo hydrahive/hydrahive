@@ -70,6 +70,11 @@ class VMCreateRequest(BaseModel):
     bridge_iface: str = Field("br0", pattern=r"^[a-zA-Z0-9_\-]{1,15}$")
 
 
+class VMUpdateRequest(BaseModel):
+    network_mode: str | None = Field(None, pattern=r"^(user|bridge)$")
+    bridge_iface: str | None = Field(None, pattern=r"^[a-zA-Z0-9_\-]{1,15}$")
+
+
 class VMActionResponse(BaseModel):
     vm_id: str
     status: str
@@ -273,6 +278,17 @@ def register_vm_routes(
         if not vm:
             raise HTTPException(404, f"VM nicht gefunden: {vm_id}")
         return vm.to_dict()
+
+    @admin_router.patch("/admin/vms/{vm_id}")
+    async def update_vm(vm_id: str, req: VMUpdateRequest, _=_admin):
+        """VM-Konfiguration ändern (nur wenn gestoppt)."""
+        mgr = _get_vm_manager()
+        try:
+            vm = await mgr.update_vm(vm_id, network_mode=req.network_mode, bridge_iface=req.bridge_iface)
+            return vm.to_dict()
+        except ValueError as e:
+            status_code = 409 if "gestoppt" in str(e) else 404
+            raise HTTPException(status_code, str(e))
 
     @admin_router.delete("/admin/vms/{vm_id}")
     async def delete_vm(vm_id: str, _=_admin):

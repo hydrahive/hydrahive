@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Play, Square, Trash2, Upload, Loader2,
   Monitor, Server, HardDrive, Cpu, Activity,
-  X, ChevronRight, AlertCircle,
+  X, ChevronRight, AlertCircle, Network, Pencil,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -27,6 +27,8 @@ interface VMInfo {
   owner: string;
   created_at: number;
   disk_path: string;
+  network_mode: string;
+  bridge_iface: string;
 }
 
 interface ISOInfo {
@@ -53,6 +55,87 @@ function StatusBadge({ status }: { status: string }) {
       <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
       {c.label}
     </span>
+  );
+}
+
+// ── EditNetworkModal ───────────────────────────────────────────────────────────
+interface EditNetworkModalProps {
+  vm: VMInfo;
+  onClose: () => void;
+  onUpdated: () => void;
+}
+
+function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
+  const [networkMode, setNetworkMode] = useState<"user" | "bridge">(vm.network_mode === "bridge" ? "bridge" : "user");
+  const [bridgeIface, setBridgeIface] = useState(vm.bridge_iface || "br0");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/vms/${vm.vm_id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ network_mode: networkMode, bridge_iface: bridgeIface }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
+      }
+      onUpdated();
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="card w-full max-w-sm mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold flex items-center gap-2"><Network className="w-4 h-4" /> Netzwerk ändern — {vm.name}</h2>
+          <button className="btn btn-sm" onClick={onClose}><X className="w-4 h-4" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Netzwerk-Modus</label>
+            <select className="w-full px-3 py-2 border rounded-lg text-sm" value={networkMode} onChange={e => setNetworkMode(e.target.value as "user" | "bridge")}>
+              <option value="user">NAT (intern, 10.0.2.x)</option>
+              <option value="bridge">Bridge (Router-DHCP, eigene IP)</option>
+            </select>
+          </div>
+          {networkMode === "bridge" && (
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Bridge-Interface</label>
+              <input
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                value={bridgeIface}
+                onChange={e => setBridgeIface(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, ""))}
+                placeholder="br0"
+                maxLength={15}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Bridge muss auf dem Host existieren (z.B. br0)</p>
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 rounded p-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />{error}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button className="btn" onClick={onClose} disabled={loading}>Abbrechen</button>
+            <button className="btn btn-primary flex items-center gap-1.5" onClick={handleSave} disabled={loading}>
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}Speichern
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -510,6 +593,7 @@ export function VMsPage() {
   const [activeTab, setActiveTab] = useState<"vms" | "isos">("vms");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [editNetworkVm, setEditNetworkVm] = useState<VMInfo | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -686,6 +770,10 @@ export function VMsPage() {
                   <div className="flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" />{vm.disk_gb} GB</div>
                   <div className="flex items-center gap-1"><Activity className="w-3.5 h-3.5" />{(vm.ram_mb / 1024).toFixed(1)} GB</div>
                 </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Network className="w-3.5 h-3.5" />
+                  {vm.network_mode === "bridge" ? `Bridge (${vm.bridge_iface || "br0"})` : "NAT (10.0.2.x)"}
+                </div>
                 {vm.vnc_port && vm.status === "running" && (
                   <div className="text-xs text-muted-foreground">VNC: Port {vm.vnc_port}</div>
                 )}
@@ -725,8 +813,18 @@ export function VMsPage() {
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />{vm.status === "starting" ? "Startet…" : "Stoppt…"}
                     </span>
                   )}
+                  {(vm.status === "stopped" || vm.status === "created" || vm.status === "error") && (
+                    <button
+                      className="btn btn-sm flex items-center gap-1 ml-auto"
+                      title="Netzwerk ändern"
+                      onClick={() => setEditNetworkVm(vm)}
+                      disabled={busy(vm.vm_id)}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
-                    className="btn btn-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950 border border-red-200 dark:border-red-800 ml-auto"
+                    className={`btn btn-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950 border border-red-200 dark:border-red-800 ${vm.status === "running" ? "ml-auto" : ""}`}
                     onClick={() => { if (window.confirm(`VM "${vm.name}" wirklich löschen?`)) handleAction(vm.vm_id, "delete"); }}
                     disabled={busy(vm.vm_id) || vm.status === "starting" || vm.status === "stopping"}
                   >
@@ -823,6 +921,15 @@ export function VMsPage() {
         <ImportVMModal
           onClose={() => setShowImportModal(false)}
           onCreated={() => { setShowImportModal(false); fetchVms(); }}
+        />
+      )}
+
+      {/* Edit Network Modal */}
+      {editNetworkVm && (
+        <EditNetworkModal
+          vm={editNetworkVm}
+          onClose={() => setEditNetworkVm(null)}
+          onUpdated={() => { setEditNetworkVm(null); fetchVms(); }}
         />
       )}
     </div>

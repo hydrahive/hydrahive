@@ -346,6 +346,27 @@ class VMManager:
             rows = await self._db.execute("SELECT * FROM vms ORDER BY created_at DESC")
         return [self._row_to_vm(r) async for r in rows]
 
+    async def update_vm(self, vm_id: str, *, network_mode: str | None = None, bridge_iface: str | None = None) -> VMConfig:
+        """Ändert konfigurierbare VM-Felder (nur wenn gestoppt/created/error)."""
+        await self._init_db()
+        row = await self._db.execute("SELECT * FROM vms WHERE vm_id = ?", (vm_id,))
+        vm_row = await row.fetchone()
+        if not vm_row:
+            raise ValueError(f"VM nicht gefunden: {vm_id}")
+        vm = self._row_to_vm(vm_row)
+        if vm.status not in (VM_STATUS_STOPPED, VM_STATUS_CREATED, VM_STATUS_ERROR):
+            raise ValueError(f"VM muss gestoppt sein um geändert zu werden (status={vm.status})")
+        if network_mode is not None:
+            vm.network_mode = network_mode
+        if bridge_iface is not None:
+            vm.bridge_iface = bridge_iface
+        await self._db.execute(
+            "UPDATE vms SET network_mode=?, bridge_iface=? WHERE vm_id=?",
+            (vm.network_mode, vm.bridge_iface, vm_id),
+        )
+        await self._db.commit()
+        return vm
+
     async def refresh_status(self, vm_id: str) -> VMConfig:
         """Prüft ob PID noch lebt, setzt status=error falls nicht."""
         await self._init_db()
