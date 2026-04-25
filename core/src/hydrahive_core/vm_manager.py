@@ -115,6 +115,7 @@ class VMManager:
         disk_gb: int,
         iso_file: str | None,
         owner: str,
+        import_disk_path: str | None = None,
     ) -> VMConfig:
         """Erstellt eine neue VM mit QCOW2-Disk."""
         await self._init_db()
@@ -127,20 +128,27 @@ class VMManager:
 
         vm_id = uuid.uuid4().hex
         vm_dir = self._vms_dir / vm_id
-        disk_path = vm_dir / "disk.qcow2"
-
-        # Verzeichnis anlegen
         vm_dir.mkdir(parents=True, exist_ok=True)
 
-        # Disk erstellen
-        proc = await asyncio.create_subprocess_exec(
-            "qemu-img", "create", "-f", "qcow2", str(disk_path), f"{disk_gb}G",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            shutil.rmtree(vm_dir, ignore_errors=True)
-            raise RuntimeError(f"qemu-img create failed: {stderr.decode().strip()}")
+        if import_disk_path:
+            # Importierte Disk verschieben (rename, kein Copy)
+            import_src = Path(import_disk_path)
+            disk_path = vm_dir / "disk.qcow2"
+            import_src.rename(disk_path)
+            # disk_gb aus der tatsächlichen Disk-Größe ermitteln
+            actual_size = disk_path.stat().st_size
+            disk_gb = max(1, actual_size // (1024 ** 3))
+        else:
+            # Neue leere Disk erstellen
+            disk_path = vm_dir / "disk.qcow2"
+            proc = await asyncio.create_subprocess_exec(
+                "qemu-img", "create", "-f", "qcow2", str(disk_path), f"{disk_gb}G",
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                shutil.rmtree(vm_dir, ignore_errors=True)
+                raise RuntimeError(f"qemu-img create failed: {stderr.decode().strip()}")
 
         vm = VMConfig(
             vm_id=vm_id,

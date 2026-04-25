@@ -243,6 +243,9 @@ main() {
             mkdir -p "$_t" && chown hydrahive:hydrahive "$_t"
             [ "$_vmdir" = "vnc-tokens" ] && chmod 700 "$_t" || chmod 750 "$_t"
         done
+        # disk-imports Verzeichnis (#908)
+        _t="/var/lib/hydrahive/disk-imports"
+        mkdir -p "$_t" && chown hydrahive:hydrahive "$_t" && chmod 750 "$_t"
         id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm" || \
             usermod -aG kvm hydrahive 2>/dev/null || true
         # websockify systemd-Service (idempotent)
@@ -901,6 +904,58 @@ PYEOF
         else
             warn "#895: nginx -t fehlgeschlagen nach ISO-Patch — Rollback aus ${_backup_iso}"
             cp "${_backup_iso}" "${_nginx_cfg_iso}"
+        fi
+    fi
+
+    # #908: Disk-Import-Upload-Location in nginx-Config einfügen
+    _nginx_cfg_import=""
+    for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+        if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then
+            _nginx_cfg_import="${_cand}"
+            break
+        elif [ -f "${_cand}" ]; then
+            _nginx_cfg_import=$(readlink -f "${_cand}")
+            break
+        fi
+    done
+    if [ -n "${_nginx_cfg_import}" ] && ! grep -q "admin/vms/import/upload" "${_nginx_cfg_import}"; then
+        info "#908: Disk-Import-Upload-Location in nginx einfügen (client_max_body_size 0)"
+        _backup_import="${_nginx_cfg_import}.bak-diskimport-$(date +%s)"
+        cp "${_nginx_cfg_import}" "${_backup_import}"
+        python3 <<PYEOF
+import re, sys
+p = "${_nginx_cfg_import}"
+txt = open(p).read()
+if "admin/vms/import/upload" in txt:
+    sys.exit(0)
+block = (
+    "    # VM-Disk-Import (#908)\n"
+    "    location = /api/admin/vms/import/upload {\n"
+    "        include /etc/nginx/snippets/hydrahive-security-headers.conf;\n"
+    "        proxy_pass         http://127.0.0.1:8765/admin/vms/import/upload;\n"
+    "        proxy_http_version 1.1;\n"
+    "        proxy_set_header   Host              \$host;\n"
+    "        proxy_set_header   X-Real-IP         \$remote_addr;\n"
+    "        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;\n"
+    "        proxy_set_header   Connection        \"\";\n"
+    "        proxy_read_timeout    7200s;\n"
+    "        proxy_connect_timeout 5s;\n"
+    "        client_max_body_size  0;\n"
+    "        proxy_request_buffering off;\n"
+    "    }\n\n"
+)
+new_txt, count = re.subn(r"(\s*location /api/ \{)", "\n" + block + r"\1", txt, count=1)
+if count == 0:
+    sys.exit("marker 'location /api/ {' nicht gefunden")
+open(p, "w").write(new_txt)
+PYEOF
+        if nginx -t 2>&1 | head -5; then
+            systemctl reload nginx 2>&1 | head -3 && \
+                info "#908: nginx Disk-Import-Upload-Location aktiv (client_max_body_size 0)" || \
+                warn "#908: nginx reload fehlgeschlagen"
+        else
+            warn "#908: nginx -t fehlgeschlagen nach Disk-Import-Patch — Rollback aus ${_backup_import}"
+            cp "${_backup_import}" "${_nginx_cfg_import}"
         fi
     fi
 

@@ -52,7 +52,7 @@ fi
 # ── Storage-Verzeichnisse anlegen ───────────────────────────────────────
 # Basis-Verzeichnis muss hydrahive gehören damit vms.db erstellt werden kann
 chown hydrahive:hydrahive /var/lib/hydrahive
-for dir in isos vms vnc-tokens; do
+for dir in isos vms vnc-tokens disk-imports; do
   target="/var/lib/hydrahive/${dir}"
   mkdir -p "$target"
   chown hydrahive:hydrahive "$target"
@@ -61,7 +61,7 @@ for dir in isos vms vnc-tokens; do
     *)          chmod 750 "$target" ;;
   esac
 done
-success "Storage-Verzeichnisse (/var/lib/hydrahive/{isos,vms,vnc-tokens}) erstellt"
+success "Storage-Verzeichnisse (/var/lib/hydrahive/{isos,vms,vnc-tokens,disk-imports}) erstellt"
 
 # ── websockify systemd-Service ────────────────────────────────────────────
 cat > /etc/systemd/system/hydrahive-websockify.service << 'EOF'

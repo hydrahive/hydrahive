@@ -220,6 +220,233 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
   );
 }
 
+// ── ImportVMModal ──────────────────────────────────────────────────────────────
+interface ImportVMModalProps {
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+type ImportStep = "params" | "uploading" | "converting" | "creating" | "error";
+
+function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
+  const [step, setStep] = useState<ImportStep>("params");
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState("");
+  const [cpu, setCpu] = useState(2);
+  const [ramMb, setRamMb] = useState(2048);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [convertPct, setConvertPct] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function cleanup() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }
+
+  async function startImport() {
+    if (!file || !name.trim()) return;
+    setStep("uploading");
+    setUploadPct(0);
+
+    // XHR Upload mit Fortschrittsbalken
+    const formData = new FormData();
+    formData.append("file", file);
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener("progress", e => {
+        if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 100));
+      });
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const d = JSON.parse(xhr.responseText);
+            setJobId(d.job_id);
+            resolve();
+          } catch {
+            reject(new Error("Ungültige Server-Antwort beim Upload"));
+          }
+        } else {
+          try {
+            const d = JSON.parse(xhr.responseText);
+            reject(new Error(fmtDetail(d.detail, `HTTP ${xhr.status}`)));
+          } catch {
+            reject(new Error(`Upload fehlgeschlagen (${xhr.status})`));
+          }
+        }
+      });
+      xhr.addEventListener("error", () => reject(new Error("Netzwerkfehler beim Upload")));
+      xhr.open("POST", "/api/admin/vms/import/upload");
+      xhr.withCredentials = true;
+      xhr.send(formData);
+    }).then(() => {
+      setStep("converting");
+    }).catch((e: unknown) => {
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setStep("error");
+    });
+  }
+
+  // Polling während converting
+  useEffect(() => {
+    if (step !== "converting" || !jobId) return;
+    cleanup();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/vms/import/${jobId}/status`, { credentials: "include" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        setConvertPct(d.progress_pct ?? 0);
+        if (d.status === "done") {
+          cleanup();
+          createVM(jobId);
+        } else if (d.status === "error") {
+          cleanup();
+          setErrorMsg(d.error ?? "Konvertierung fehlgeschlagen");
+          setStep("error");
+        }
+      } catch (e: unknown) {
+        cleanup();
+        setErrorMsg(e instanceof Error ? e.message : String(e));
+        setStep("error");
+      }
+    }, 2000);
+    return cleanup;
+  }, [step, jobId]);
+
+  async function createVM(jid: string) {
+    setStep("creating");
+    try {
+      const res = await fetch("/api/admin/vms", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          cpu,
+          ram_mb: ramMb,
+          disk_gb: 20, // wird vom Backend aus der tatsächlichen Disk-Größe ermittelt
+          import_job_id: jid,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
+      }
+      onCreated();
+      onClose();
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setStep("error");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="card w-full max-w-lg mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Upload className="w-5 h-5" /> VM importieren
+          </h2>
+          <button className="btn btn-sm" onClick={() => { cleanup(); onClose(); }}><X className="w-4 h-4" /></button>
+        </div>
+
+        {/* Step: params */}
+        {step === "params" && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Disk-Image (.vdi, .vmdk, .vhd, .vhdx, .raw, .img, .qcow2)</label>
+              <input
+                type="file"
+                accept=".vdi,.vmdk,.vhd,.vhdx,.raw,.img,.qcow2"
+                className="w-full text-sm"
+                onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }}
+              />
+              {file && <p className="text-xs text-muted-foreground mt-1">{file.name} ({(file.size / 1024 / 1024 / 1024).toFixed(2)} GB)</p>}
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">VM-Name</label>
+              <input
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                value={name}
+                onChange={e => setName(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, ""))}
+                placeholder="meine-vm"
+                maxLength={64}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">CPU (Kerne)</label>
+                <input type="number" className="w-full px-3 py-2 border rounded-lg text-sm" value={cpu} min={1} max={16} onChange={e => setCpu(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">RAM</label>
+                <select className="w-full px-3 py-2 border rounded-lg text-sm" value={ramMb} onChange={e => setRamMb(Number(e.target.value))}>
+                  {RAM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-between pt-2">
+              <button className="btn" onClick={onClose}>Abbrechen</button>
+              <button className="btn btn-primary flex items-center gap-2" onClick={startImport} disabled={!file || !name.trim()}>
+                <Upload className="w-4 h-4" /> Importieren
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: uploading */}
+        {step === "uploading" && (
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center text-muted-foreground">Datei wird hochgeladen…</p>
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary transition-all" style={{ width: `${uploadPct}%` }} />
+            </div>
+            <p className="text-center text-sm font-medium">{uploadPct}%</p>
+          </div>
+        )}
+
+        {/* Step: converting */}
+        {step === "converting" && (
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center text-muted-foreground">Konvertierung zu QCOW2…</p>
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary transition-all" style={{ width: `${convertPct}%` }} />
+            </div>
+            <p className="text-center text-sm font-medium">{convertPct}%</p>
+          </div>
+        )}
+
+        {/* Step: creating */}
+        {step === "creating" && (
+          <div className="flex items-center justify-center gap-3 py-8 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">VM wird erstellt…</span>
+          </div>
+        )}
+
+        {/* Step: error */}
+        {step === "error" && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 rounded p-3">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMsg ?? "Unbekannter Fehler"}</span>
+            </div>
+            <div className="flex justify-between pt-2">
+              <button className="btn" onClick={onClose}>Schließen</button>
+              <button className="btn btn-primary" onClick={() => { setStep("params"); setErrorMsg(null); setJobId(null); }}>
+                Nochmal versuchen
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── VMsPage ────────────────────────────────────────────────────────────────────
 export function VMsPage() {
   const { isAdmin } = useAuth();
@@ -230,6 +457,7 @@ export function VMsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"vms" | "isos">("vms");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -343,9 +571,17 @@ export function VMsPage() {
           {!isAdmin && <p className="text-sm text-muted-foreground mt-1">Admin-Rechte erforderlich</p>}
         </div>
         {activeTab === "vms" && isAdmin && (
-          <button className="btn btn-primary flex items-center gap-2" onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4" /> Neue VM
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn btn-secondary flex items-center gap-2"
+              onClick={() => setShowImportModal(true)}
+            >
+              <Upload className="w-4 h-4" /> VM importieren
+            </button>
+            <button className="btn btn-primary flex items-center gap-2" onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4" /> Neue VM
+            </button>
+          </div>
         )}
       </div>
 
@@ -527,6 +763,14 @@ export function VMsPage() {
           isos={isos}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => { setShowCreateModal(false); fetchVms(); }}
+        />
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <ImportVMModal
+          onClose={() => setShowImportModal(false)}
+          onCreated={() => { setShowImportModal(false); fetchVms(); }}
         />
       )}
     </div>
