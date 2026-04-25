@@ -201,10 +201,21 @@ class VMManager:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        # proc startet QEMU als Kind; wir lesen PID aus pidfile
-        await asyncio.sleep(0.5)
+        # 1.5s warten und prüfen ob QEMU noch lebt
+        await asyncio.sleep(1.5)
+        if proc.returncode is not None:
+            _, stderr_data = await proc.communicate()
+            err = stderr_data.decode(errors="replace").strip()
+            self._vnc_proxy.unregister(vm_id)
+            await self._db.execute(
+                "UPDATE vms SET status=? WHERE vm_id=?",
+                (VM_STATUS_ERROR, vm_id),
+            )
+            await self._db.commit()
+            raise RuntimeError(f"QEMU beendet sich sofort (rc={proc.returncode}): {err[:300]}")
+
         pid_str = pidfile.read_text().strip() if pidfile.exists() else ""
-        pid = int(pid_str) if pid_str.isdigit() else None
+        pid = int(pid_str) if pid_str.isdigit() else proc.pid
 
         # Status updaten
         await self._db.execute(
@@ -351,16 +362,20 @@ class VMManager:
         raise RuntimeError("Kein freier VNC-Port mehr verfügbar (5900-5999)")
 
     def _build_qemu_cmd(self, vm: VMConfig, vnc_display: int) -> list[str]:
-        """Baut das QEMU-KVM-Kommando als Liste (für create_subprocess_exec)."""
+        """Baut das QEMU-Kommando. KVM wird genutzt wenn /dev/kvm verfügbar, sonst TCG."""
+        kvm = Path("/dev/kvm").exists()
         cmd = [
             "qemu-system-x86_64",
-            "-enable-kvm",
             "-m", str(vm.ram_mb),
             "-smp", str(vm.cpu),
             "-drive", f"file={vm.disk_path},format=qcow2",
             "-vnc", f"127.0.0.1:{vnc_display}",
-            "-machine", "type=q35,accel=kvm",
-            "-cpu", "host",
+        ]
+        if kvm:
+            cmd += ["-enable-kvm", "-machine", "type=q35,accel=kvm", "-cpu", "host"]
+        else:
+            cmd += ["-machine", "type=q35", "-cpu", "qemu64"]
+        cmd += [
             "-device", "virtio-net-pci,netdev=net0",
             "-netdev", "user,id=net0",
         ]
@@ -377,4 +392,5 @@ class VMManager:
             if Path(bp).exists():
                 cmd += ["-bios", bp]
                 break
+        logger.info("QEMU-Cmd (kvm=%s): %s", kvm, " ".join(cmd))
         return cmd

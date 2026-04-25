@@ -245,6 +245,27 @@ main() {
         done
         id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm" || \
             usermod -aG kvm hydrahive 2>/dev/null || true
+        # websockify systemd-Service (idempotent)
+        if command -v websockify >/dev/null 2>&1; then
+            cat > /etc/systemd/system/hydrahive-websockify.service << 'WSEOF'
+[Unit]
+Description=HydraHive VNC WebSocket Proxy
+After=network.target hydrahive-core.service
+
+[Service]
+User=hydrahive
+ExecStart=/usr/bin/websockify --token-plugin=TokenFile --token-source=/var/lib/hydrahive/vnc-tokens/ 6080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+WSEOF
+            systemctl daemon-reload
+            systemctl enable --now hydrahive-websockify.service 2>/dev/null && \
+                info "websockify-Service aktiv (Port 6080)" || \
+                warn "websockify-Service konnte nicht gestartet werden"
+        fi
     fi
 
     # --- 3c. Default-MCP-Server installieren + registrieren (idempotent, #620) ---
