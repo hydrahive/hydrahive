@@ -290,6 +290,39 @@ WSEOF
         fi
     fi
 
+    # #895: Bridge br0 automatisch einrichten für VM Bridge-Networking (idempotent)
+    _primary_nic=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+    if [ -z "$_primary_nic" ]; then
+        warn "Bridge-Setup: Primäres Interface nicht erkennbar — übersprungen"
+    elif ip link show br0 >/dev/null 2>&1; then
+        info "Bridge br0 bereits vorhanden — übersprungen"
+    elif command -v netplan >/dev/null 2>&1 && [ -d /etc/netplan ]; then
+        info "Bridge br0 einrichten (${_primary_nic} → br0) via netplan..."
+        cat > /etc/netplan/99-hydrahive-bridge.yaml << NPEOF
+network:
+  version: 2
+  ethernets:
+    ${_primary_nic}:
+      dhcp4: false
+  bridges:
+    br0:
+      interfaces: [${_primary_nic}]
+      dhcp4: true
+      parameters:
+        stp: false
+        forward-delay: 0
+NPEOF
+        chmod 600 /etc/netplan/99-hydrahive-bridge.yaml
+        if netplan apply 2>/dev/null; then
+            info "Bridge br0 eingerichtet (kurze Netz-Unterbrechung ist normal)"
+        else
+            warn "netplan apply fehlgeschlagen — Bridge manuell prüfen"
+            rm -f /etc/netplan/99-hydrahive-bridge.yaml
+        fi
+    else
+        warn "netplan nicht verfügbar — Bridge br0 manuell einrichten oder bridge-utils nutzen"
+    fi
+
     # #895: /ws/vnc/ WebSocket-Location in nginx einfügen falls fehlend
     _nginx_cfg_vnc=""
     for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
