@@ -17,9 +17,9 @@ from typing import AsyncIterator
 logger = logging.getLogger(__name__)
 
 # ── Magic Bytes ────────────────────────────────────────────────────────────────
-# ISO 9660: Sector 16 (32768), Byte 1-5 = "CD001"
+# ISO 9660: Sector 16 starts at byte 32768; byte 0 = descriptor type, bytes 1-5 = "CD001"
 _ISO9660_MAGIC = b"CD001"
-_ISO9660_OFFSET = 32768
+_ISO9660_OFFSET = 32769  # skip the 1-byte descriptor type
 
 # ── Filename-Regex ─────────────────────────────────────────────────────────────
 _SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\-]{1,128}$")
@@ -62,7 +62,7 @@ class ISOManager:
     def validate_iso(self, path: Path) -> bool:
         """Prüft ISO 9660 Magic Bytes. Akzeptiert auch UDF-ISOs."""
         try:
-            if path.stat().st_size < _ISO9660_OFFSET + 5:
+            if path.stat().st_size < _ISO9660_OFFSET + 5:  # needs 32769 + 5 bytes
                 return False
             with path.open("rb") as f:
                 f.seek(_ISO9660_OFFSET)
