@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Bot, Plus, Pencil, Trash2, X,
-  Users, Settings, Loader2,
+  Users, Settings, Loader2, Plug,
 } from "lucide-react";
 import { api } from "@/lib/api";
+
+interface McpServer { id: string; name: string; transport?: string }
 
 interface Agent {
   id: string;
@@ -40,6 +42,7 @@ interface FormState {
   max_tool_rounds: string;
   compaction_threshold: string;
   project_assignments: Record<string, string>;
+  mcp_servers: string[];
 }
 
 const emptyForm = (): FormState => ({
@@ -48,6 +51,7 @@ const emptyForm = (): FormState => ({
   execution_mode_default: "elevated", risk_policy: "interactive",
   max_tool_rounds: "", compaction_threshold: "",
   project_assignments: {},
+  mcp_servers: [],
 });
 
 function slugify(s: string) {
@@ -58,6 +62,7 @@ export function AgentsPage() {
   const [agents, setAgents] = useState<Record<string, Agent>>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -77,7 +82,7 @@ export function AgentsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [a, t, p] = await Promise.all([
+      const [a, t, p, mcp] = await Promise.all([
         api.get<Record<string, Agent>>("/agents"),
         api.get<string[]>("/admin/teams").then(async (ids: string[]) => {
           const mapped: Team[] = [];
@@ -93,10 +98,12 @@ export function AgentsPage() {
             agents: cfg?.agents ?? {},
           }))
         ),
+        api.get<{ servers: McpServer[] }>("/mcp/servers").then(r => r?.servers ?? []).catch(() => []),
       ]);
       setAgents(a ?? {});
       setTeams(t);
       setProjects(p);
+      setMcpServers(mcp);
     } catch (e) {
       console.error("loadAll failed", e);
     } finally {
@@ -131,6 +138,7 @@ export function AgentsPage() {
       max_tool_rounds: String(agAny.max_tool_rounds ?? ag.max_tool_rounds ?? ""),
       compaction_threshold: "",
       project_assignments: {},
+      mcp_servers: agAny.mcp_servers ?? [],
     });
     setActiveTab("basis");
     setDialogOpen(true);
@@ -151,6 +159,7 @@ export function AgentsPage() {
         execution_mode_default: form.execution_mode_default,
         risk_policy: form.risk_policy,
         max_tool_rounds: form.max_tool_rounds ? parseInt(form.max_tool_rounds) : null,
+        mcp_servers: form.mcp_servers,
       };
       if (isNew) {
         await api.post("/agents", payload);
@@ -215,6 +224,15 @@ export function AgentsPage() {
     { id: "zuweisung", label: "Zuweisung", icon: Users },
     { id: "erweitert", label: "Erweitert", icon: Settings },
   ];
+
+  function toggleMcp(id: string) {
+    setForm(prev => ({
+      ...prev,
+      mcp_servers: prev.mcp_servers.includes(id)
+        ? prev.mcp_servers.filter(s => s !== id)
+        : [...prev.mcp_servers, id],
+    }));
+  }
 
   const typeOptions = [
     { value: "boss", label: "Boss — Haupt-KI des Projekts" },
@@ -653,6 +671,39 @@ export function AgentsPage() {
                       className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/60"
                     />
                   </div>
+                  {mcpServers.length > 0 && (
+                    <div>
+                      <label className="flex items-center gap-1.5 text-xs text-white/40 mb-2">
+                        <Plug className="h-3 w-3" /> Erweiterungen (MCP-Server)
+                      </label>
+                      <div className="space-y-1.5">
+                        {mcpServers.map(srv => {
+                          const active = form.mcp_servers.includes(srv.id);
+                          return (
+                            <button
+                              key={srv.id}
+                              type="button"
+                              onClick={() => toggleMcp(srv.id)}
+                              className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
+                                active
+                                  ? "border-indigo-500/40 bg-indigo-500/10 text-white"
+                                  : "border-white/10 bg-zinc-800/50 text-white/40 hover:text-white/70"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                <Plug className="h-3.5 w-3.5 flex-shrink-0" />
+                                <span>{srv.name || srv.id}</span>
+                                <span className="font-mono text-[10px] opacity-50">{srv.id}</span>
+                              </span>
+                              <span className={`text-[10px] font-medium ${active ? "text-indigo-400" : "text-white/20"}`}>
+                                {active ? "AN" : "AUS"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
