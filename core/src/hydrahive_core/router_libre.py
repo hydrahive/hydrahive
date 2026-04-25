@@ -202,19 +202,21 @@ def fetch_history(cfg: dict, hours: int = 24) -> list[dict]:
     return result[-min(len(result), hours * 12):]  # ~1 reading per 5 min
 
 
+from pydantic import BaseModel as _BaseModel
+
+class LibreConfigBody(_BaseModel):
+    email: str = ""
+    password: str = ""
+    region: str = "EU"
+    unit: str = "mmol"
+    low: float = 3.9
+    high: float = 10.0
+
+
 # ─── FastAPI routes ────────────────────────────────────────────────────────────
 
 def register_libre_routes(router, *, require_auth) -> None:
     from fastapi import Depends, HTTPException
-    from pydantic import BaseModel
-
-    class LibreConfig(BaseModel):
-        email: str = ""
-        password: str = ""
-        region: str = "EU"
-        unit: str = "mmol"
-        low: float = 3.9
-        high: float = 10.0
 
     @router.get("/libre/config")
     def libre_get_config(_auth=Depends(require_auth)):
@@ -231,7 +233,7 @@ def register_libre_routes(router, *, require_auth) -> None:
             return {"configured": False}
 
     @router.put("/libre/config")
-    def libre_save_config(req: LibreConfig, _auth=Depends(require_auth)):
+    def libre_save_config(req: LibreConfigBody, _auth=Depends(require_auth)):
         p = _config_path()
         existing: dict = {}
         if p.exists():
