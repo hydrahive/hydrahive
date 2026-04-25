@@ -228,12 +228,24 @@ main() {
 
     # --- 3b. System-Dependencies nachrüsten (idempotent) ---
     # bubblewrap (bwrap) ist PFLICHT fuer shell_exec safe/elevated-Sandbox (#605)
-    for pkg in ffmpeg jq tree bubblewrap; do
+    # qemu-utils/qemu-system-x86_64 für VM-Manager (#895)
+    for pkg in ffmpeg jq tree bubblewrap qemu-utils qemu-system-x86_64; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
             info "Installiere fehlende Abhängigkeit: $pkg"
             apt-get install -y -qq "$pkg" || warn "$pkg konnte nicht installiert werden"
         fi
     done
+    # VM-Manager: Storage-Verzeichnisse + kvm-Gruppe (idempotent, #895)
+    if dpkg -l qemu-utils 2>/dev/null | grep -q "^ii"; then
+        chown hydrahive:hydrahive /var/lib/hydrahive 2>/dev/null || true
+        for _vmdir in isos vms vnc-tokens; do
+            _t="/var/lib/hydrahive/${_vmdir}"
+            mkdir -p "$_t" && chown hydrahive:hydrahive "$_t"
+            [ "$_vmdir" = "vnc-tokens" ] && chmod 700 "$_t" || chmod 750 "$_t"
+        done
+        id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm" || \
+            usermod -aG kvm hydrahive 2>/dev/null || true
+    fi
 
     # --- 3c. Default-MCP-Server installieren + registrieren (idempotent, #620) ---
     if [ -f "${TMPDIR_BASE}/installer/install-default-mcp-servers.sh" ]; then

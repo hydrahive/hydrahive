@@ -6,6 +6,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function fmtDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map((e: any) => e.msg || String(e)).join(", ");
+  return fallback;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface VMInfo {
   vm_id: string;
@@ -94,7 +101,7 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail || `HTTP ${res.status}`);
+        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
       }
       onCreated();
       onClose();
@@ -275,7 +282,7 @@ export function VMsPage() {
       const res = await fetch(url, { method: method[action], credentials: "include" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail || `HTTP ${res.status}`);
+        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
       }
       await fetchVms();
     } catch (e: unknown) {
@@ -291,7 +298,7 @@ export function VMsPage() {
       const res = await fetch(`/api/admin/vms/isos/${encodeURIComponent(filename)}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail || `HTTP ${res.status}`);
+        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
       }
       setIsos(prev => prev.filter(i => i.filename !== filename));
     } catch (e: unknown) {
@@ -311,7 +318,7 @@ export function VMsPage() {
       if (xhr.status >= 200 && xhr.status < 300) {
         fetchIsos();
       } else {
-        try { const d = JSON.parse(xhr.responseText); setUploadError(d.detail || `HTTP ${xhr.status}`); }
+        try { const d = JSON.parse(xhr.responseText); setUploadError(fmtDetail(d.detail, `HTTP ${xhr.status}`)); }
         catch { setUploadError(`Upload fehlgeschlagen (${xhr.status})`); }
       }
     });

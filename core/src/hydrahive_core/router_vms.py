@@ -116,10 +116,10 @@ def register_vm_routes(
         iso_path: str | None = None
         if req.iso_file:
             iso_mgr = _get_iso_manager()
-            resolved = iso_mgr.get_iso_path(req.iso_file)
-            if resolved is None:
-                raise HTTPException(400, f"ISO nicht gefunden: {req.iso_file}")
-            iso_path = str(resolved)
+            try:
+                iso_path = str(iso_mgr.get_iso_path(req.iso_file))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
         try:
             vm = await mgr.create_vm(
                 name=req.name,
@@ -132,6 +132,8 @@ def register_vm_routes(
             return vm.to_dict()
         except ValueError as e:
             raise HTTPException(400, str(e))
+        except FileNotFoundError:
+            raise HTTPException(503, "qemu-img nicht gefunden — bitte QEMU installieren (sudo apt-get install qemu-utils qemu-system-x86_64)")
         except RuntimeError as e:
             raise HTTPException(500, str(e))
 
@@ -148,7 +150,7 @@ def register_vm_routes(
         """ISO-Datei hochladen (Streaming, max size limitiert)."""
         mgr = _get_iso_manager()
         try:
-            info = await mgr.save_iso(file.filename, file.stream)
+            info = await mgr.save_iso(file.filename, file.stream())
             return {"filename": info.filename, "size_human": info.size_human, "path": info.path}
         except ValueError as e:
             msg = str(e)

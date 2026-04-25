@@ -3475,10 +3475,10 @@ class VmCreateTool(BaseTool):
             return {"error": f"VM-Limit erreicht ({settings.vm_max_count})"}
         iso_path: str | None = None
         if iso_file:
-            resolved = _get_iso_manager().get_iso_path(iso_file)
-            if resolved is None:
-                return {"error": f"ISO nicht gefunden: {iso_file}"}
-            iso_path = str(resolved)
+            try:
+                iso_path = str(_get_iso_manager().get_iso_path(iso_file))
+            except ValueError as e:
+                return {"error": str(e)}
         try:
             vm = await mgr.create_vm(name=name, cpu=cpu, ram_mb=ram_mb, disk_gb=disk_gb, iso_file=iso_path, owner=agent_id)
             return {"ok": True, "vm": vm.to_dict()}
