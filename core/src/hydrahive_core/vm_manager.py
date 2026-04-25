@@ -346,7 +346,14 @@ class VMManager:
             rows = await self._db.execute("SELECT * FROM vms ORDER BY created_at DESC")
         return [self._row_to_vm(r) async for r in rows]
 
-    async def update_vm(self, vm_id: str, *, network_mode: str | None = None, bridge_iface: str | None = None) -> VMConfig:
+    async def update_vm(
+        self, vm_id: str, *,
+        cpu: int | None = None,
+        ram_mb: int | None = None,
+        disk_gb: int | None = None,
+        network_mode: str | None = None,
+        bridge_iface: str | None = None,
+    ) -> VMConfig:
         """Ändert konfigurierbare VM-Felder (nur wenn gestoppt/created/error)."""
         await self._init_db()
         row = await self._db.execute("SELECT * FROM vms WHERE vm_id = ?", (vm_id,))
@@ -356,13 +363,35 @@ class VMManager:
         vm = self._row_to_vm(vm_row)
         if vm.status not in (VM_STATUS_STOPPED, VM_STATUS_CREATED, VM_STATUS_ERROR):
             raise ValueError(f"VM muss gestoppt sein um geändert zu werden (status={vm.status})")
+        if cpu is not None:
+            vm.cpu = cpu
+        if ram_mb is not None:
+            vm.ram_mb = ram_mb
         if network_mode is not None:
             vm.network_mode = network_mode
         if bridge_iface is not None:
             vm.bridge_iface = bridge_iface
+        # Disk vergrößern via qemu-img resize (Verkleinern nicht erlaubt)
+        if disk_gb is not None and disk_gb != vm.disk_gb:
+            if disk_gb < vm.disk_gb:
+                raise ValueError(f"Disk kann nicht verkleinert werden ({vm.disk_gb} GB → {disk_gb} GB)")
+            disk_path = Path(vm.disk_path)
+            if not disk_path.exists():
+                raise ValueError(f"Disk-Image nicht gefunden: {vm.disk_path}")
+            qemu_img = shutil.which("qemu-img")
+            if not qemu_img:
+                raise FileNotFoundError("qemu-img nicht gefunden")
+            result = await asyncio.create_subprocess_exec(
+                qemu_img, "resize", str(disk_path), f"{disk_gb}G",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await result.communicate()
+            if result.returncode != 0:
+                raise RuntimeError(f"qemu-img resize fehlgeschlagen: {stderr.decode(errors='replace').strip()}")
+            vm.disk_gb = disk_gb
         await self._db.execute(
-            "UPDATE vms SET network_mode=?, bridge_iface=? WHERE vm_id=?",
-            (vm.network_mode, vm.bridge_iface, vm_id),
+            "UPDATE vms SET cpu=?, ram_mb=?, disk_gb=?, network_mode=?, bridge_iface=? WHERE vm_id=?",
+            (vm.cpu, vm.ram_mb, vm.disk_gb, vm.network_mode, vm.bridge_iface, vm_id),
         )
         await self._db.commit()
         return vm

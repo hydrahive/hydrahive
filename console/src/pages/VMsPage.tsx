@@ -122,6 +122,9 @@ interface EditNetworkModalProps {
 }
 
 function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
+  const [cpu, setCpu] = useState(vm.cpu);
+  const [ramMb, setRamMb] = useState(vm.ram_mb);
+  const [diskGb, setDiskGb] = useState(vm.disk_gb);
   const [networkMode, setNetworkMode] = useState<"user" | "bridge">(vm.network_mode === "bridge" ? "bridge" : "user");
   const [bridgeIface, setBridgeIface] = useState(vm.bridge_iface || "br0");
   const [loading, setLoading] = useState(false);
@@ -135,7 +138,7 @@ function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network_mode: networkMode, bridge_iface: bridgeIface }),
+        body: JSON.stringify({ cpu, ram_mb: ramMb, disk_gb: diskGb, network_mode: networkMode, bridge_iface: bridgeIface }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -154,12 +157,28 @@ function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="card w-full max-w-sm mx-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold flex items-center gap-2"><Network className="w-4 h-4" /> Netzwerk ändern — {vm.name}</h2>
+          <h2 className="text-base font-semibold flex items-center gap-2"><Pencil className="w-4 h-4" /> VM bearbeiten — {vm.name}</h2>
           <button className="btn btn-sm" onClick={onClose}><X className="w-4 h-4" /></button>
         </div>
         <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">CPU (Kerne)</label>
+              <input type="number" className="w-full px-3 py-2 border rounded-lg text-sm" value={cpu} min={1} max={16} onChange={e => setCpu(Number(e.target.value))} />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">RAM</label>
+              <select className="w-full px-3 py-2 border rounded-lg text-sm" value={ramMb} onChange={e => setRamMb(Number(e.target.value))}>
+                {RAM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Netzwerk-Modus</label>
+            <label className="block text-xs text-muted-foreground mb-1">Disk (GB) — nur vergrößern möglich</label>
+            <input type="number" className="w-full px-3 py-2 border rounded-lg text-sm" value={diskGb} min={vm.disk_gb} max={500} onChange={e => setDiskGb(Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Netzwerk</label>
             <select className="w-full px-3 py-2 border rounded-lg text-sm" value={networkMode} onChange={e => setNetworkMode(e.target.value as "user" | "bridge")}>
               <option value="user">NAT (intern, 10.0.2.x)</option>
               <option value="bridge">Bridge (Router-DHCP, eigene IP)</option>
@@ -175,7 +194,6 @@ function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
                 placeholder="br0"
                 maxLength={15}
               />
-              <p className="text-xs text-muted-foreground mt-1">Bridge muss auf dem Host existieren (z.B. br0)</p>
             </div>
           )}
           {error && (

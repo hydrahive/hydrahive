@@ -71,6 +71,9 @@ class VMCreateRequest(BaseModel):
 
 
 class VMUpdateRequest(BaseModel):
+    cpu: int | None = Field(None, ge=1, le=16)
+    ram_mb: int | None = Field(None, ge=512, le=65536)
+    disk_gb: int | None = Field(None, ge=5, le=500)
     network_mode: str | None = Field(None, pattern=r"^(user|bridge)$")
     bridge_iface: str | None = Field(None, pattern=r"^[a-zA-Z0-9_\-]{1,15}$")
 
@@ -284,11 +287,19 @@ def register_vm_routes(
         """VM-Konfiguration ändern (nur wenn gestoppt)."""
         mgr = _get_vm_manager()
         try:
-            vm = await mgr.update_vm(vm_id, network_mode=req.network_mode, bridge_iface=req.bridge_iface)
+            vm = await mgr.update_vm(
+                vm_id,
+                cpu=req.cpu, ram_mb=req.ram_mb, disk_gb=req.disk_gb,
+                network_mode=req.network_mode, bridge_iface=req.bridge_iface,
+            )
             return vm.to_dict()
+        except FileNotFoundError as e:
+            raise HTTPException(503, str(e))
         except ValueError as e:
-            status_code = 409 if "gestoppt" in str(e) else 404
+            status_code = 409 if "gestoppt" in str(e) or "verkleinert" in str(e) else 404
             raise HTTPException(status_code, str(e))
+        except RuntimeError as e:
+            raise HTTPException(500, str(e))
 
     @admin_router.delete("/admin/vms/{vm_id}")
     async def delete_vm(vm_id: str, _=_admin):
