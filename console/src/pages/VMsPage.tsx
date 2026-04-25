@@ -400,11 +400,15 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
         {/* Step: uploading */}
         {step === "uploading" && (
           <div className="space-y-4 py-4">
-            <p className="text-sm text-center text-muted-foreground">Datei wird hochgeladen…</p>
+            <p className="text-sm text-center text-muted-foreground">
+              {uploadPct < 100 ? "Datei wird hochgeladen…" : "Server speichert Datei, bitte warten…"}
+            </p>
             <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
               <div className="h-full bg-primary transition-all" style={{ width: `${uploadPct}%` }} />
             </div>
-            <p className="text-center text-sm font-medium">{uploadPct}%</p>
+            <p className="text-center text-sm font-medium">
+              {uploadPct < 100 ? `${uploadPct}%` : <Loader2 className="w-4 h-4 animate-spin inline" />}
+            </p>
           </div>
         )}
 
