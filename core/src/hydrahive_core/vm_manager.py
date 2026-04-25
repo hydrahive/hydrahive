@@ -219,16 +219,37 @@ class VMManager:
         pidfile = vm_dir / "qemu.pid"
         log_path = vm_dir / "qemu.log"
 
-        # Log-Datei statt PIPE: QEMU überlebt Core-Neustarts (kein SIGPIPE bei geschlossener Pipe)
-        log_fd = open(log_path, "wb")
+        # QEMU im User-Scope des hydrahive-Users starten (via systemd-run --user).
+        # Das platziert QEMU außerhalb des hydrahive-core Service-Cgroups —
+        # Service-Neustarts killen QEMU dadurch nicht mehr (cgroup v2 safe).
+        # Voraussetzung: loginctl enable-linger hydrahive (im Installer gesetzt).
+        # Fallback: direkt starten falls systemd-run fehlt (CI/Test-Umgebungen).
         full_cmd = cmd + ["-pidfile", str(pidfile)]
+        extra_env: dict[str, str] = {}
+        _systemd_run = shutil.which("systemd-run")
+        if _systemd_run:
+            try:
+                import pwd as _pwd
+                _uid = _pwd.getpwnam("hydrahive").pw_uid
+                extra_env["XDG_RUNTIME_DIR"] = f"/run/user/{_uid}"
+            except KeyError:
+                _systemd_run = None
+        if _systemd_run:
+            full_cmd = [
+                _systemd_run, "--user", "--scope",
+                f"--unit=hydrahive-vm-{vm_id}",
+                "--",
+            ] + full_cmd
+        log_fd = open(log_path, "wb")
+        run_env = {**os.environ, **extra_env} if extra_env else None
         proc = await asyncio.create_subprocess_exec(
             *full_cmd,
             stdout=log_fd,
             stderr=log_fd,
-            start_new_session=True,  # eigene Session → kein SIGHUP bei Parent-Tod
+            start_new_session=True,
+            env=run_env,
         )
-        log_fd.close()  # Parent schließt seinen Fd; QEMU hält seinen offen
+        log_fd.close()
 
         # 1.5s warten und prüfen ob QEMU noch lebt
         await asyncio.sleep(1.5)

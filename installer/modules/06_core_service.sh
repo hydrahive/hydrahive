@@ -67,6 +67,11 @@ Defaults:hydrahive !requiretty
 SUDOEOF
 chmod 440 /etc/sudoers.d/hydrahive
 
+# --- User-Session für hydrahive aktivieren (QEMU-Scope überlebt Service-Neustarts) ---
+loginctl enable-linger "${HYDRAHIVE_USER}" 2>/dev/null && \
+    success "loginctl enable-linger ${HYDRAHIVE_USER}: User-Session persistent" || \
+    warn "loginctl enable-linger fehlgeschlagen — VMs könnten bei Updates stoppen"
+
 # --- Verzeichnisse ---
 mkdir -p "${CORE_DIR}/src/hydrahive_core" /agents /projects /etc/hydrahive
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}" /agents /projects

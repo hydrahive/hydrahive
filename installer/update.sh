@@ -140,6 +140,8 @@ main() {
     # Sicherstellen dass /etc/hydrahive hydrahive gehört (überlebt Reboots nicht immer)
     mkdir -p /etc/hydrahive
     chown -R hydrahive:hydrahive /etc/hydrahive 2>/dev/null || true
+    # User-Session persistent halten damit QEMU-Scopes Service-Neustarts überleben
+    loginctl enable-linger hydrahive 2>/dev/null || true
 
     info "Aktualisiere Core..."
     rsync -a --delete \
