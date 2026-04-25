@@ -206,6 +206,70 @@ def fetch_history(cfg: dict, hours: int = 24) -> list[dict]:
 
 def register_libre_routes(router, *, require_auth) -> None:
     from fastapi import Depends, HTTPException
+    from pydantic import BaseModel
+
+    class LibreConfig(BaseModel):
+        email: str = ""
+        password: str = ""
+        region: str = "EU"
+        unit: str = "mmol"
+        low: float = 3.9
+        high: float = 10.0
+
+    @router.get("/libre/config")
+    def libre_get_config(_auth=Depends(require_auth)):
+        p = _config_path()
+        if not p.exists():
+            return {"email": "", "password": "", "region": "EU", "unit": "mmol",
+                    "low": 3.9, "high": 10.0, "configured": False}
+        try:
+            cfg = json.loads(p.read_text())
+            # Passwort maskieren — nicht ans Frontend senden
+            return {**cfg, "password": "••••••••" if cfg.get("password") else "",
+                    "configured": bool(cfg.get("email") and cfg.get("password"))}
+        except Exception:
+            return {"configured": False}
+
+    @router.put("/libre/config")
+    def libre_save_config(req: LibreConfig, _auth=Depends(require_auth)):
+        p = _config_path()
+        existing: dict = {}
+        if p.exists():
+            try:
+                existing = json.loads(p.read_text())
+            except Exception:
+                pass
+        # Passwort nur übernehmen wenn nicht Platzhalter
+        password = req.password if req.password and req.password != "••••••••" else existing.get("password", "")
+        cfg = {
+            "email": req.email.strip(),
+            "password": password,
+            "region": req.region.upper(),
+            "unit": req.unit,
+            "low": req.low,
+            "high": req.high,
+        }
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(cfg, indent=2))
+            p.chmod(0o640)
+        except PermissionError:
+            raise HTTPException(403, "Keine Schreibrechte auf /etc/hydrahive/ — als root ausführen")
+        _auth_cache.clear()
+        _glucose_cache.clear()
+        return {"saved": True, "configured": bool(cfg["email"] and cfg["password"])}
+
+    @router.post("/libre/test")
+    def libre_test(_auth=Depends(require_auth)):
+        cfg = _load_config()
+        if not cfg:
+            raise HTTPException(404, "Freestyle Libre nicht konfiguriert")
+        try:
+            _auth_cache.clear()
+            token, patient_id, host = _get_token(cfg)
+            return {"ok": True, "host": host, "patient_id": patient_id}
+        except Exception as e:
+            raise HTTPException(502, str(e)[:300])
 
     @router.get("/libre/status")
     def libre_status(_auth=Depends(require_auth)):

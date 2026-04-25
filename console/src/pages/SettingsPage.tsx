@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Cpu, GitBranch, Github, Network, Settings, Mail, Archive, ArrowRightLeft, LayoutDashboard, Map, BookOpen, CheckCircle, Loader2 } from "lucide-react";
+import { Cpu, GitBranch, Github, Network, Settings, Mail, Archive, ArrowRightLeft, LayoutDashboard, Map, BookOpen, CheckCircle, Loader2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { ConfigHubPage } from "@/pages/ConfigHubPage";
@@ -13,9 +13,10 @@ import { BackupPage } from "@/pages/BackupPage";
 import { MigrationPage } from "@/pages/MigrationPage";
 import { ReposPage } from "@/pages/ReposPage";
 import { ConfigMapPage } from "@/pages/ConfigMapPage";
+import { LibreConfigPage } from "@/pages/LibreConfigPage";
 import { useTranslation } from "react-i18next";
 
-type TabId = "overview" | "config-map" | "llm" | "gitea" | "github" | "repos" | "vpn" | "kas" | "backup" | "migration" | "wiki";
+type TabId = "overview" | "config-map" | "llm" | "gitea" | "github" | "repos" | "vpn" | "kas" | "backup" | "migration" | "wiki" | "libre";
 
 // ── BookStack Wiki Config Tab ──────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   // #331: Tab immer direkt aus URL ableiten — kein eigener State
   const rawTab = searchParams.get("tab") as TabId | null;
-  const active: TabId = rawTab && ["overview","config-map","llm","gitea","github","repos","vpn","kas","backup","migration","wiki"].includes(rawTab)
+  const active: TabId = rawTab && ["overview","config-map","llm","gitea","github","repos","vpn","kas","backup","migration","wiki","libre"].includes(rawTab)
     ? rawTab : "overview";
   const setActive = useCallback((id: TabId) => {
     setSearchParams({ tab: id }, { replace: true });
@@ -134,6 +135,7 @@ export function SettingsPage() {
     { id: "backup",    label: t("settings.tabBackup", { defaultValue: "Backup" }),       icon: Archive,          component: BackupPage },
     { id: "migration", label: t("settings.tabMigration", { defaultValue: "Migration" }), icon: ArrowRightLeft,   component: MigrationPage },
     { id: "wiki",      label: "Wiki",                                                      icon: BookOpen,         component: WikiConfigTab },
+    { id: "libre",     label: "Libre",                                                     icon: Activity,         component: LibreConfigPage },
   ], [t]);
 
   const ActiveComponent = TABS.find(tab => tab.id === active)!.component;
