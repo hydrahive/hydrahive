@@ -959,6 +959,49 @@ PYEOF
         fi
     fi
 
+    # #908-fix: client_body_timeout + proxy_send_timeout in Upload-Locations nachrüsten
+    _nginx_cfg_to=""
+    for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+        if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then _nginx_cfg_to="${_cand}"; break
+        elif [ -f "${_cand}" ]; then _nginx_cfg_to=$(readlink -f "${_cand}"); break; fi
+    done
+    if [ -n "${_nginx_cfg_to}" ] && grep -q "admin/vms/import/upload\|admin/vms/isos/upload" "${_nginx_cfg_to}" && ! grep -q "client_body_timeout" "${_nginx_cfg_to}"; then
+        info "#908-fix: client_body_timeout + proxy_send_timeout in Upload-Locations einfügen"
+        _backup_to="${_nginx_cfg_to}.bak-timeout-$(date +%s)"
+        cp "${_nginx_cfg_to}" "${_backup_to}"
+        python3 <<'PYEOF'
+import re, sys, os
+p = os.environ.get("_nginx_cfg_to") or ""
+# Pfad kommt via Shell-Heredoc-Expansion nicht durch — direkt suchen
+import glob
+for cand in ["/etc/nginx/sites-available/hydrahive-console", "/etc/nginx/sites-enabled/hydrahive-console"]:
+    if os.path.exists(cand):
+        p = os.path.realpath(cand); break
+if not p:
+    sys.exit("nginx-Config nicht gefunden")
+txt = open(p).read()
+if "client_body_timeout" in txt:
+    sys.exit(0)
+def patch_location(txt, marker):
+    # Nach proxy_read_timeout 7200s; in der jeweiligen Upload-Location einfügen
+    pattern = rf'(location = {re.escape(marker)} \{{[^}}]*?proxy_read_timeout\s+7200s;)'
+    replacement = r'\1\n        proxy_send_timeout    7200s;\n        client_body_timeout   7200s;'
+    return re.sub(pattern, replacement, txt, flags=re.DOTALL)
+txt = patch_location(txt, "/api/admin/vms/isos/upload")
+txt = patch_location(txt, "/api/admin/vms/import/upload")
+open(p, "w").write(txt)
+print("OK")
+PYEOF
+        if nginx -t 2>&1 | head -3; then
+            systemctl reload nginx 2>&1 | head -2 && \
+                info "#908-fix: nginx Upload-Timeouts aktualisiert (client_body_timeout 7200s)" || \
+                warn "#908-fix: nginx reload fehlgeschlagen"
+        else
+            warn "#908-fix: nginx -t fehlgeschlagen — Rollback aus ${_backup_to}"
+            cp "${_backup_to}" "${_nginx_cfg_to}"
+        fi
+    fi
+
     # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then
         cp "${TMPDIR_BASE}/installer/update.sh" "${HYDRAHIVE_DIR}/update.sh"
