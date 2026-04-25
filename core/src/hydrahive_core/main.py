@@ -80,6 +80,7 @@ from .router_repos import register_repo_routes
 from .router_config_map import register_config_map_routes
 # v2: plugin_manager entfernt
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
+from .router_libre import register_libre_routes
 from .group_service import GroupService
 from .router_groups import register_group_routes
 from .pipeline_executor import execute_pipeline, get_watch_folders
@@ -1922,6 +1923,7 @@ register_pipeline_routes(
     require_admin=require_admin,
     notify_fn=None,  # notification_service.notify falls verfügbar
 )
+register_libre_routes(auth_router, require_auth=require_auth)
 register_voice_routes(
     auth_router,
     require_auth=require_auth,
