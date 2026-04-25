@@ -20,8 +20,7 @@ _VNC_PROXY_DEFAULT_PORT = 6080
 class VNCProxy:
     def __init__(self, token_dir: Path):
         self._token_dir = token_dir.resolve()
-        self._token_dir.mkdir(parents=True, exist_ok=True)
-        # vm_id → token mapping (im Speicher)
+        # mkdir lazy in register() — Verzeichnis muss vom Installer angelegt sein
         self._map: dict[str, str] = {}
 
     def register(self, vm_id: str, vnc_port: int) -> str:

@@ -135,6 +135,48 @@ def register_vm_routes(
         except RuntimeError as e:
             raise HTTPException(500, str(e))
 
+    # ── ISO (statisch vor {vm_id}, sonst Konflikt!) ───────────────────────────
+
+    @admin_router.get("/admin/vms/isos")
+    async def list_isos(_=_admin):
+        """Alle ISOs listen."""
+        mgr = _get_iso_manager()
+        return mgr.list_isos()
+
+    @admin_router.post("/admin/vms/isos/upload")
+    async def upload_iso(file: UploadFile = File(...), _=_admin):
+        """ISO-Datei hochladen (Streaming, max size limitiert)."""
+        mgr = _get_iso_manager()
+        try:
+            info = await mgr.save_iso(file.filename, file.stream)
+            return {"filename": info.filename, "size_human": info.size_human, "path": info.path}
+        except ValueError as e:
+            msg = str(e)
+            if "existiert bereits" in msg:
+                raise HTTPException(409, msg)
+            elif "ISO-Größe" in msg or "Max-ISO" in msg:
+                raise HTTPException(400, msg)
+            else:
+                raise HTTPException(400, msg)
+        except Exception as e:
+            logger.error("ISO-Upload fehlgeschlagen: %s", e)
+            raise HTTPException(500, f"Upload fehlgeschlagen: {e}")
+
+    @admin_router.delete("/admin/vms/isos/{filename}")
+    async def delete_iso(filename: str, _=_admin):
+        """ISO-Datei löschen."""
+        mgr = _get_iso_manager()
+        try:
+            mgr.delete_iso(filename)
+            return {"deleted": filename}
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            logger.error("ISO-Delete fehlgeschlagen: %s", e)
+            raise HTTPException(500, str(e))
+
+    # ── VM CRUD (dynamisch, nach statischen Routen) ───────────────────────────
+
     @admin_router.get("/admin/vms/{vm_id}")
     async def get_vm(vm_id: str, _=_admin):
         """Einzelne VM laden."""
@@ -229,43 +271,3 @@ def register_vm_routes(
             vnc_port=vm.vnc_port or 0,
             websockify_ok=ws_ok,
         )
-
-    # ── ISO ───────────────────────────────────────────────────────────────────
-
-    @admin_router.get("/admin/vms/isos")
-    async def list_isos(_=_admin):
-        """Alle ISOs listen."""
-        mgr = _get_iso_manager()
-        return mgr.list_isos()
-
-    @admin_router.post("/admin/vms/isos/upload")
-    async def upload_iso(file: UploadFile = File(...), _=_admin):
-        """ISO-Datei hochladen (Streaming, max size limitiert)."""
-        mgr = _get_iso_manager()
-        try:
-            info = await mgr.save_iso(file.filename, file.stream)
-            return {"filename": info.filename, "size_human": info.size_human, "path": info.path}
-        except ValueError as e:
-            msg = str(e)
-            if "existiert bereits" in msg:
-                raise HTTPException(409, msg)
-            elif "ISO-Größe" in msg or "Max-ISO" in msg:
-                raise HTTPException(400, msg)
-            else:
-                raise HTTPException(400, msg)
-        except Exception as e:
-            logger.error("ISO-Upload fehlgeschlagen: %s", e)
-            raise HTTPException(500, f"Upload fehlgeschlagen: {e}")
-
-    @admin_router.delete("/admin/vms/isos/{filename}")
-    async def delete_iso(filename: str, _=_admin):
-        """ISO-Datei löschen."""
-        mgr = _get_iso_manager()
-        try:
-            mgr.delete_iso(filename)
-            return {"deleted": filename}
-        except ValueError as e:
-            raise HTTPException(404, str(e))
-        except Exception as e:
-            logger.error("ISO-Delete fehlgeschlagen: %s", e)
-            raise HTTPException(500, str(e))
