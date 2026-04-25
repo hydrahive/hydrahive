@@ -137,6 +137,10 @@ main() {
     success "Repo geklont"
 
     # --- 2. Core aktualisieren ---
+    # Sicherstellen dass /etc/hydrahive hydrahive gehört (überlebt Reboots nicht immer)
+    mkdir -p /etc/hydrahive
+    chown -R hydrahive:hydrahive /etc/hydrahive 2>/dev/null || true
+
     info "Aktualisiere Core..."
     rsync -a --delete \
         --exclude='__pycache__' --exclude='*.pyc' \
