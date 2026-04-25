@@ -246,7 +246,8 @@ main() {
         id -nGz hydrahive 2>/dev/null | grep -qzxF "kvm" || \
             usermod -aG kvm hydrahive 2>/dev/null || true
         # websockify systemd-Service (idempotent)
-        if command -v websockify >/dev/null 2>&1; then
+        if [ -x /usr/bin/websockify ] || [ -x /usr/local/bin/websockify ]; then
+            info "#895: websockify-Service einrichten..."
             cat > /etc/systemd/system/hydrahive-websockify.service << 'WSEOF'
 [Unit]
 Description=HydraHive VNC WebSocket Proxy
