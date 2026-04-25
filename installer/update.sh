@@ -272,6 +272,54 @@ WSEOF
         fi
     fi
 
+    # #895: /ws/vnc/ WebSocket-Location in nginx einfügen falls fehlend
+    _nginx_cfg_vnc=""
+    for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+        if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then _nginx_cfg_vnc="${_cand}"; break
+        elif [ -f "${_cand}" ]; then _nginx_cfg_vnc=$(readlink -f "${_cand}"); break; fi
+    done
+    if [ -n "${_nginx_cfg_vnc}" ] && ! grep -q "ws/vnc" "${_nginx_cfg_vnc}"; then
+        info "#895: VNC WebSocket-Location in nginx einfügen"
+        _backup_vnc="${_nginx_cfg_vnc}.bak-vnc-$(date +%s)"
+        cp "${_nginx_cfg_vnc}" "${_backup_vnc}"
+        python3 <<'PYEOF'
+import re, sys, os
+p = ""
+for cand in ["/etc/nginx/sites-available/hydrahive-console", "/etc/nginx/sites-enabled/hydrahive-console"]:
+    if os.path.exists(cand):
+        p = os.path.realpath(cand); break
+if not p:
+    sys.exit("nginx-Config nicht gefunden")
+txt = open(p).read()
+if "ws/vnc" in txt:
+    sys.exit(0)
+block = (
+    "    # VM-Manager VNC WebSocket (#895)\n"
+    "    location /ws/vnc/ {\n"
+    "        proxy_pass         http://127.0.0.1:6080/;\n"
+    "        proxy_http_version 1.1;\n"
+    "        proxy_set_header   Upgrade    $http_upgrade;\n"
+    "        proxy_set_header   Connection \"upgrade\";\n"
+    "        proxy_set_header   Host       $host;\n"
+    "        proxy_read_timeout 3600s;\n"
+    "    }\n\n"
+)
+new_txt, count = re.subn(r"(\s*location /api/ \{)", "\n" + block + r"\1", txt, count=1)
+if count == 0:
+    sys.exit("marker 'location /api/ {' nicht gefunden")
+open(p, "w").write(new_txt)
+print("OK")
+PYEOF
+        if nginx -t 2>&1 | head -3; then
+            systemctl reload nginx 2>&1 | head -2 && \
+                info "#895: nginx VNC WebSocket-Location aktiv (/ws/vnc/ → :6080)" || \
+                warn "#895: nginx reload fehlgeschlagen"
+        else
+            warn "#895: nginx -t fehlgeschlagen nach VNC-Patch — Rollback"
+            cp "${_backup_vnc}" "${_nginx_cfg_vnc}"
+        fi
+    fi
+
     # --- 3c. Default-MCP-Server installieren + registrieren (idempotent, #620) ---
     if [ -f "${TMPDIR_BASE}/installer/install-default-mcp-servers.sh" ]; then
         info "Default-MCP-Server installieren..."
