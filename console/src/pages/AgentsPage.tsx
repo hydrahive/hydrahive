@@ -121,30 +121,35 @@ export function AgentsPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(id: string) {
-    const ag = agents[id];
-    if (!ag) return;
+  async function openEdit(id: string) {
+    if (!agents[id]) return;
     setIsNew(false);
     setFormId(id);
-    const agAny = ag as any;
-    setForm({
-      id: ag.id || id,
-      identity: ag.identity || "",
-      type: ag.type || "worker",
-      model: agAny.llm?.model || ag.model || "claude-sonnet-4-6",
-      soul: "",
-      team_id: agAny.team_id || ag.team_id || "",
-      team_role: agAny.team_role || ag.team_role || "",
-      execution_mode_default: agAny.execution_mode_default || ag.execution_mode_default || "elevated",
-      risk_policy: agAny.risk_policy || ag.risk_policy || "interactive",
-      max_tool_rounds: String(agAny.max_tool_rounds ?? ag.max_tool_rounds ?? ""),
-      compaction_threshold: "",
-      project_assignments: {},
-      mcp_servers: agAny.mcp_servers ?? [],
-      libre_enabled: agAny.libre_enabled ?? false,
-    });
     setActiveTab("basis");
     setDialogOpen(true);
+    try {
+      const data = await api.get<{ config: any }>(`/agents/${id}`);
+      const cfg = data?.config ?? {};
+      const execModeDefault = cfg.execution_modes?.default ?? cfg.execution_mode_default ?? "elevated";
+      setForm({
+        id,
+        identity: cfg.identity ?? "",
+        type: cfg.type ?? "worker",
+        model: cfg.llm?.model ?? "claude-sonnet-4-6",
+        soul: "",
+        team_id: cfg.team_id ?? "",
+        team_role: cfg.team_role ?? "",
+        execution_mode_default: execModeDefault,
+        risk_policy: cfg.risk_policy ?? "interactive",
+        max_tool_rounds: cfg.max_tool_rounds != null ? String(cfg.max_tool_rounds) : "",
+        compaction_threshold: "",
+        project_assignments: {},
+        mcp_servers: cfg.mcp_servers ?? [],
+        libre_enabled: cfg.libre_enabled ?? false,
+      });
+    } catch (e) {
+      console.error("openEdit fetch failed", e);
+    }
   }
 
   async function handleSave() {
@@ -332,7 +337,7 @@ export function AgentsPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button
-                              onClick={() => openEdit(id)}
+                              onClick={() => void openEdit(id)}
                               className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-white hover:border-white/30 transition-colors"
                             >
                               <Pencil className="h-3.5 w-3.5" />
@@ -412,7 +417,7 @@ export function AgentsPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button
-                              onClick={() => openEdit(id)}
+                              onClick={() => void openEdit(id)}
                               className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-white hover:border-white/30 transition-colors"
                             >
                               <Pencil className="h-3.5 w-3.5" />
