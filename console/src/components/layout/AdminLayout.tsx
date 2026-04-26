@@ -360,6 +360,20 @@ export function AdminLayout() {
 
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
   const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate, showLog, logLines, logDone, closeLog } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
   const showDeploymentPanel = isAdmin && (updating || Boolean(updateError) || updateAvailable);
@@ -493,26 +507,6 @@ export function AdminLayout() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={toggleDark}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
-          >
-            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            {dark ? t("layout.light") : t("layout.dark")}
-          </button>
-          <LanguageSwitcher />
-          <button
-            onClick={() => {
-              logout();
-              navigate("/login");
-            }}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:border-red-300/20 hover:bg-red-500/10 hover:text-red-100"
-          >
-            <LogOut className="h-4 w-4" />
-            {t("layout.logout")}
-          </button>
-        </div>
       </div>
     </aside>
   );
@@ -613,48 +607,83 @@ export function AdminLayout() {
 
       <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
         {/* Header */}
-        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-3 backdrop-blur md:px-6 lg:px-8">
+        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-2 backdrop-blur md:px-6">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              {/* Hamburger: auf Mobile versteckt (Bottom-Nav übernimmt), auf Tablet sichtbar, auf Desktop unsichtbar */}
+            {/* Links: Hamburger (mobile) + horizontale Nav-Gruppen */}
+            <div className="flex items-center gap-1 min-w-0">
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
-                className="rounded-2xl border bg-card/70 p-2 text-foreground shadow-sm lg:hidden"
+                className="rounded-xl border bg-card/70 p-2 text-foreground shadow-sm lg:hidden mr-1"
                 aria-label="Menü öffnen"
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="min-w-0">
-                <p className="hidden text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground sm:block">{t("layout.operationsConsole")}</p>
-                <h2 className="truncate text-lg font-semibold tracking-tight sm:text-xl">{activeItem?.label ?? "HydraHive"}</h2>
+              <div ref={dropdownRef} className="hidden lg:flex items-center gap-0.5">
+                {nav.filter(g => g.label).map(g => {
+                  const hasActive = g.items.some(item => {
+                    const p = item.to.split("?")[0];
+                    return location.pathname === p || location.pathname.startsWith(`${p}/`);
+                  });
+                  return (
+                    <div key={g.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdown(openDropdown === g.id ? null : g.id)}
+                        className={cn(
+                          "flex items-center gap-1 rounded-xl px-3 py-1.5 text-sm font-medium transition",
+                          hasActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent/10 hover:text-foreground"
+                        )}
+                      >
+                        {g.label}
+                        <ChevronDown className={cn("h-3 w-3 transition-transform duration-150", openDropdown === g.id && "rotate-180")} />
+                      </button>
+                      {openDropdown === g.id && (
+                        <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border/60 bg-card shadow-lg py-1">
+                          {g.items.map(item => {
+                            const Icon = item.icon;
+                            const p = item.to.split("?")[0];
+                            const isActive = location.pathname === p || location.pathname.startsWith(`${p}/`);
+                            return (
+                              <NavLink
+                                key={item.to}
+                                to={item.to}
+                                className={cn(
+                                  "flex items-center gap-2.5 px-4 py-2 text-sm transition hover:bg-accent/10",
+                                  isActive ? "text-primary font-medium" : "text-foreground"
+                                )}
+                              >
+                                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                {item.label}
+                              </NavLink>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={triggerUpdate}
-                  disabled={updating}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition",
-                    updateAvailable || updateError || updating
-                      ? "border-red-300/30 bg-red-500/15 text-red-100 hover:bg-red-500/20"
-                      : "border-white/10 bg-white/5 text-[hsl(var(--sidebar-foreground))] hover:bg-white/10",
-                    updating && "cursor-not-allowed opacity-70",
-                  )}
-                  title={updating ? t("layout.updateRunning") : updateAvailable ? t("layout.updateAvailable") : t("layout.triggerUpdate")}
-                >
-                  <RefreshCw className={cn("h-4 w-4", updating && "animate-spin")} />
-                  <span className="hidden sm:inline">{updating ? t("layout.updateRunning") : t("layout.triggerUpdate")}</span>
-                </button>
-              )}
-              {/* Hint-Pill nur ab md */}
-              <span className="status-pill hidden md:inline-flex">{activeItem?.hint ?? t("layout.systemView")}</span>
-              {/* Status-Pill nur ab sm */}
-              <span className={cn("status-pill hidden sm:inline-flex", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
-                {updating ? t("layout.updateActive") : t("layout.systemReady")}
-              </span>
+            {/* Rechts: Hell/Dunkel, Sprache, Logout, Glocke */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={toggleDark}
+                className="rounded-xl border border-border/40 bg-card/50 p-2 text-muted-foreground transition hover:text-foreground hover:bg-accent/10"
+                title={dark ? t("layout.light") : t("layout.dark")}
+              >
+                {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+              <LanguageSwitcher compact />
+              <button
+                type="button"
+                onClick={() => { logout(); navigate("/login"); }}
+                className="rounded-xl border border-border/40 bg-card/50 p-2 text-muted-foreground transition hover:text-red-400 hover:border-red-300/30 hover:bg-red-500/10"
+                title={t("layout.logout")}
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
               <NotificationBell />
             </div>
           </div>

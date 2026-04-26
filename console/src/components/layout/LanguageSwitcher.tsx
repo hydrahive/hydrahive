@@ -31,7 +31,7 @@ export const LANGUAGES: LanguageEntry[] = [
   { code: "zh", flag: "🇨🇳", name: "中文" },  // #692 — LLM-initial, Tier A0+ (partial, EN-fallback)
 ];
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ compact = false }: { compact?: boolean } = {}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,7 +104,9 @@ export function LanguageSwitcher() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("layout.languageMenuLabel", { defaultValue: "Sprache wählen" })}
-        className="flex h-full w-full items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/5 px-2 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
+        className={compact
+          ? "flex items-center justify-center gap-1 rounded-xl border border-border/40 bg-card/50 px-2 py-2 text-sm text-muted-foreground transition hover:text-foreground hover:bg-accent/10"
+          : "flex h-full w-full items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/5 px-2 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"}
       >
         <span className="text-sm leading-none" aria-hidden="true">{current.flag}</span>
         <span>{current.code.toUpperCase()}</span>
@@ -118,7 +120,9 @@ export function LanguageSwitcher() {
         <div
           role="menu"
           aria-label={t("layout.languageMenuLabel", { defaultValue: "Sprache wählen" })}
-          className="absolute bottom-full left-0 mb-2 w-max min-w-full overflow-hidden rounded-2xl border border-white/10 bg-[hsl(var(--sidebar-background))] shadow-lg z-50"
+          className={compact
+            ? "absolute top-full right-0 mt-1 w-max min-w-full overflow-hidden rounded-xl border border-border/60 bg-card shadow-lg z-50"
+            : "absolute bottom-full left-0 mb-2 w-max min-w-full overflow-hidden rounded-2xl border border-white/10 bg-[hsl(var(--sidebar-background))] shadow-lg z-50"}
         >
           {LANGUAGES.map((lang, i) => {
             const isActive = lang.code === current.code;
@@ -130,7 +134,7 @@ export function LanguageSwitcher() {
                 role="menuitemradio"
                 aria-checked={isActive}
                 onClick={() => choose(lang.code)}
-                className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-sm text-left text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10 focus:bg-white/10 focus:outline-none ${isActive ? "bg-white/5 font-medium" : ""}`}
+                className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-sm text-left transition focus:outline-none ${compact ? "text-foreground hover:bg-accent/10 focus:bg-accent/10" : "text-[hsl(var(--sidebar-foreground))] hover:bg-white/10 focus:bg-white/10"} ${isActive ? (compact ? "bg-accent/5 font-medium" : "bg-white/5 font-medium") : ""}`}
               >
                 <span className="text-base leading-none" aria-hidden="true">{lang.flag}</span>
                 <span>{lang.name}</span>
