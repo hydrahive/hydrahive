@@ -7,7 +7,7 @@ export interface WidgetProps {
   widgetId: string;
   isEditing?: boolean;
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function WidgetShell({
