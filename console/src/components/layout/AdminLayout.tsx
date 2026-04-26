@@ -397,38 +397,33 @@ export function AdminLayout() {
 
   const sidebar = (
     <aside className="app-sidebar">
-      <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
-          <div className="relative flex justify-center">
-            {companionActive && (
-              <div id="companion-dock" className="absolute right-0 top-0 rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
-            )}
-            <button
-              type="button"
-              onClick={() => setMobileOpen(false)}
-              className="absolute right-0 top-0 rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
-              aria-label="Close menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <img src="/hydrahive-logo.png" alt="HydraHive"
-              className="h-[120px] w-[120px] rounded-2xl"
-              style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
-          </div>
+      <div className="border-b border-white/5 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <img src="/hydrahive-logo.png" alt="HydraHive"
+            className="h-12 w-12 rounded-xl"
+            style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
           <button
             type="button"
             onClick={() => navigate("/my-agent")}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15"
+            className="ml-auto rounded-lg border border-white/10 bg-white/5 p-1.5 text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10 lg:hidden"
+            aria-label={t("layout.assistantChatOpen")}
           >
             <MessageSquare className="h-4 w-4" />
-            {t("layout.assistantChatOpen")}
           </button>
-          {lastCommit && (
-            <p className="mt-2 text-center text-[10px] text-[hsl(var(--sidebar-muted))] cursor-default" onClick={companionTap}>
-              {t("layout.lastCommit", { commit: lastCommit })}
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="rounded-lg p-1.5 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
+            aria-label="Close menu"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
+        {lastCommit && (
+          <p className="mt-1 px-1 text-[10px] text-[hsl(var(--sidebar-muted))] cursor-default" onClick={companionTap}>
+            {t("layout.lastCommit", { commit: lastCommit })}
+          </p>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
@@ -440,7 +435,7 @@ export function AdminLayout() {
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] transition-colors"
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] transition-colors"
                 >
                   {group.label}
                   <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", open ? "rotate-0" : "-rotate-90")} />
@@ -461,7 +456,7 @@ export function AdminLayout() {
                         title={hint}
                         data-tour={tourId}
                         className={({ isActive }) => cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                          "flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors",
                           group.label ? "pl-4" : "",
                           isActive
                             ? "bg-primary/10 text-primary"
@@ -533,7 +528,7 @@ export function AdminLayout() {
   return (
     <HeaderSlotCtx.Provider value={headerSlotCtx}>
     <TourProvider>
-    <div className="app-shell lg:grid lg:h-viewport-safe lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
+    <div className="app-shell lg:grid lg:h-viewport-safe lg:grid-cols-[16rem_minmax(0,1fr)] lg:overflow-hidden">
       {/* Update Live-Log Modal */}
       {showLog && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
@@ -604,7 +599,7 @@ export function AdminLayout() {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)}>
-          <div className="h-full w-[18rem]" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-[16rem]" onClick={(e) => e.stopPropagation()}>
             {sidebar}
           </div>
         </div>
@@ -612,7 +607,7 @@ export function AdminLayout() {
 
       <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
         {/* Header — gleiche Höhe wie Sidebar-Logo-Box */}
-        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[var(--sidebar-top-height,265px)] px-4 md:px-6">
+        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[56px] px-4 md:px-6">
           {/* Zeile 1: Hamburger + Nav-Gruppen + Rechts-Controls */}
           <div className="flex items-center justify-between gap-3 py-2">
             {/* Links: Hamburger (mobile) + horizontale Nav-Gruppen */}
