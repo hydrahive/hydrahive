@@ -98,16 +98,17 @@ def _vma_extract(vma_path: Path, raw_path: Path,
 
         if target_dev_id is None:
             raise ValueError("VMA enthält kein Disk-Device — Backup leer oder beschädigt?")
+        if image_size == 0:
+            raise ValueError(f"VMA Device '{devname}' hat Größe 0 — Header-Parsing fehlgeschlagen. "
+                             f"Magic={magic!r}, dev_id={target_dev_id}")
 
         # --- write raw image ---
         total_clusters = (image_size + _VMA_CLUSTER_SIZE - 1) // _VMA_CLUSTER_SIZE
         written_clusters = 0
-        empty_cluster = b"\x00" * _VMA_CLUSTER_SIZE
 
         with raw_path.open("wb") as out:
-            # pre-allocate
-            out.seek(image_size - 1)
-            out.write(b"\x00")
+            # pre-allocate via truncate statt seek(size-1)+write — robuster auf allen Filesystemen
+            out.truncate(image_size)
             out.seek(0)
 
             while True:
