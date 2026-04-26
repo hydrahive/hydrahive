@@ -4,7 +4,6 @@
 
 /* Mobile / Responsive Utilities */
 @layer utilities {
-  /* Scrollbar komplett ausblenden (für Tab-Bars etc.) */
   .scrollbar-none {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -13,25 +12,16 @@
     display: none;
   }
 
-  /* Safe-Area für Notch / Bottom-Bar auf iOS */
   .safe-area-inset-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* Viewport-Höhe mit Keyboard-Awareness (#725).
-     3-Ebenen-Fallback:
-       1) 100vh          — alle Browser
-       2) 100dvh         — iOS 15.4+, Android 108+ (Dynamic Viewport Height)
-       3) --vv-height    — live via visualViewport-Listener in main.tsx
-     Auf Desktop ist dvh == vh, daher Noop. Auf Mobile schrumpft der Shell
-     mit der Bildschirmtastatur, und sticky Composer bleibt sichtbar. */
   .h-viewport-safe {
     height: 100vh;
     height: 100dvh;
     height: var(--vv-height, 100dvh);
   }
 
-  /* Touch-freundlichere Tap-Target-Größe */
   .tap-target {
     min-height: 44px;
     min-width: 44px;
@@ -40,80 +30,143 @@
 
 @layer base {
   :root {
-    --background: 150 20% 96%;
-    --foreground: 210 38% 14%;
-    --card: 0 0% 100%;
-    --card-foreground: 210 38% 14%;
-    --primary: 152 65% 32%;
-    --primary-foreground: 150 30% 97%;
-    --secondary: 160 30% 91%;
-    --secondary-foreground: 210 33% 18%;
-    --muted: 155 25% 92%;
-    --muted-foreground: 210 16% 38%;
-    --accent: 187 72% 42%;
-    --accent-foreground: 150 30% 97%;
-    --destructive: 2 72% 52%;
-    --destructive-foreground: 150 30% 97%;
-    --border: 160 18% 82%;
-    --radius: 1rem;
-    --shell: 150 30% 98%;
-    --shell-foreground: 210 38% 14%;
-    --sidebar: 210 45% 12%;
-    --sidebar-foreground: 150 30% 94%;
-    --sidebar-muted: 180 20% 70%;
-    --sidebar-border: 210 35% 20%;
-    --sidebar-top-height: 265px;
-    --panel: 0 0% 100%;
-    --panel-foreground: 210 38% 14%;
-    --panel-muted: 155 30% 95%;
-    --hero-start: 160 40% 92%;
-    --hero-end: 187 50% 91%;
-    --shadow-soft: 180 20% 72%;
+    /* ── Neural Dark Design Tokens (HydraHive 2026-04) ── */
+
+    /* Background depth layers */
+    --bg-void:        220 35% 4%;    /* Deepest — app-shell background */
+    --bg-surface:     220 30% 8%;    /* Cards, panels */
+    --bg-elevated:    220 25% 12%;   /* Modals, dropdowns, hover */
+    --bg-overlay:     220 20% 16%;  /* Tooltips, toasts */
+
+    /* Text hierarchy */
+    --text-primary:   160 30% 95%;   /* Main text */
+    --text-secondary: 160 20% 75%;   /* Secondary text, labels */
+    --text-muted:     160 15% 55%;   /* Placeholder, disabled */
+    --text-faint:      160 10% 35%;   /* Ghost text, subtle borders */
+
+    /* Borders */
+    --border-subtle:   220 20% 18%;   /* Barely visible separation */
+    --border-default:  220 20% 25%;   /* Normal borders */
+    --border-strong:   220 20% 35%;   /* Emphasized borders */
+
+    /* Candy Neon accents (Phase 1 — kept unchanged) */
+    --candy-pink:     330 82% 60%;
+    --candy-violet:   268 78% 62%;
+    --candy-cyan:     188 90% 52%;
+    --candy-lime:     150 70% 52%;
+    --candy-amber:    28  90% 58%;
+
+    /* Status colors */
+    --status-online:   152 70% 50%;
+    --status-warning: 28  90% 58%;
+    --status-error:   5   68% 56%;
+    --status-info:    188 90% 52%;
+
+    /* ── shadcn/ui token mapping (using Neural Dark) ── */
+    --background: 220 35% 4%;
+    --foreground: 160 30% 95%;
+    --card:       220 30% 8%;
+    --card-foreground: 160 30% 95%;
+    --primary:    268 78% 62%;
+    --primary-foreground: 0 0% 100%;
+    --success:    152 70% 50%;
+    --success-foreground: 220 35% 4%;
+    --secondary:  220 25% 14%;
+    --secondary-foreground: 160 20% 75%;
+    --muted:      220 20% 16%;
+    --muted-foreground: 160 15% 55%;
+    --accent:     188 90% 52%;
+    --accent-foreground: 220 35% 4%;
+    --destructive: 5 68% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border:     220 20% 22%;
+    --radius:     0.75rem;
+    --shell:      220 35% 4%;
+    --shell-foreground: 160 30% 95%;
+
+    /* Sidebar — Neural Dark */
+    --sidebar:        220 35% 5%;
+    --sidebar-foreground: 160 30% 92%;
+    --sidebar-muted:      160 15% 55%;
+    --sidebar-border:     220 20% 18%;
+    --sidebar-top-height: 72px;   /* ← Compact logo row height (was 265px) */
+
+    /* Panel / Hero */
+    --panel:          220 30% 8%;
+    --panel-foreground: 160 30% 92%;
+    --panel-muted:    220 22% 14%;
+    --hero-start:     268 60% 18%;  /* violet tint */
+    --hero-end:       188 60% 18%;  /* cyan tint */
+
+    /* Shadows */
+    --shadow-soft: 220 50% 3%;
+
+    /* ── Light mode (Paper Neural) — kept for reference, dark only for now ── */
+    /* Light mode tokens are defined in .light block below */
   }
 
   .dark {
-    --background: 210 40% 8%;
-    --foreground: 160 30% 92%;
-    --card: 210 35% 10%;
-    --card-foreground: 160 30% 92%;
-    /* Candy-Repalette (Till 2026-04-18): Primary von Grün auf Violet,
-       damit Menü/Tabs/Badges nicht mehr monoton grün sind. Grün bleibt
-       als --success für OK-Status (status-pill-ok). */
-    --primary: 268 78% 62%;
+    --background: 220 35% 4%;
+    --foreground: 160 30% 95%;
+    --card:       220 30% 8%;
+    --card-foreground: 160 30% 95%;
+    --primary:    268 78% 62%;
     --primary-foreground: 0 0% 100%;
-    --success: 152 70% 50%;
-    --success-foreground: 210 40% 8%;
-    --secondary: 210 20% 18%;
-    --secondary-foreground: 160 30% 92%;
-    --muted: 210 20% 16%;
-    --muted-foreground: 180 15% 65%;
-    --accent: 187 80% 48%;
-    --accent-foreground: 210 40% 8%;
+    --success:    152 70% 50%;
+    --success-foreground: 220 35% 4%;
+    --secondary:  220 25% 14%;
+    --secondary-foreground: 160 20% 75%;
+    --muted:      220 20% 16%;
+    --muted-foreground: 160 15% 55%;
+    --accent:     188 90% 52%;
+    --accent-foreground: 220 35% 4%;
     --destructive: 5 68% 56%;
     --destructive-foreground: 0 0% 100%;
-    --border: 210 20% 22%;
-    --shell: 210 42% 6%;
-    --shell-foreground: 160 30% 92%;
-    --sidebar: 210 45% 7%;
+    --border:     220 20% 22%;
+    --shell:      220 35% 4%;
+    --shell-foreground: 160 30% 95%;
+    --sidebar:        220 35% 5%;
     --sidebar-foreground: 160 30% 92%;
-    --sidebar-muted: 180 15% 60%;
-    --sidebar-border: 210 25% 17%;
-    --panel: 210 35% 10%;
+    --sidebar-muted:      160 15% 55%;
+    --sidebar-border:     220 20% 18%;
+    --panel:          220 30% 8%;
     --panel-foreground: 160 30% 92%;
-    --panel-muted: 210 22% 14%;
-    --hero-start: 160 35% 14%;
-    --hero-end: 187 40% 14%;
-    --shadow-soft: 210 50% 3%;
+    --panel-muted:    220 22% 14%;
+    --hero-start:     268 60% 18%;
+    --hero-end:       188 60% 18%;
+    --shadow-soft: 220 50% 3%;
   }
 
-  /* Candy-Palette (Phase 1, Till 2026-04-18). Nur Farbtöne, keine Alpha —
-     die Nutzung legt die Transparenz fest. Bewusst in beiden Modi gleich. */
-  :root {
-    --candy-pink: 330 82% 60%;
-    --candy-violet: 268 78% 62%;
-    --candy-cyan: 188 90% 52%;
-    --candy-lime: 150 70% 52%;
-    --candy-amber: 28 90% 58%;
+  .light {
+    /* Paper Neural — Light mode */
+    --background: 40 30% 98%;
+    --foreground: 220 30% 10%;
+    --card:       40 25% 96%;
+    --card-foreground: 220 30% 10%;
+    --primary:    268 75% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary:  40 20% 90%;
+    --secondary-foreground: 220 20% 25%;
+    --muted:      40 20% 88%;
+    --muted-foreground: 220 15% 45%;
+    --accent:     188 85% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 5 68% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border:     40 20% 82%;
+    --shell:      40 30% 98%;
+    --shell-foreground: 220 30% 10%;
+    --sidebar:        40 25% 94%;
+    --sidebar-foreground: 220 30% 10%;
+    --sidebar-muted:      220 20% 50%;
+    --sidebar-border:     40 20% 82%;
+    --sidebar-top-height: 72px;
+    --panel:          40 25% 96%;
+    --panel-foreground: 220 30% 10%;
+    --panel-muted:    40 20% 92%;
+    --hero-start:     268 60% 90%;
+    --hero-end:       188 60% 88%;
+    --shadow-soft: 40 50% 90%;
   }
 
   * {
@@ -132,39 +185,42 @@
     min-height: 100vh;
     max-width: 100%;
     overflow-x: hidden;
+    /* Deep dark background with subtle candy corner glows */
     background-image:
-      radial-gradient(circle at top left, hsl(var(--hero-start) / 0.75), transparent 34%),
-      radial-gradient(circle at top right, hsl(var(--hero-end) / 0.55), transparent 28%),
+      radial-gradient(circle at 8% 12%, hsl(var(--candy-pink)   / 0.10), transparent 40%),
+      radial-gradient(circle at 92% 8%, hsl(var(--candy-violet) / 0.12), transparent 40%),
+      radial-gradient(circle at 12% 94%, hsl(var(--candy-cyan)  / 0.08), transparent 44%),
       linear-gradient(180deg, hsl(var(--background)), hsl(var(--shell)) 65%, hsl(var(--background)));
   }
 
-  /* Candy-Background im Dark-Mode: drei subtile radiale Hues an den Ecken
-     für Tiefe + Farbe (Phase 1). Light-Mode bleibt beim grünen Hero-Verlauf. */
-  .dark body {
+  /* Light mode: warm paper gradient */
+  .light body {
     background-image:
-      radial-gradient(circle at 8% 12%, hsl(var(--candy-pink) / 0.12), transparent 42%),
-      radial-gradient(circle at 92% 8%, hsl(var(--candy-violet) / 0.14), transparent 42%),
-      radial-gradient(circle at 12% 94%, hsl(var(--candy-cyan) / 0.10), transparent 46%),
+      radial-gradient(circle at 50% 0%, hsl(var(--hero-start) / 0.18), transparent 50%),
       linear-gradient(180deg, hsl(var(--background)), hsl(var(--shell)) 65%, hsl(var(--background)));
   }
 
   #root {
     min-height: 100vh;
   }
+
+  /* Custom focus style */
+  :focus-visible {
+    outline: 2px solid hsl(var(--candy-violet));
+    outline-offset: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 @layer components {
-  /* Candy-Buttons & -Bubbles (Phase 1).
-     .btn-candy    = Primary CTA mit Gradient (cyan → violet → pink) + Glow
-     .btn-glass    = Secondary mit backdrop-blur + ring
-     .bubble-candy-user      = User-Chat-Bubble mit Gradient
-     .bubble-candy-assistant = Assistant-Bubble mit Cyan-Glow-Border
-     .card-candy-border      = generischer Akzent-Border-Glow für Panels */
+  /* ── Candy Buttons & Bubbles (Phase 1) ── */
   .btn-candy {
     background-image: linear-gradient(135deg,
-      hsl(var(--candy-cyan)) 0%,
+      hsl(var(--candy-cyan))    0%,
       hsl(var(--candy-violet)) 55%,
-      hsl(var(--candy-pink)) 100%);
+      hsl(var(--candy-pink))   100%);
     color: #fff;
     box-shadow: 0 4px 20px hsl(var(--candy-violet) / 0.32);
     transition: box-shadow .2s, filter .2s, transform .05s;
@@ -197,7 +253,7 @@
   .bubble-candy-user {
     background-image: linear-gradient(135deg,
       hsl(var(--candy-violet) / 0.95) 0%,
-      hsl(var(--candy-pink) / 0.9) 100%);
+      hsl(var(--candy-pink)   / 0.90) 100%);
     color: #fff;
     border-color: hsl(var(--candy-violet) / 0.55) !important;
     box-shadow: 0 4px 24px hsl(var(--candy-pink) / 0.35);
@@ -218,12 +274,12 @@
       inset 0 1px 0 hsl(var(--candy-pink) / 0.05);
   }
 
-  /* Candy-Badges — farbige Pille je Tool-Event-Typ (Phase 1.5) */
+  /* ── Candy Badges (Phase 1.5) ── */
   .badge-candy-info {
-    border-color: hsl(var(--candy-cyan) / 0.5) !important;
-    background-color: hsl(var(--candy-cyan) / 0.14);
+    border-color: hsl(var(--candy-cyan)   / 0.5) !important;
+    background-color: hsl(var(--candy-cyan)   / 0.14);
     color: hsl(var(--candy-cyan));
-    box-shadow: 0 2px 12px hsl(var(--candy-cyan) / 0.12);
+    box-shadow: 0 2px 12px hsl(var(--candy-cyan)   / 0.12);
   }
   .badge-candy-tool {
     border-color: hsl(var(--candy-violet) / 0.5) !important;
@@ -232,29 +288,29 @@
     box-shadow: 0 2px 12px hsl(var(--candy-violet) / 0.14);
   }
   .badge-candy-result {
-    border-color: hsl(var(--candy-lime) / 0.5) !important;
-    background-color: hsl(var(--candy-lime) / 0.12);
+    border-color: hsl(var(--candy-lime)   / 0.5) !important;
+    background-color: hsl(var(--candy-lime)   / 0.12);
     color: hsl(var(--candy-lime));
-    box-shadow: 0 2px 12px hsl(var(--candy-lime) / 0.1);
+    box-shadow: 0 2px 12px hsl(var(--candy-lime)   / 0.10);
   }
   .badge-candy-warn {
-    border-color: hsl(var(--candy-amber) / 0.55) !important;
-    background-color: hsl(var(--candy-amber) / 0.16);
+    border-color: hsl(var(--candy-amber)  / 0.55) !important;
+    background-color: hsl(var(--candy-amber)  / 0.16);
     color: hsl(var(--candy-amber));
-    box-shadow: 0 2px 12px hsl(var(--candy-amber) / 0.14);
+    box-shadow: 0 2px 12px hsl(var(--candy-amber)  / 0.14);
   }
   .badge-candy-confirm {
-    border-color: hsl(var(--candy-pink) / 0.55) !important;
-    background-color: hsl(var(--candy-pink) / 0.16);
+    border-color: hsl(var(--candy-pink)   / 0.55) !important;
+    background-color: hsl(var(--candy-pink)   / 0.16);
     color: hsl(var(--candy-pink));
-    box-shadow: 0 2px 12px hsl(var(--candy-pink) / 0.18);
+    box-shadow: 0 2px 12px hsl(var(--candy-pink)   / 0.18);
   }
 
-  /* Chip-Varianten */
+  /* ── Chip variants ── */
   .chip-candy {
     background-image: linear-gradient(135deg,
       hsl(var(--candy-violet) / 0.7),
-      hsl(var(--candy-pink) / 0.6));
+      hsl(var(--candy-pink)   / 0.6));
     color: #fff;
     border: 1px solid hsl(var(--candy-violet) / 0.45);
     box-shadow: 0 2px 12px hsl(var(--candy-violet) / 0.2);
@@ -266,7 +322,7 @@
   }
   .chip-glass {
     background-image: linear-gradient(135deg,
-      hsl(var(--candy-cyan) / 0.18),
+      hsl(var(--candy-cyan)   / 0.18),
       hsl(var(--candy-violet) / 0.12));
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
@@ -281,22 +337,24 @@
     box-shadow: 0 3px 14px hsl(var(--candy-cyan) / 0.25);
   }
 
+  /* ── App Shell ── */
   .app-shell {
     @apply min-h-screen text-foreground;
     background: transparent;
   }
 
   .app-sidebar {
-    @apply flex h-full w-72 flex-col border-r;
+    @apply flex h-full flex-col border-r;
     background: hsl(var(--sidebar) / 0.96);
     color: hsl(var(--sidebar-foreground));
     border-color: hsl(var(--sidebar-border));
     box-shadow: 0 24px 80px hsl(var(--shadow-soft) / 0.18);
     backdrop-filter: blur(20px);
+    width: 16rem;   /* ← Reduced from 18rem */
   }
 
   .app-panel {
-    @apply rounded-[calc(var(--radius)+0.25rem)] border;
+    @apply rounded-xl border;
     background: hsl(var(--panel) / 0.8);
     color: hsl(var(--panel-foreground));
     border-color: hsl(var(--border) / 0.9);
@@ -320,16 +378,15 @@
     @apply text-sm leading-6 text-muted-foreground;
   }
 
+  /* ── Navigation items ── */
   .nav-item {
-    @apply flex items-center gap-3 rounded-2xl px-4 py-2 text-sm font-medium transition-all;
+    @apply flex items-center gap-3 rounded-xl px-4 py-1.5 text-sm font-medium transition-all;
     color: hsl(var(--sidebar-muted));
   }
-
   .nav-item:hover {
     background: hsl(var(--sidebar-foreground) / 0.08);
     color: hsl(var(--sidebar-foreground));
   }
-
   .nav-item-active {
     background: linear-gradient(135deg, hsl(var(--primary) / 0.26), hsl(var(--accent) / 0.18));
     color: hsl(var(--sidebar-foreground));
@@ -341,71 +398,48 @@
     background: hsl(var(--secondary));
     color: hsl(var(--secondary-foreground));
   }
-
   .status-pill-ok {
-    /* Fallback auf --primary falls --success nicht gesetzt ist (Light-Mode). */
     background: hsl(var(--success, var(--primary)) / 0.14);
     color: hsl(var(--success, var(--primary)));
   }
 
+  /* ── Hero Panel (dark) ── */
   .hero-panel {
-    @apply relative overflow-hidden rounded-[calc(var(--radius)+0.75rem)] border p-6 lg:p-8;
+    @apply relative overflow-hidden rounded-2xl border p-6 lg:p-8;
     background:
-      linear-gradient(135deg, hsl(var(--hero-start) / 0.72), transparent 55%),
-      linear-gradient(160deg, hsl(var(--hero-end) / 0.72), transparent 62%),
+      radial-gradient(circle at 0% 0%, hsl(var(--candy-violet) / 0.18), transparent 40%),
+      radial-gradient(circle at 100% 0%, hsl(var(--candy-pink)   / 0.14), transparent 45%),
+      radial-gradient(circle at 50% 100%, hsl(var(--candy-cyan)  / 0.10), transparent 55%),
       hsl(var(--panel) / 0.92);
-    border-color: hsl(var(--border) / 0.9);
-    box-shadow: 0 16px 60px hsl(var(--shadow-soft) / 0.18);
-  }
-  /* Dark-Mode bekommt Candy-Hues im Hero statt des grünen Hero-Gradients */
-  .dark .hero-panel {
-    background:
-      radial-gradient(circle at 0% 0%, hsl(var(--candy-violet) / 0.22), transparent 40%),
-      radial-gradient(circle at 100% 0%, hsl(var(--candy-pink) / 0.18), transparent 45%),
-      radial-gradient(circle at 50% 100%, hsl(var(--candy-cyan) / 0.12), transparent 55%),
-      hsl(var(--panel) / 0.92);
-    border-color: hsl(var(--candy-violet) / 0.35);
+    border-color: hsl(var(--candy-violet) / 0.30);
     box-shadow:
-      0 0 0 1px hsl(var(--candy-violet) / 0.1),
-      0 16px 60px hsl(var(--candy-violet) / 0.18);
+      0 0 0 1px hsl(var(--candy-violet) / 0.08),
+      0 16px 60px hsl(var(--candy-violet) / 0.14);
   }
 
-  .hero-panel::after {
-    content: "";
-    @apply absolute inset-y-0 right-0 w-1/3;
-    background: linear-gradient(180deg, hsl(var(--primary) / 0.12), transparent 72%);
-    pointer-events: none;
-  }
-  .dark .hero-panel::after {
-    background: linear-gradient(180deg, hsl(var(--candy-pink) / 0.16), transparent 72%);
-  }
-
+  /* ── Metric Card (dark) ── */
   .metric-card {
     @apply app-panel p-5;
     transition: border-color .2s, box-shadow .2s, transform .1s;
-  }
-  .dark .metric-card {
-    border-color: hsl(var(--candy-violet) / 0.22) !important;
+    border-color: hsl(var(--candy-violet) / 0.18) !important;
     box-shadow:
-      0 0 0 1px hsl(var(--candy-violet) / 0.05),
-      0 6px 24px hsl(var(--candy-violet) / 0.08);
+      0 0 0 1px hsl(var(--candy-violet) / 0.04),
+      0 6px 24px hsl(var(--candy-violet) / 0.06);
   }
-  .dark .metric-card:hover {
-    border-color: hsl(var(--candy-cyan) / 0.45) !important;
+  .metric-card:hover {
+    border-color: hsl(var(--candy-cyan) / 0.40) !important;
     box-shadow:
-      0 0 0 1px hsl(var(--candy-cyan) / 0.1),
-      0 8px 28px hsl(var(--candy-cyan) / 0.2);
+      0 0 0 1px hsl(var(--candy-cyan) / 0.08),
+      0 8px 28px hsl(var(--candy-cyan) / 0.14);
   }
 
   .metric-kicker {
-    @apply text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground;
+    @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground;
   }
 
   .metric-value {
     @apply mt-3 text-3xl font-semibold tracking-tight;
-  }
-  /* Metric-Values mit Farbverlauf im Dark-Mode */
-  .dark .metric-value {
+    /* Gradient value in dark mode */
     background-image: linear-gradient(135deg,
       hsl(var(--candy-cyan)),
       hsl(var(--candy-violet)) 60%,
@@ -419,15 +453,17 @@
     @apply mt-2 text-sm text-muted-foreground;
   }
 
+  /* ── Section Card ── */
   .section-card {
     @apply app-panel p-5;
   }
 
+  /* ── Dot indicator ── */
   .dot {
     @apply inline-block h-2.5 w-2.5 rounded-full;
   }
 
-  /* Verhindert horizontalen Overflow in Markdown/Prose-Blöcken (Code, Tabellen) */
+  /* ── Prose overflow protection ── */
   .prose pre,
   .prose table,
   .prose img {
@@ -436,28 +472,58 @@
   .prose code {
     word-break: break-all;
   }
+
+  /* ── Card hover micro-interaction ── */
+  .card-interactive {
+    transition: border-color .2s ease-out-expo,
+                box-shadow   .2s ease-out-expo,
+                transform   .2s ease-out-expo;
+  }
+  .card-interactive:hover {
+    border-color: hsl(var(--border-strong));
+    box-shadow: 0 8px 32px hsl(var(--shadow-soft) / 0.14);
+    transform: translateY(-2px);
+  }
+
+  /* ── Skeleton shimmer ── */
+  @keyframes skeleton-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted) / 0.4) 25%,
+      hsl(var(--muted) / 0.7) 50%,
+      hsl(var(--muted) / 0.4) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 2s ease-in-out infinite;
+  }
 }
 
-/* HydraHive Logo Glow Animation (Login + Branding) */
+/* ── Logo Glow Animation (Login + Sidebar Branding) ── */
 @keyframes pulse-glow {
   0%, 100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 40px rgba(74, 222, 128, 0.3));
+    filter: drop-shadow(0 0 28px rgba(155, 109, 255, 0.35));
   }
   50% {
-    transform: scale(1.04);
-    filter: drop-shadow(0 0 55px rgba(74, 222, 128, 0.5));
+    transform: scale(1.03);
+    filter: drop-shadow(0 0 44px rgba(28, 232, 255, 0.50));
   }
 }
 
-/* ═══ AdminFun — Beat-synchrone Visuals (#AdminFun) ═══
-   CSS-Variablen werden vom AdminFunPlayer pro Frame gesetzt:
-     --adminfun-bass:    0.0 – 1.0  (niedrige Frequenzen)
-     --adminfun-mid:     0.0 – 1.0  (mittlere Frequenzen)
-     --adminfun-treble:  0.0 – 1.0  (hohe Frequenzen)
-     --adminfun-beat:    0 | 1      (Beat-Trigger)
-     --adminfun-active:  0 | 1      (Player aktiv?)
-*/
+/* ── Animation timing tokens ── */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:   100ms;
+  --duration-normal: 200ms;
+  --duration-slow:   300ms;
+}
+
+/* ── AdminFun — Beat-synchrone Visuals (#AdminFun) ── */
 :root {
   --adminfun-bass: 0;
   --adminfun-mid: 0;
@@ -466,8 +532,6 @@
   --adminfun-active: 0;
 }
 
-/* Body-Border — inner glow der mit Mid atmet, kräftiger Pink-Flash bei Beats.
-   Via fixed overlay weil inset box-shadow am body nicht zuverlässig greift. */
 body::after {
   content: "";
   position: fixed;
@@ -478,11 +542,10 @@ body::after {
   transition: opacity 0.3s ease-out;
   box-shadow:
     inset 0 0 calc(var(--adminfun-mid, 0) * 120px) rgba(168, 85, 247, calc(var(--adminfun-mid, 0) * 0.5)),
-    inset 0 0 calc(var(--adminfun-beat, 0) * 80px) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.7)),
-    inset 0 0 calc(var(--adminfun-bass, 0) * 60px) rgba(59, 130, 246, calc(var(--adminfun-bass, 0) * 0.4));
+    inset 0 0 calc(var(--adminfun-beat, 0) * 80px)  rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.7)),
+    inset 0 0 calc(var(--adminfun-bass, 0) * 60px)  rgba(59, 130, 246, calc(var(--adminfun-bass, 0) * 0.4));
 }
 
-/* Sidebar (alle aside-Elemente) bekommt einen lila Rand der mit Bass pulsiert */
 aside {
   transition: border-color 0.08s ease-out, box-shadow 0.08s ease-out;
 }
@@ -493,29 +556,25 @@ body[style*="--adminfun-active"] aside,
     0 0 calc(var(--adminfun-beat, 0) * 20px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.5 * var(--adminfun-active, 0)));
 }
 
-/* Sidebar-Links pulsieren mit Bass — alle a-Tags in aside */
 aside a {
   transition: transform 0.08s ease-out, filter 0.08s ease-out;
   transform: scale(calc(1 + var(--adminfun-bass, 0) * 0.08 * var(--adminfun-active, 0)));
   filter: drop-shadow(0 0 calc(var(--adminfun-bass, 0) * 6px * var(--adminfun-active, 0)) rgba(168, 85, 247, 0.8));
 }
 
-/* Alle SVG-Icons pulsieren (Sidebar, Buttons, Header) */
 svg {
   transition: transform 0.08s ease-out, filter 0.08s ease-out;
   transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.12 * var(--adminfun-active, 0)));
   filter: drop-shadow(0 0 calc(var(--adminfun-treble, 0) * 4px * var(--adminfun-active, 0)) rgba(236, 72, 153, 0.7));
 }
 
-/* Buttons mit runden Rahmen bekommen Pink-Pulse bei Beats */
-button[class*="rounded"], a[class*="rounded"] {
+button[class*="rounded"] {
   transition: box-shadow 0.08s ease-out;
 }
 button[class*="rounded"] {
   box-shadow: 0 0 calc(var(--adminfun-beat, 0) * 18px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.7 * var(--adminfun-active, 0)));
 }
 
-/* H1/H2 + alles mit .font-bold bekommt Chromatic-Shift bei Treble */
 h1, h2, .font-bold, .font-semibold {
   transition: text-shadow 0.08s ease-out;
   text-shadow:
@@ -523,15 +582,11 @@ h1, h2, .font-bold, .font-semibold {
     calc(var(--adminfun-treble, 0) * -3px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, calc(var(--adminfun-treble, 0) * 0.8));
 }
 
-/* Main-Content scalet minimal mit Beat */
 main {
   transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.005 * var(--adminfun-active, 0)));
 }
 
-/* HydraBrain-Seite: 3D-Graph-Canvas pulsiert mit Musik.
-   Canvas bekommt Filter (brightness/saturate/hue-rotate) + Scale pro Beat.
-   Radialer Glow als Overlay mit pointer-events:none. */
 .adminfun-brain-stage canvas {
   transition: filter 0.08s ease-out, transform 0.08s ease-out;
   filter:
@@ -548,16 +603,13 @@ main {
   z-index: 1;
   opacity: var(--adminfun-active, 0);
   background:
-    radial-gradient(
-      circle at 50% 50%,
+    radial-gradient(circle at 50% 50%,
       rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.35)) 0%,
       rgba(168, 85, 247, calc(var(--adminfun-bass, 0) * 0.25)) 30%,
-      transparent 70%
-    );
+      transparent 70%);
   transition: background 0.08s ease-out;
 }
 
-/* Explizite Opt-in-Klassen bleiben erhalten für spezielle Spots */
 .adminfun-bump {
   transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1);
   transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.15 * var(--adminfun-active, 0)));
