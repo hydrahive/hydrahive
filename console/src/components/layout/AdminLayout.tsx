@@ -35,11 +35,14 @@ import {
   CalendarClock,
   Network,
   ChevronDown,
+  Activity,
+  Cpu,
+  Radar,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState, useCallback, useMemo, type ReactNode } from "react";
-import { api } from "@/lib/api";
+import { api, GpuInfo, HeartbeatTaskStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { TourProvider } from "@/components/tours/TourProvider";
@@ -237,6 +240,38 @@ export function AdminLayout() {
   const { t } = useTranslation();
   const { user, isAdmin, hasPageAccess, logout } = useAuth();
   const navigate = useNavigate();
+
+  // ── Header Info-Bar State (Layout V2) ───────────────────────────
+  const [status, setStatus] = useState<Record<string, any> | null>(null);
+  const [gpu, setGpu] = useState<GpuInfo | null>(null);
+  const [heartbeatTasks, setHeartbeatTasks] = useState<HeartbeatTaskStatus[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const healthy = status !== null ? Object.keys(status).length > 0 : null;
+  const runtime = status?.runtime as Record<string, any> | undefined;
+  const running = runtime ? Object.values(runtime).filter((a: any) => a.status === "running").length : 0;
+  const agents = status?.discovery?.count ?? null;
+  const projects = status?.projects?.count ?? null;
+  const gpuList = gpu?.available && gpu.gpus ? gpu.gpus : [];
+  const hottestGpu = gpuList.length > 0 ? [...gpuList].sort((a, b) => (b.temp_c ?? -1) - (a.temp_c ?? -1))[0] : null;
+  const runningHeartbeats = heartbeatTasks.length;
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const [s, g, h] = await Promise.all([api.status(), api.gpuInfo().catch(() => null), api.heartbeatTasks().catch(() => ({ tasks: [] }))]);
+        if (!alive) return;
+        setStatus(s);
+        if (g) setGpu(g);
+        setHeartbeatTasks(h.tasks ?? []);
+        setLastUpdated(new Date());
+      } catch { /* non-critical */ }
+    }
+    load();
+    const t = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
   const location = useLocation();
   const companionTap = useCompanionActivation();
   const [companionActive, setCompanionActive] = useState(() => localStorage.getItem("hh_companion") === "1");
@@ -532,234 +567,391 @@ export function AdminLayout() {
   return (
     <HeaderSlotCtx.Provider value={headerSlotCtx}>
     <TourProvider>
-    <div className="app-shell lg:grid lg:h-viewport-safe lg:grid-cols-[16rem_minmax(0,1fr)] lg:overflow-hidden">
-      {/* Update Live-Log Modal */}
-      {showLog && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card border rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              {logDone === null && <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />}
-              {logDone === true && <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
-              {logDone === false && <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
-              <div>
-                <h2 className="text-base font-semibold">
-                  {logDone === null
-                    ? t("layout.updateRunning")
-                    : logDone
-                      ? t("layout.updateSuccess", { defaultValue: "Update abgeschlossen" })
-                      : t("layout.updateFailed", { defaultValue: "Update fehlgeschlagen" })}
-                </h2>
-                <p className="text-sm text-muted-foreground">HydraHive Self-Update</p>
-              </div>
+
+    {/* ── LAYOUT V2: Full-width header, no sidebar ─────────────────── */}
+
+    {/* Update Live-Log Modal */}
+    {showLog && (
+      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+        <div className="bg-card border rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            {logDone === null && <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />}
+            {logDone === true && <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
+            {logDone === false && <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
+            <div>
+              <h2 className="text-base font-semibold">
+                {logDone === null ? t("layout.updateRunning")
+                  : logDone ? t("layout.updateSuccess", { defaultValue: "Update abgeschlossen" })
+                  : t("layout.updateFailed", { defaultValue: "Update fehlgeschlagen" })}
+              </h2>
+              <p className="text-sm text-muted-foreground">HydraHive Self-Update</p>
             </div>
-            {logDone === null && (
-              <div className="text-amber-400 text-sm font-medium flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                {t("layout.updateDoNotClose", { defaultValue: "Bitte nicht schließen — Update läuft..." })}
-              </div>
+          </div>
+          {logDone === null && (
+            <div className="text-amber-400 text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {t("layout.updateDoNotClose", { defaultValue: "Bitte nicht schließen — Update läuft..." })}
+            </div>
+          )}
+          <div ref={updateLogRef} className="bg-black/50 rounded-lg p-4 font-mono text-xs text-green-400 h-64 overflow-y-auto">
+            {logLines.length === 0 && logDone === null && (
+              <div className="text-muted-foreground">{t("layout.updateWaiting", { defaultValue: "Warte auf Log-Output..." })}</div>
             )}
-            <div
-              ref={updateLogRef}
-              className="bg-black/50 rounded-lg p-4 font-mono text-xs text-green-400 h-64 overflow-y-auto"
-            >
-              {logLines.length === 0 && logDone === null && (
-                <div className="text-muted-foreground">{t("layout.updateWaiting", { defaultValue: "Warte auf Log-Output..." })}</div>
-              )}
-              {logLines.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
-            </div>
-            {logDone !== null && (
-              <div className="flex justify-end gap-2">
-                {logDone && (
-                  <p className="text-sm text-green-500 flex-1 self-center">
-                    {t("layout.updateReloadHint", { defaultValue: "Seite wird gleich neu geladen..." })}
-                  </p>
-                )}
-                <button
-                  className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => { closeLog(); if (logDone) window.location.reload(); }}
-                >
-                  {logDone ? t("layout.updateReload", { defaultValue: "Neu laden" }) : t("layout.updateClose", { defaultValue: "Schließen" })}
-                </button>
-              </div>
-            )}
+            {logLines.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
           </div>
-        </div>
-      )}
-      {!coreOnline && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95 backdrop-blur-sm">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <div className="text-center">
-            <p className="text-lg font-semibold">
-              {updating ? t("layout.restartingUpdate") : t("layout.restartingCore")}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{t("layout.restartingWait")}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="hidden lg:block lg:h-viewport-safe lg:overflow-hidden">
-        <div className="sticky top-0 h-viewport-safe">{sidebar}</div>
-      </div>
-
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)}>
-          <div className="h-full w-[16rem]" onClick={(e) => e.stopPropagation()}>
-            {sidebar}
-          </div>
-        </div>
-      )}
-
-      <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
-        {/* Header — gleiche Höhe wie Sidebar-Logo-Box */}
-        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[96px] px-4 md:px-6">
-          {/* Zeile 1: Hamburger + Nav-Gruppen + Rechts-Controls */}
-          <div className="flex items-center justify-between gap-3 py-2">
-            {/* Links: Hamburger (mobile) + horizontale Nav-Gruppen */}
-            <div className="flex items-center gap-1 min-w-0">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(true)}
-                className="rounded-xl border bg-card/70 p-2 text-foreground shadow-sm lg:hidden mr-1"
-                aria-label="Menü öffnen"
-              >
-                <Menu className="h-5 w-5" />
+          {logDone !== null && (
+            <div className="flex justify-end gap-2">
+              {logDone && <p className="text-sm text-green-500 flex-1 self-center">{t("layout.updateReloadHint", { defaultValue: "Seite wird gleich neu geladen..." })}</p>}
+              <button className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => { closeLog(); if (logDone) window.location.reload(); }}>
+                {logDone ? t("layout.updateReload", { defaultValue: "Neu laden" }) : t("layout.updateClose", { defaultValue: "Schließen" })}
               </button>
-              <div ref={dropdownRef} className="hidden lg:flex items-center gap-0.5">
-                {nav.filter(g => g.label).map(g => {
-                  const hasActive = g.items.some(item => {
-                    const p = item.to.split("?")[0];
-                    return location.pathname === p || location.pathname.startsWith(`${p}/`);
-                  });
-                  return (
-                    <div key={g.id} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setOpenDropdown(openDropdown === g.id ? null : g.id)}
-                        className={cn(
-                          "flex items-center gap-1 rounded-xl px-3 py-1.5 text-sm font-medium transition",
-                          hasActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent/10 hover:text-foreground"
-                        )}
-                      >
-                        {g.label}
-                        <ChevronDown className={cn("h-3 w-3 transition-transform duration-150", openDropdown === g.id && "rotate-180")} />
-                      </button>
-                      {openDropdown === g.id && (
-                        <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border/60 bg-card shadow-lg py-1">
-                          {g.items.map(item => {
-                            const Icon = item.icon;
-                            const p = item.to.split("?")[0];
-                            const isActive = location.pathname === p || location.pathname.startsWith(`${p}/`);
-                            return (
-                              <NavLink
-                                key={item.to}
-                                to={item.to}
-                                className={cn(
-                                  "flex items-center gap-2.5 px-4 py-2 text-sm transition hover:bg-accent/10",
-                                  isActive ? "text-primary font-medium" : "text-foreground"
-                                )}
-                              >
-                                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                {item.label}
-                              </NavLink>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Rechts: Hell/Dunkel, Sprache, Logout, Glocke */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={toggleDark}
-                className="rounded-xl border border-border/40 bg-card/50 p-2 text-muted-foreground transition hover:text-foreground hover:bg-accent/10"
-                title={dark ? t("layout.light") : t("layout.dark")}
-              >
-                {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
-              <LanguageSwitcher compact />
-              <button
-                type="button"
-                onClick={() => { logout(); navigate("/login"); }}
-                className="rounded-xl border border-border/40 bg-card/50 p-2 text-muted-foreground transition hover:text-red-400 hover:border-red-300/30 hover:bg-red-500/10"
-                title={t("layout.logout")}
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-              <NotificationBell />
-            </div>
-          </div>
-
-          {/* Zeile 2: Seitentitel + Hint + optionaler Slot (z.B. Tab-Bar) — flush mit Sidebar-Box */}
-          {activeItem && (
-            <div className="flex flex-1 flex-col justify-end">
-              <h1 className={`text-2xl font-bold tracking-tight text-foreground leading-tight ${headerSlot ? "mt-1" : "mb-5"}`}>
-                {activeItem.label}
-              </h1>
-              {activeItem.hint && (
-                <p className={`mt-1 text-sm text-muted-foreground leading-snug max-w-xl ${headerSlot ? "" : "mb-5"}`}>
-                  {activeItem.hint}
-                </p>
-              )}
-              {headerSlot}
             </div>
           )}
         </div>
+      </div>
+    )}
 
-        {/* Content — Chat-Routen bekommen vollen Platz ohne Padding */}
-        {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
-          <div className="flex-1 min-h-0 overflow-hidden pb-14 lg:pb-0">
-            <Outlet />
-          </div>
-        ) : (
-          <div className="px-3 py-3 pb-20 sm:px-4 sm:py-4 md:px-6 md:py-6 lg:flex-1 lg:overflow-y-auto lg:px-8 lg:py-8 lg:pb-8">
-            <Outlet />
-          </div>
-        )}
-      </main>
+    {!coreOnline && (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95 backdrop-blur-sm">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <div className="text-center">
+          <p className="text-lg font-semibold">{updating ? t("layout.restartingUpdate") : t("layout.restartingCore")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("layout.restartingWait")}</p>
+        </div>
+      </div>
+    )}
 
-      {/* Bottom-Navigation — auf Mobile und Tablet (< lg), Desktop hat die Sidebar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur-sm lg:hidden">
-        <div className="flex items-center justify-around px-1 py-1 safe-area-inset-bottom">
-          {bottomNavItems.map(({ to, icon: Icon, label }) => {
-            const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`);
+    {/* ── HORIZONTAL HEADER ────────────────────────────────────────── */}
+    <div className="sticky top-0 z-40 flex flex-col bg-[hsl(var(--shell))/0.92] backdrop-blur-xl border-b border-border/50">
+
+      {/* Row 1: Logo + Nav + Right Controls */}
+      <div className="flex items-center gap-4 px-4 lg:px-6 h-14">
+
+        {/* Logo + Name */}
+        <button
+          type="button"
+          onClick={() => navigate("/dashboard")}
+          className="flex items-center gap-2.5 shrink-0 rounded-xl hover:bg-white/5 transition-colors px-1 py-0.5"
+        >
+          <img
+            src="/hydrahive-logo.png"
+            alt="HydraHive"
+            className="h-8 w-8 rounded-lg"
+            style={{ animation: "pulse-glow 3s ease-in-out infinite" }}
+          />
+          <span className="font-semibold text-sm text-[hsl(var(--sidebar-foreground))] hidden sm:block">HydraHive</span>
+        </button>
+
+        {/* Vertical divider */}
+        <div className="hidden lg:block w-px h-6 bg-white/10 shrink-0" />
+
+        {/* Main Navigation — horizontal pills */}
+        <nav className="hidden lg:flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+          {nav.map(g => {
+            const hasActive = g.items.some(item => {
+              const p = item.to.split("?")[0];
+              return location.pathname === p || location.pathname.startsWith(`${p}/`);
+            });
+            if (g.id === "main") {
+              // Main items: Dashboard + Projects as direct pills
+              return g.items.map(item => {
+                const Icon = item.icon;
+                const p = item.to.split("?")[0];
+                const isActive = location.pathname === p || location.pathname.startsWith(`${p}/`);
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    title={item.hint}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors shrink-0",
+                      isActive
+                        ? "bg-primary/15 text-primary border border-primary/25"
+                        : "text-muted-foreground hover:bg-white/8 hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {item.label}
+                  </NavLink>
+                );
+              });
+            }
+            // Grouped items with dropdown
             return (
-              <NavLink
-                key={to}
-                to={to}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-0",
-                  isActive
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+              <div key={g.id} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(openDropdown === g.id ? null : g.id)}
+                  className={cn(
+                    "flex items-center gap-1 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
+                    hasActive ? "bg-primary/15 text-primary border border-primary/25" : "text-muted-foreground hover:bg-white/8 hover:text-foreground"
+                  )}
+                >
+                  {g.label}
+                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-150", openDropdown === g.id && "rotate-180")} />
+                </button>
+                {openDropdown === g.id && (
+                  <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border/60 bg-card shadow-xl py-1 backdrop-blur">
+                    {g.items.map(item => {
+                      const Icon = item.icon;
+                      const p = item.to.split("?")[0];
+                      const isActive = location.pathname === p || location.pathname.startsWith(`${p}/`);
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setOpenDropdown(null)}
+                          className={cn(
+                            "flex items-center gap-2.5 px-4 py-2 text-sm transition hover:bg-accent/10",
+                            isActive ? "text-primary font-medium" : "text-foreground"
+                          )}
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          {item.label}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
                 )}
-              >
-                <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
-                <span className={cn("text-[0.6rem] font-medium truncate max-w-[52px] text-center", isActive ? "text-primary" : "text-muted-foreground")}>
-                  {label}
-                </span>
-              </NavLink>
+              </div>
             );
           })}
-          {/* Mehr-Button öffnet Drawer */}
+        </nav>
+
+        {/* Right Controls */}
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
+          {/* Chat button — always visible, goes to my-agent */}
           <button
-            onClick={() => setMobileOpen(true)}
-            className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
+            type="button"
+            onClick={() => navigate("/my-agent")}
+            className="hidden sm:flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium bg-primary/15 text-primary border border-primary/25 hover:bg-primary/25 transition-colors"
           >
-            <Menu className="h-5 w-5 shrink-0" />
-            <span className="text-[0.6rem] font-medium">{t("nav.more")}</span>
+            <MessageSquare className="h-3.5 w-3.5" />
+            Chat
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleDark}
+            className="rounded-xl p-2 text-muted-foreground transition hover:text-foreground hover:bg-white/8"
+            title={dark ? t("layout.light") : t("layout.dark")}
+          >
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+          <LanguageSwitcher compact />
+          <button
+            type="button"
+            onClick={() => { logout(); navigate("/login"); }}
+            className="rounded-xl p-2 text-muted-foreground transition hover:text-red-400 hover:bg-red-500/10"
+            title={t("layout.logout")}
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+          <NotificationBell />
+
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="lg:hidden rounded-xl p-2 text-muted-foreground transition hover:text-foreground hover:bg-white/8"
+            aria-label="Menü öffnen"
+          >
+            <Menu className="h-5 w-5" />
           </button>
         </div>
-      </nav>
+      </div>
 
-      <NotificationQueue />
-      <SupportWidget />
-      <FloatingCompanion />
+      {/* Row 2: Info Widgets Bar */}
+      <div className="flex items-center gap-2 px-4 lg:px-6 h-10 overflow-x-auto scrollbar-none border-t border-white/5">
+        {/* Core Status */}
+        <div className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium rounded-full px-2.5 py-1",
+          healthy === false ? "bg-red-500/15 text-red-400 border border-red-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"
+        )}>
+          <span className={cn("h-1.5 w-1.5 rounded-full", healthy === false ? "bg-red-400 animate-pulse" : "bg-green-400")} />
+          {healthy === false ? t("dashboard.coreOffline") : t("dashboard.coreOnline")}
+        </div>
+
+        {/* Agents */}
+        {agents != null && (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-violet-500/15 text-violet-400 border border-violet-500/25">
+            <Bot className="h-3 w-3" />
+            Agents: {agents}
+          </div>
+        )}
+
+        {/* Projects */}
+        {projects != null && (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
+            <FolderKanban className="h-3 w-3" />
+            Projects: {projects}
+          </div>
+        )}
+
+        {/* Runtime */}
+        {running > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-lime-500/15 text-lime-400 border border-lime-500/25">
+            <Activity className="h-3 w-3" />
+            Runtime: {running}
+          </div>
+        )}
+
+        {/* GPU Temp */}
+        {hottestGpu && (hottestGpu.temp_c ?? 0) > 0 && (
+          <div className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border",
+            (hottestGpu.temp_c ?? 0) >= 80
+              ? "bg-amber-500/15 text-amber-400 border-amber-500/25"
+              : "bg-amber-500/10 text-amber-400/70 border-amber-500/15"
+          )}>
+            <Cpu className="h-3 w-3" />
+            GPU: {hottestGpu.temp_c}°C
+          </div>
+        )}
+
+        {/* Heartbeats */}
+        {runningHeartbeats > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-muted text-muted-foreground border border-border/50">
+            <Radar className="h-3 w-3" />
+            HB: {runningHeartbeats}
+          </div>
+        )}
+
+        {/* Update available */}
+        {updateAvailable && (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/25">
+            <RefreshCw className="h-3 w-3" />
+            {t("layout.updateAvailable")}
+          </div>
+        )}
+
+        {/* Spacer */}
+        <div className="flex-1 min-w-0" />
+
+        {/* Last sync */}
+        {lastUpdated && (
+          <span className="text-[10px] text-muted-foreground shrink-0 hidden md:block">
+            {t("dashboard.updateSync", { time: lastUpdated.toLocaleTimeString("de-DE") })}
+          </span>
+        )}
+      </div>
     </div>
+
+    {/* ── MAIN CONTENT ─────────────────────────────────────────────── */}
+    <main className="relative min-w-0 flex-1 flex flex-col overflow-hidden">
+
+      {/* Page header with slot (tabs) — only on non-chat routes */}
+      {!location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) && (
+        <div className="px-4 lg:px-8 pt-4 lg:pt-6 pb-0">
+          {activeItem && (
+            <div className="mb-4">
+              <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">
+                {activeItem.label}
+              </h1>
+              {activeItem.hint && (
+                <p className="mt-0.5 text-sm text-muted-foreground leading-snug max-w-xl">
+                  {activeItem.hint}
+                </p>
+              )}
+            </div>
+          )}
+          {headerSlot && <div className="mb-4">{headerSlot}</div>}
+        </div>
+      )}
+
+      {/* Content area */}
+      {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
+        <div className="flex-1 min-h-0 overflow-hidden pb-14 lg:pb-0">
+          <Outlet />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 lg:px-8 lg:pt-0 pb-20 lg:pb-8">
+          <Outlet />
+        </div>
+      )}
+    </main>
+
+    {/* ── BOTTOM NAV (mobile only) ──────────────────────────────────── */}
+    <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur-sm lg:hidden">
+      <div className="flex items-center justify-around px-1 py-1 safe-area-inset-bottom">
+        {bottomNavItems.map(({ to, icon: Icon, label }) => {
+          const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`);
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className={cn(
+                "flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-0",
+                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
+              <span className={cn("text-[0.6rem] font-medium truncate max-w-[52px] text-center", isActive ? "text-primary" : "text-muted-foreground")}>
+                {label}
+              </span>
+            </NavLink>
+          );
+        })}
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Menu className="h-5 w-5 shrink-0" />
+          <span className="text-[0.6rem] font-medium">{t("nav.more")}</span>
+        </button>
+      </div>
+    </nav>
+
+    {/* Mobile Drawer */}
+    {mobileOpen && (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)}>
+        <div className="absolute left-0 top-0 bottom-0 w-[260px] bg-[hsl(var(--sidebar))] border-r border-[hsl(var(--sidebar-border))] shadow-2xl overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between h-14 px-4 border-b border-[hsl(var(--sidebar-border))]">
+            <div className="flex items-center gap-2.5">
+              <img src="/hydrahive-logo.png" alt="HydraHive" className="h-8 w-8 rounded-lg" style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
+              <span className="font-semibold text-sm text-[hsl(var(--sidebar-foreground))]">HydraHive</span>
+            </div>
+            <button onClick={() => setMobileOpen(false)} className="p-2 rounded-xl text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))]">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <nav className="p-3 space-y-1">
+            {nav.map(g => (
+              <div key={g.id}>
+                {g.label && (
+                  <p className="px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-[hsl(var(--sidebar-muted))]">{g.label}</p>
+                )}
+                {g.items.map(item => {
+                  const Icon = item.icon;
+                  const p = item.to.split("?")[0];
+                  const isActive = location.pathname === p || location.pathname.startsWith(`${p}/`);
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
+                        isActive ? "bg-primary/15 text-primary" : "text-[hsl(var(--sidebar-muted))] hover:bg-white/8 hover:text-[hsl(var(--sidebar-foreground))]"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {item.label}
+                    </NavLink>
+                  );
+                })}
+                {g.label && <div className="mt-1 border-t border-white/5" />}
+              </div>
+            ))}
+          </nav>
+        </div>
+      </div>
+    )}
+
+    <NotificationQueue />
+    <SupportWidget />
+    <FloatingCompanion />
     </TourProvider>
     </HeaderSlotCtx.Provider>
   );
+
 }
