@@ -400,17 +400,22 @@ export function AdminLayout() {
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Array of refs for each dropdown — lets us detect outside clicks correctly
+  const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      // Close if click is outside ALL open dropdowns
+      const open = openDropdown;
+      if (!open) return;
+      const ref = dropdownRefs.current[open];
+      if (ref && !ref.contains(e.target as Node)) {
         setOpenDropdown(null);
       }
     }
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
+  }, [openDropdown]);
 
   useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
   const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate, showLog, logLines, logDone, closeLog } = useUpdateStatus(isAdmin);
@@ -647,7 +652,7 @@ export function AdminLayout() {
         <div className="hidden lg:block w-px h-6 bg-white/10 shrink-0" />
 
         {/* Main Navigation — horizontal pills */}
-        <nav className="hidden lg:flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+        <nav className="hidden lg:flex items-center gap-0.5 flex-1 min-w-0">
           {nav.map(g => {
             const hasActive = g.items.some(item => {
               const p = item.to.split("?")[0];
@@ -692,7 +697,7 @@ export function AdminLayout() {
                   <ChevronDown className={cn("h-3 w-3 transition-transform duration-150", openDropdown === g.id && "rotate-180")} />
                 </button>
                 {openDropdown === g.id && (
-                  <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border/60 bg-card shadow-xl py-1 backdrop-blur">
+                  <div ref={el => { dropdownRefs.current[g.id] = el; }} className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border/60 bg-card shadow-xl py-1 backdrop-blur overflow-visible">
                     {g.items.map(item => {
                       const Icon = item.icon;
                       const p = item.to.split("?")[0];
