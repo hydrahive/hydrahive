@@ -397,7 +397,7 @@ export function AdminLayout() {
 
   const sidebar = (
     <aside className="app-sidebar">
-      <div className="flex items-center justify-between h-[72px] px-4 border-b border-[hsl(var(--sidebar-border))]">
+      <div className="flex items-center justify-between h-[96px] px-4 border-b border-[hsl(var(--sidebar-border))]">
         <button
           type="button"
           onClick={() => setMobileOpen(false)}
@@ -410,7 +410,7 @@ export function AdminLayout() {
           <img
             src="/hydrahive-logo.png"
             alt="HydraHive"
-            className="h-12 w-12 rounded-2xl"
+            className="h-20 w-20 rounded-2xl"
             style={{ animation: "pulse-glow 3s ease-in-out infinite" }}
           />
           <span className="font-semibold text-base text-[hsl(var(--sidebar-foreground))] truncate">HydraHive</span>
@@ -611,7 +611,7 @@ export function AdminLayout() {
 
       <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
         {/* Header — gleiche Höhe wie Sidebar-Logo-Box */}
-        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[72px] px-4 md:px-6">
+        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[96px] px-4 md:px-6">
           {/* Zeile 1: Hamburger + Nav-Gruppen + Rechts-Controls */}
           <div className="flex items-center justify-between gap-3 py-2">
             {/* Links: Hamburger (mobile) + horizontale Nav-Gruppen */}

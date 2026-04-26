@@ -463,7 +463,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
     <div className="space-y-5">
 
       {/* ── HERO ZONE ────────────────────────────────────────────── */}
-      <div className="rounded-2xl border bg-card p-6 lg:p-8">
+      <div className="card-accent rounded-2xl border bg-card p-6 lg:p-8">
         {/* Greeting + Core Status */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="flex-1 min-w-0">
@@ -566,7 +566,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         {/* LEFT: Activity Stream + Context-Metriken */}
         <div className="space-y-4">
           {/* Activity Stream */}
-          <div className="rounded-xl border bg-card p-5">
+          <div className="card-accent rounded-xl border bg-card p-5">
             <div className="flex items-center gap-2 mb-4">
               <Activity className="h-4 w-4 text-primary" />
               <h2 className="text-base font-semibold tracking-tight">{t("dashboard.activityStream", { defaultValue: "Activity Stream" })}</h2>
@@ -601,7 +601,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
           {/* Context-Metriken (nur wenn Daten da) */}
           {Object.keys(sessionMetrics).length > 0 && (
-            <div className="rounded-xl border bg-card p-5">
+            <div className="card-accent rounded-xl border bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <Brain className="h-4 w-4 text-primary" />
                 <h2 className="text-base font-semibold tracking-tight">{t("dashboard.contextMetrics", { defaultValue: "Context-Metriken" })}</h2>
@@ -649,7 +649,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           </div>
 
           {/* Quick Actions */}
-          <div className="rounded-xl border bg-card p-5">
+          <div className="card-accent rounded-xl border bg-card p-5">
             <h2 className="text-base font-semibold tracking-tight mb-4">{t("dashboard.quickActions", { defaultValue: "Quick Actions" })}</h2>
             <div className="space-y-2">
               <button onClick={() => navigate("/agents/new")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
@@ -671,7 +671,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* ── FULL-WIDTH: OAuth + Token-Pläne ─────────────────────── */}
       {oauthUsage && (oauthUsage.available || oauthUsage.message) ? (
-        <div className="rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-5">
           <div className="flex items-center gap-3 mb-4">
             <Activity className="h-4 w-4 text-primary" />
             <h2 className="text-base font-semibold tracking-tight">Claude OAuth</h2>
@@ -706,7 +706,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* Codex + MiniMax */}
       {codex && codex.configured ? (
-        <div className="rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-5">
           <div className="flex items-center gap-3 mb-4">
             <Cpu className="h-4 w-4 text-primary" />
             <h2 className="text-base font-semibold tracking-tight">Codex</h2>
@@ -739,7 +739,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       ) : null}
 
       {minimax && minimax.available ? (
-        <div className="rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-5">
           <div className="flex items-center gap-3 mb-4">
             <Zap className="h-4 w-4 text-primary" />
             <h2 className="text-base font-semibold tracking-tight">MiniMax</h2>

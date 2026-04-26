@@ -355,7 +355,12 @@
 
   .app-panel {
     @apply rounded-xl border;
-    background: hsl(var(--panel) / 0.8);
+    background: linear-gradient(
+      160deg,
+      hsl(var(--panel) / 0.85) 0%,
+      hsl(var(--panel) / 0.75) 55%,
+      hsl(var(--bg-elevated, var(--panel)) / 0.65) 100%
+    );
     color: hsl(var(--panel-foreground));
     border-color: hsl(var(--border) / 0.9);
     box-shadow: 0 12px 40px hsl(var(--shadow-soft) / 0.16);
@@ -619,4 +624,24 @@ main {
   text-shadow:
     calc(var(--adminfun-treble, 0) * 4px * var(--adminfun-active, 0)) 0 rgba(236, 72, 153, 0.8),
     calc(var(--adminfun-treble, 0) * -4px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, 0.8);
+}
+
+/* ── Content Card mit dezentem Candy-Gradient ── */
+.card-accent {
+  position: relative;
+  overflow: hidden;
+}
+.card-accent::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 0% 0%, hsl(var(--candy-violet) / 0.07), transparent 50%),
+    radial-gradient(circle at 100% 0%, hsl(var(--candy-cyan) / 0.05), transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+.card-accent > * {
+  position: relative;
+  z-index: 1;
 }
