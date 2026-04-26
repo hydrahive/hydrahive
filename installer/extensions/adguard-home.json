@@ -9,5 +9,15 @@
   "service": "adguardhome",
   "health_url": "http://127.0.0.1:8300/",
   "open_url": ":8300/",
-  "installed_check": "/opt/adguard-home/AdGuardHome"
+  "installed_check": "/opt/adguard-home/AdGuardHome",
+  "install_params": [
+    {
+      "key": "ADGUARD_DNS_IP",
+      "label": "Dedizierte DNS-IP",
+      "type": "string",
+      "placeholder": "z.B. 192.168.1.53",
+      "required": false,
+      "description": "Freie IP aus deinem Netz — AdGuard lauscht dann auf Port 53 dieser IP. Router-DNS auf diese IP zeigen lassen. Leer lassen für Standard-Modus (Port 3053)."
+    }
+  ]
 }

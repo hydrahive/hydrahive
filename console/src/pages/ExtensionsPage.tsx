@@ -12,6 +12,15 @@ interface ExtValidation {
   warnings: string[];
 }
 
+interface InstallParam {
+  key: string;
+  label: string;
+  type: string;
+  placeholder?: string;
+  required?: boolean;
+  description?: string;
+}
+
 interface Extension {
   id: string;
   name: string;
@@ -23,6 +32,7 @@ interface Extension {
   http_ok: boolean;
   open_url: string | null;
   has_uninstall: boolean;
+  install_params?: InstallParam[];
   validation?: ExtValidation;
 }
 
@@ -141,6 +151,10 @@ export function ExtensionsPage() {
   const logRef    = useRef<HTMLDivElement>(null);
   const abortRef  = useRef<AbortController | null>(null);
 
+  // Install-Params Dialog
+  const [paramDialogExt, setParamDialogExt] = useState<Extension | null>(null);
+  const [paramValues,    setParamValues]    = useState<Record<string, string>>({});
+
   // Installing = modal is open and action is still running
   const installing = activeId !== null && logDone === null;
 
@@ -180,7 +194,17 @@ export function ExtensionsPage() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
 
-  async function handleAction(id: string, action: "install" | "uninstall") {
+  async function handleAction(id: string, action: "install" | "uninstall", params?: Record<string, string>) {
+    // Bei Install: prüfen ob Params-Dialog nötig
+    if (action === "install" && !params) {
+      const ext = extensions.find(e => e.id === id);
+      if (ext?.install_params && ext.install_params.length > 0) {
+        setParamValues({});
+        setParamDialogExt(ext);
+        return;
+      }
+    }
+
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -192,10 +216,13 @@ export function ExtensionsPage() {
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
+      const body = (action === "install" && params) ? JSON.stringify({ params }) : undefined;
       const res = await fetch(`/api/admin/extensions/${id}/${action}`, {
         method: "POST",
         credentials: "include",
         signal: ctrl.signal,
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body,
       });
       if (!res.ok || !res.body) {
         setLog([`Fehler: HTTP ${res.status}`]);
@@ -419,6 +446,41 @@ export function ExtensionsPage() {
           </div>
         ))}
       </div>
+
+      {/* Install-Params Dialog */}
+      {paramDialogExt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="card w-full max-w-md mx-4 space-y-4">
+            <h2 className="text-lg font-semibold">{paramDialogExt.name} installieren</h2>
+            {paramDialogExt.install_params!.map(p => (
+              <div key={p.key} className="space-y-1">
+                <label className="text-sm font-medium">{p.label}{p.required && <span className="text-red-500 ml-1">*</span>}</label>
+                {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
+                <input
+                  className="input w-full"
+                  type={p.type === "password" ? "password" : "text"}
+                  placeholder={p.placeholder ?? ""}
+                  value={paramValues[p.key] ?? ""}
+                  onChange={e => setParamValues(v => ({ ...v, [p.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+            <div className="flex gap-2 justify-end pt-2">
+              <button className="btn btn-ghost" onClick={() => setParamDialogExt(null)}>Abbrechen</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const ext = paramDialogExt;
+                  setParamDialogExt(null);
+                  handleAction(ext.id, "install", paramValues);
+                }}
+              >
+                Installieren
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

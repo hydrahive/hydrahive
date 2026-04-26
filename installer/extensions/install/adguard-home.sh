@@ -20,9 +20,20 @@ AGH_BINARY="${AGH_DIR}/AdGuardHome"
 AGH_CONF_DIR="${AGH_DIR}"
 AGH_DATA_DIR="/var/lib/adguard-home"
 AGH_USER="adguardhome"
-DNS_PORT="3053"
 WEB_PORT="8300"
 HH_CONF="/etc/hydrahive/adguard-home.json"
+
+# Dedizierte DNS-IP (optional, aus Env-Var gesetzt via HydraHive Install-Params)
+# Wenn gesetzt: IP-Alias anlegen + AdGuard auf IP:53 binden
+# Wenn leer:    Standard-Modus 0.0.0.0:3053
+ADGUARD_DNS_IP="${ADGUARD_DNS_IP:-}"
+if [ -n "${ADGUARD_DNS_IP}" ]; then
+    DNS_BIND="${ADGUARD_DNS_IP}"
+    DNS_PORT="53"
+else
+    DNS_BIND="0.0.0.0"
+    DNS_PORT="3053"
+fi
 
 info "=== AdGuard Home installieren ==="
 
@@ -110,6 +121,39 @@ mkdir -p "${AGH_DATA_DIR}"
 chown -R "${AGH_USER}:${AGH_USER}" "${AGH_DATA_DIR}"
 chown -R "${AGH_USER}:${AGH_USER}" "${AGH_DIR}"
 
+# --- IP-Alias (nur wenn ADGUARD_DNS_IP gesetzt) ---
+if [ -n "${ADGUARD_DNS_IP}" ]; then
+    info "Richte dedizierte DNS-IP ${ADGUARD_DNS_IP} ein..."
+    PRIMARY_IFACE="$(ip route | awk '/^default/ { print $5; exit }')"
+    if [ -z "${PRIMARY_IFACE}" ]; then
+        error "Kein primäres Netzwerk-Interface gefunden"
+    fi
+    # Prefix aus dem Interface ermitteln (z.B. /24)
+    IFACE_PREFIX="$(ip -4 addr show dev "${PRIMARY_IFACE}" | awk '/inet / { split($2,a,"/"); print a[2]; exit }')"
+    IFACE_PREFIX="${IFACE_PREFIX:-24}"
+
+    # systemd-Service für persistenten IP-Alias
+    cat > /etc/systemd/system/adguard-dns-alias.service << ALIASEOF
+[Unit]
+Description=AdGuard Home DNS IP Alias (${ADGUARD_DNS_IP})
+Before=adguardhome.service
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/ip addr add ${ADGUARD_DNS_IP}/${IFACE_PREFIX} dev ${PRIMARY_IFACE} 2>/dev/null || true
+ExecStop=/sbin/ip addr del ${ADGUARD_DNS_IP}/${IFACE_PREFIX} dev ${PRIMARY_IFACE} 2>/dev/null || true
+
+[Install]
+WantedBy=multi-user.target
+ALIASEOF
+    systemctl daemon-reload
+    systemctl enable adguard-dns-alias
+    systemctl start adguard-dns-alias
+    success "IP-Alias ${ADGUARD_DNS_IP} auf ${PRIMARY_IFACE} aktiv"
+fi
+
 # --- Initiale Konfiguration erstellen (nur wenn noch keine vorhanden) ---
 AGH_YAML="${AGH_CONF_DIR}/AdGuardHome.yaml"
 if [ ! -f "${AGH_YAML}" ]; then
@@ -132,7 +176,7 @@ web_session_ttl: 720
 
 dns:
   bind_hosts:
-    - 0.0.0.0
+    - ${DNS_BIND}
   port: ${DNS_PORT}
   anonymize_client_ip: false
   ratelimit: 20
@@ -365,7 +409,11 @@ chmod 640 "${HH_CONF}"
 echo ""
 info "=== AdGuard Home installiert ==="
 info "Web-UI:   http://127.0.0.1:${WEB_PORT}"
-info "DNS-Port: ${DNS_PORT} (TCP/UDP)"
+info "DNS-Port: ${DNS_PORT} (TCP/UDP) auf ${DNS_BIND}"
 info "Ersteinrichtung: Im Browser öffnen → Setup-Wizard startet automatisch"
-warn "Hinweis: Port ${DNS_PORT} statt 53 — bei Bedarf Router-DNS auf diesen Port zeigen lassen"
-warn "oder iptables-Redirect: iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}"
+if [ -n "${ADGUARD_DNS_IP}" ]; then
+    success "Router-DNS → ${ADGUARD_DNS_IP} (Port 53, kein iptables nötig)"
+else
+    warn "Hinweis: Port ${DNS_PORT} statt 53 — Router-DNS auf Server-IP:${DNS_PORT} zeigen lassen"
+    warn "oder iptables-Redirect: iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}"
+fi

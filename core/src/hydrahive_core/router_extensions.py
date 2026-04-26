@@ -90,10 +90,10 @@ def _is_installed(manifest: dict) -> bool:
         return False
 
 
-async def _stream_script(script_path: Path):
+async def _stream_script(script_path: Path, extra_env: dict | None = None):
     import os as _os
     import json as _j
-    env = {**_os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+    env = {**_os.environ, "DEBIAN_FRONTEND": "noninteractive", **(extra_env or {})}
     proc = await asyncio.create_subprocess_exec(
         "sudo", "-n", "/bin/bash", str(script_path),
         stdout=asyncio.subprocess.PIPE,
@@ -214,6 +214,7 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
                 "external":    is_external,
                 "config_hint": m.get("config_hint", ""),
                 "plugin_id":   m.get("plugin_id", ""),
+                "install_params": m.get("install_params", []),
                 "validation":  validation,
             })
           except Exception as e:
@@ -232,7 +233,7 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
         return _validate_extension(manifests[ext_id])
 
     @admin_router.post("/admin/extensions/{ext_id}/install")
-    async def install_extension(ext_id: str, _a=Depends(require_admin)):
+    async def install_extension(ext_id: str, request: Request, _a=Depends(require_admin)):
         if not _EXT_ID_RE.match(ext_id):
             raise HTTPException(400, "Ungültige Extension-ID")
         manifests = {m["id"]: m for m in _load_manifests()}
@@ -251,9 +252,20 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
                 "Extension '%s' Warnungen: %s", ext_id, "; ".join(validation["warnings"]),
             )
 
+        # Optionale Install-Params aus Request-Body als Env-Vars übergeben
+        extra_env: dict[str, str] = {}
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and "params" in body:
+                for k, v in body["params"].items():
+                    if isinstance(k, str) and isinstance(v, str) and v.strip():
+                        extra_env[k] = v.strip()
+        except Exception:
+            pass
+
         script_path = INSTALLER_DIR / manifests[ext_id]["install_script"]
         return StreamingResponse(
-            _stream_script(script_path),
+            _stream_script(script_path, extra_env=extra_env),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
