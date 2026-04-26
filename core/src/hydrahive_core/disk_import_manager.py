@@ -28,7 +28,7 @@ _VMA_MAGIC = b"VMA"          # 3-byte prefix; byte 3 is version (0x01 standard, 
 _VMA_CLUSTER_SIZE = 65536   # 64 KB per cluster
 _VMA_EXTENT_HEADER_SIZE = 512
 _VMA_BLOCKS_PER_EXTENT = 59
-_VMA_DEV_ENTRY_SIZE = 80    # VmaDeviceInfo: devflags(4)+devid(4)+size(8)+devname(64)
+_VMA_DEV_ENTRY_SIZE = 32    # VmaDeviceInfoHeader: devname_ptr(4)+reserved(4)+size(8)+reserved2(16)
 _VMA_MAX_DEVS = 255
 # VmaExtentHeader offsets: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16) = 40
 _VMA_BLOCKINFO_OFFSET = 40
@@ -83,7 +83,11 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
         if magic[3:4] not in (b"\x01", b"\x00"):
             logger.warning("Unbekanntes VMA-Version-Byte %r — versuche trotzdem zu parsen", magic[3:4])
 
-        dev_info_offset = 2048  # VmaHeader: 60 fixed + reserved[1988] = 2048
+        # VmaHeader layout (all big-endian): magic(4)+version(4)+uuid(16)+ctime(8)+
+        # md5sum(16)+blob_buffer_offset(4 @ byte 48)+blob_buffer_size(4)+header_size(4)+...
+        # dev_info[256] starts at 0x1000 = 4096
+        blob_buffer_offset = struct.unpack_from(">I", header_cluster, 48)[0]
+        dev_info_offset = 4096
         target_dev_id: int | None = None
         image_size: int = 0
         devname: str = "disk0"
@@ -92,14 +96,18 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
             off = dev_info_offset + i * _VMA_DEV_ENTRY_SIZE
             if off + _VMA_DEV_ENTRY_SIZE > len(header_cluster):
                 break
-            devflags = header_cluster[off]
-            if not (devflags & 0x01):  # bit 0 = active
+            # VmaDeviceInfoHeader: devname_ptr(4,BE)+reserved(4)+size(8,BE)+reserved2(16)
+            devname_ptr = struct.unpack_from(">I", header_cluster, off)[0]
+            if devname_ptr == 0:  # empty slot
                 continue
-            img_size_raw = struct.unpack_from("<Q", header_cluster, off + 8)[0]
+            img_size_raw = struct.unpack_from(">Q", header_cluster, off + 8)[0]
             if img_size_raw == 0:
                 continue
-            name_bytes = header_cluster[off + 16: off + 80]
-            name = name_bytes.split(b"\x00")[0].decode("utf-8", errors="replace")
+            # devname lives in the blob buffer at blob_buffer_offset + devname_ptr
+            blob_name_start = blob_buffer_offset + devname_ptr
+            blob_name_end = min(blob_name_start + 64, len(header_cluster))
+            name = header_cluster[blob_name_start:blob_name_end].split(b"\x00")[0].decode(
+                "utf-8", errors="replace")
             if target_dev_id is None:
                 target_dev_id = i + 1
                 image_size = img_size_raw
@@ -130,7 +138,7 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                 if extent_header[:4] != b"VMAE":
                     raise ValueError("Ungültiger Extent-Header — VMA beschädigt?")
                 # blockinfo starts at offset 40: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16)
-                block_infos = struct.unpack_from("<59Q", extent_header, _VMA_BLOCKINFO_OFFSET)
+                block_infos = struct.unpack_from(">59Q", extent_header, _VMA_BLOCKINFO_OFFSET)
 
                 for bi in block_infos:
                     cluster_data = _readexact(f, _VMA_CLUSTER_SIZE)
