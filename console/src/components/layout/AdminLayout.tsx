@@ -247,7 +247,7 @@ export function AdminLayout() {
   const [heartbeatTasks, setHeartbeatTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const healthy = status !== null ? Object.keys(status).length > 0 : null;
+  const [coreHealthy, setCoreHealthy] = useState<boolean | null>(null);
   const runtime = status?.runtime as Record<string, any> | undefined;
   const running = runtime ? Object.values(runtime).filter((a: any) => a.status === "running").length : 0;
   const agents = status?.discovery?.count ?? null;
@@ -260,7 +260,15 @@ export function AdminLayout() {
     let alive = true;
     async function load() {
       try {
-        const [s, g, h] = await Promise.all([api.status(), api.gpuInfo().catch(() => null), api.heartbeatTasks().catch(() => ({ tasks: [] }))]);
+        const [s, h, g] = await Promise.all([
+          api.status().catch(() => null),
+          api.heartbeatTasks().catch(() => ({ tasks: [] })),
+          api.gpuInfo().catch(() => null),
+        ]);
+        try {
+          const h = await api.health();
+          setCoreHealthy(h?.status === "ok");
+        } catch { setCoreHealthy(false); }
         if (!alive) return;
         setStatus(s);
         if (g) setGpu(g);
@@ -771,10 +779,10 @@ export function AdminLayout() {
       <div className="flex items-center gap-2 px-4 lg:px-6 h-10 overflow-x-auto scrollbar-none border-t border-white/5">
         {/* Core Status */}
         <div className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium rounded-full px-2.5 py-1",
-          healthy === false ? "bg-red-500/15 text-red-400 border border-red-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"
+          coreHealthy === false ? "bg-red-500/15 text-red-400 border border-red-500/30" : coreHealthy === true ? "bg-green-500/15 text-green-400 border border-green-500/30" : "bg-muted text-muted-foreground border border-border/50"
         )}>
-          <span className={cn("h-1.5 w-1.5 rounded-full", healthy === false ? "bg-red-400 animate-pulse" : "bg-green-400")} />
-          {healthy === false ? t("dashboard.coreOffline") : t("dashboard.coreOnline")}
+          <span className={cn("h-1.5 w-1.5 rounded-full", coreHealthy === false ? "bg-red-400 animate-pulse" : coreHealthy === true ? "bg-green-400" : "bg-muted-foreground")} />
+          {coreHealthy === false ? t("dashboard.coreOffline") : coreHealthy === true ? t("dashboard.coreOnline") : "..."}
         </div>
 
         {/* Agents */}
@@ -821,12 +829,27 @@ export function AdminLayout() {
           </div>
         )}
 
-        {/* Update available */}
-        {updateAvailable && (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/25">
-            <RefreshCw className="h-3 w-3" />
-            {t("layout.updateAvailable")}
+        {/* Update status + trigger */}
+        {(updateAvailable || updating) && isAdmin && (
+          <div className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border",
+            updating
+              ? "bg-amber-500/20 text-amber-400 border-amber-500/35"
+              : "bg-amber-500/15 text-amber-400 border-amber-500/25 cursor-pointer hover:bg-amber-500/25"
+          )}>
+            <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
+            {updating ? t("layout.updateRunning") : t("layout.updateAvailable")}
           </div>
+        )}
+        {isAdmin && !updating && updateAvailable && (
+          <button
+            type="button"
+            onClick={triggerUpdate}
+            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+            title={t("layout.triggerUpdate")}
+          >
+            <RefreshCw className="h-3 w-3" />
+            Update
+          </button>
         )}
 
         {/* Spacer */}
