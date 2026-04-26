@@ -34,6 +34,7 @@ import {
   Workflow,
   CalendarClock,
   Network,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -246,36 +247,116 @@ export function AdminLayout() {
   }, []);
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
+  type NavGroup = { id: string; label: string; items: NavItem[] };
 
-  // v2: Vereinfachte Navigation — Projekte als Haupteinstieg
-  const allNavItems: NavItem[] = [
-    { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
-    { to: "/projects",       icon: FolderKanban,    label: t("nav.projects"),        hint: t("navHint.projects") },
-    { to: "/agents",         icon: Bot,             label: t("nav.agents", { defaultValue: "Agenten" }),       hint: t("navHint.agents", { defaultValue: "Alle Agenten verwalten" }), adminOnly: true },
-    { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
-    { to: "/blueprint",      icon: Workflow,        label: t("nav.blueprint"),       hint: t("navHint.blueprint") },
-    { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },
-    { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
-    { to: "/hub?tab=extensions", icon: Rocket,      label: t("nav.extensions"),      hint: t("navHint.extensions"), adminOnly: true },
-    { to: "/schedules",     icon: CalendarClock,  label: t("nav.schedules"),       hint: t("navHint.schedules"), adminOnly: true },
-    { to: "/proactive", icon: Bot, label: t("nav.proactive", { defaultValue: "Proaktiv" }), hint: t("navHint.proactive", { defaultValue: "Autonome Background-Tasks für Agenten" }), adminOnly: true },
-    { to: "/voice",          icon: MessageSquare,   label: t("nav.voice"),           hint: t("navHint.voice"), adminOnly: true },
-    { to: "/target-systems", icon: ServerCog,       label: t("nav.targetSystems", { defaultValue: "Zielsysteme" }), hint: t("navHint.targetSystems", { defaultValue: "WKS und Root-/Remote-Server verwalten" }), adminOnly: true },
-    { to: "/vms",            icon: Server,           label: "Virtuelle Server",       hint: "VMs erstellen, starten und im Browser verwalten", adminOnly: true },
-    { to: "/federation",     icon: Network,          label: t("nav.federation"),      hint: t("navHint.federation"), adminOnly: true },
-    { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
-    { to: "/teams", icon: Users, label: t("nav.teams", { defaultValue: "Teams" }), hint: t("navHint.teams", { defaultValue: "Agent-Teams und Rollen verwalten" }), adminOnly: true },
-    { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
-    { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
-    { to: "/prompt-guide",   icon: Lightbulb,       label: t("nav.promptGuide"),     hint: t("navHint.promptGuide", { defaultValue: "KI-Tipps für bessere Prompts" }) },
-    { to: "/playground",     icon: Code,            label: "API Playground",         hint: "API-Endpoints testen und erkunden", adminOnly: true },
+  const navGroups: NavGroup[] = [
+    {
+      id: "main",
+      label: "",
+      items: [
+        { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"),  hint: t("navHint.dashboard") },
+        { to: "/projects",  icon: FolderKanban,    label: t("nav.projects"),   hint: t("navHint.projects") },
+      ],
+    },
+    {
+      id: "ai",
+      label: t("nav.group.ai", { defaultValue: "KI & Agenten" }),
+      items: [
+        { to: "/agents",    icon: Bot,      label: t("nav.agents",    { defaultValue: "Agenten" }),  hint: t("navHint.agents",    { defaultValue: "Alle Agenten verwalten" }), adminOnly: true },
+        { to: "/blueprint", icon: Workflow, label: t("nav.blueprint"),                               hint: t("navHint.blueprint") },
+        { to: "/proactive", icon: CalendarClock, label: t("nav.proactive", { defaultValue: "Proaktiv" }), hint: t("navHint.proactive", { defaultValue: "Autonome Background-Tasks" }), adminOnly: true },
+        { to: "/teams",     icon: Users,    label: t("nav.teams",     { defaultValue: "Teams" }),    hint: t("navHint.teams",     { defaultValue: "Agent-Teams und Rollen verwalten" }), adminOnly: true },
+      ],
+    },
+    {
+      id: "knowledge",
+      label: t("nav.group.knowledge", { defaultValue: "Wissen & Tools" }),
+      items: [
+        { to: "/brain",       icon: Brain,     label: t("nav.hydraBrain"),                                      hint: t("navHint.hydraBrain") },
+        { to: "/search",      icon: Search,    label: t("nav.search",       { defaultValue: "Web-Suche" }),      hint: t("navHint.search",       { defaultValue: "SearXNG Web-Suche" }) },
+        { to: "/prompt-guide",icon: Lightbulb, label: t("nav.promptGuide"),                                     hint: t("navHint.promptGuide",  { defaultValue: "KI-Tipps für bessere Prompts" }) },
+      ],
+    },
+    {
+      id: "infra",
+      label: t("nav.group.infra", { defaultValue: "Infrastruktur" }),
+      items: [
+        { to: "/system",         icon: Monitor,     label: t("nav.system"),                                              hint: t("navHint.system"), adminOnly: true },
+        { to: "/target-systems", icon: ServerCog,   label: t("nav.targetSystems", { defaultValue: "Zielsysteme" }),      hint: t("navHint.targetSystems", { defaultValue: "WKS und Remote-Server" }), adminOnly: true },
+        { to: "/vms",            icon: Server,      label: t("nav.vms",           { defaultValue: "Virtuelle Server" }), hint: "VMs erstellen und verwalten", adminOnly: true },
+        { to: "/voice",          icon: MessageSquare, label: t("nav.voice"),                                             hint: t("navHint.voice"), adminOnly: true },
+        { to: "/federation",     icon: Network,     label: t("nav.federation"),                                          hint: t("navHint.federation"), adminOnly: true },
+      ],
+    },
+    {
+      id: "extensions",
+      label: t("nav.group.extensions", { defaultValue: "Erweiterungen" }),
+      items: [
+        { to: "/hub?tab=extensions", icon: Rocket,       label: t("nav.extensions"),                                   hint: t("navHint.extensions"), adminOnly: true },
+        { to: "/mcp",                icon: Plug,         label: t("nav.mcp",       { defaultValue: "MCP-Server" }),    hint: t("navHint.mcp", { defaultValue: "MCP-Server verwalten" }) },
+        { to: "/schedules",          icon: CalendarClock, label: t("nav.schedules"),                                   hint: t("navHint.schedules"), adminOnly: true },
+      ],
+    },
+    {
+      id: "admin",
+      label: t("nav.group.admin", { defaultValue: "Administration" }),
+      items: [
+        { to: "/usermanagement", icon: Shield,   label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
+        { to: "/settings",       icon: Settings, label: t("nav.settings"),       hint: t("navHint.settings") },
+        { to: "/playground",     icon: Code,     label: "API Playground",        hint: "API-Endpoints testen", adminOnly: true },
+      ],
+    },
   ];
 
-  const nav = allNavItems.filter((item) => {
-    if (isAdmin) return true;
-    const pageId = item.to.replace(/^\//, "");
-    return hasPageAccess(pageId);
+  // Gruppen filtern: Items nach Rechten, leere Gruppen entfernen
+  const nav = navGroups.map(g => ({
+    ...g,
+    items: g.items.filter(item => {
+      if (isAdmin) return true;
+      const pageId = item.to.replace(/^\//, "").split("?")[0];
+      return hasPageAccess(pageId);
+    }),
+  })).filter(g => g.items.length > 0);
+
+  // Klapp-State pro Gruppe (in localStorage)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("hh_nav_groups") ?? "{}"); } catch { return {}; }
   });
+
+  function isGroupOpen(groupId: string, groupItems: NavItem[]): boolean {
+    // Gruppe ist offen wenn: explizit geöffnet, aktive Route drin, oder erste Gruppe (main)
+    if (groupId === "main") return true;
+    if (openGroups[groupId] !== undefined) return openGroups[groupId];
+    return groupItems.some(item => {
+      const itemPath = item.to.split("?")[0];
+      return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`);
+    });
+  }
+
+  function toggleGroup(groupId: string) {
+    setOpenGroups(prev => {
+      const next = { ...prev, [groupId]: !isGroupOpen(groupId, nav.find(g => g.id === groupId)?.items ?? []) };
+      localStorage.setItem("hh_nav_groups", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  // Bei Routenwechsel: Gruppe mit aktiver Route öffnen
+  useEffect(() => {
+    nav.forEach(g => {
+      const hasActive = g.items.some(item => {
+        const itemPath = item.to.split("?")[0];
+        return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`);
+      });
+      if (hasActive && openGroups[g.id] === false) {
+        setOpenGroups(prev => {
+          const next = { ...prev, [g.id]: true };
+          localStorage.setItem("hh_nav_groups", JSON.stringify(next));
+          return next;
+        });
+      }
+    });
+  }, [location.pathname]);
 
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -288,13 +369,13 @@ export function AdminLayout() {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const activeItem = useMemo(
-    () => nav.find((item) => {
+  const activeItem = useMemo(() => {
+    const allItems = nav.flatMap(g => g.items);
+    return allItems.find(item => {
       const itemPath = item.to.split("?")[0];
       return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`);
-    }) ?? nav[0],
-    [location.pathname, nav],
-  );
+    }) ?? allItems[0];
+  }, [location.pathname, nav]);
 
   const sidebar = (
     <aside className="app-sidebar">
@@ -354,31 +435,52 @@ export function AdminLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {nav.map(({ to, icon: Icon, label, hint }) => {
-          const itemPath = to.split("?")[0];
-          // #532: data-tour Attribute für Guided Tours
-          const tourId = to === "/my-agent" ? "nav-myagent"
-            : to === "/projects" ? "nav-projects"
-            : to === "/settings" ? "nav-settings"
-            : itemPath === "/hub" ? "nav-extensions"
-            : undefined;
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {nav.map(group => {
+          const open = isGroupOpen(group.id, group.items);
           return (
-            <NavLink
-              key={to}
-              to={to}
-              title={hint}
-              data-tour={tourId}
-              className={({ isActive }) => cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            <div key={group.id}>
+              {group.label && (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] transition-colors"
+                >
+                  {group.label}
+                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", open ? "rotate-0" : "-rotate-90")} />
+                </button>
               )}
-            >
-              <Icon className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">{label}</span>
-            </NavLink>
+              {open && (
+                <div className="space-y-0.5">
+                  {group.items.map(({ to, icon: Icon, label, hint }) => {
+                    const itemPath = to.split("?")[0];
+                    const tourId = to === "/projects" ? "nav-projects"
+                      : to === "/settings" ? "nav-settings"
+                      : itemPath === "/hub" ? "nav-extensions"
+                      : undefined;
+                    return (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        title={hint}
+                        data-tour={tourId}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                          group.label ? "pl-4" : "",
+                          isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Icon className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+              {group.label && <div className="mt-1 border-t border-white/5" />}
+            </div>
           );
         })}
       </nav>
