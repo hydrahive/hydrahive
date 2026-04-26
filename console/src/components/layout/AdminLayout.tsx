@@ -400,7 +400,7 @@ export function AdminLayout() {
       <div className="border-b border-white/5 px-4 py-3">
         <div className="flex items-center gap-3">
           <img src="/hydrahive-logo.png" alt="HydraHive"
-            className="h-12 w-12 rounded-xl"
+            className="h-16 w-16 rounded-xl"
             style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
           <button
             type="button"
