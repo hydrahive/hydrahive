@@ -10,3 +10,7 @@ export { ActivityStreamWidget } from "./ActivityStreamWidget";
 export { AttentionWidget } from "./AttentionWidget";
 export type { AttentionItem } from "./AttentionWidget";
 export { QuickActionsWidget } from "./QuickActionsWidget";
+export { ContextMetricsWidget } from "./ContextMetricsWidget";
+export { OAuthWidget } from "./OAuthWidget";
+export { CodexWidget } from "./CodexWidget";
+export { MiniMaxWidget } from "./MiniMaxWidget";
