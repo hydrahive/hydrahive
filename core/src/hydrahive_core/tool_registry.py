@@ -830,6 +830,28 @@ def _safe_memory_filename(filename: str) -> str:
 # Core Tool #1: shell_exec
 # =========================================================================
 
+_llm_env_cache: dict[str, str] | None = None
+
+def _load_llm_env() -> dict[str, str]:
+    """Liest /etc/hydrahive/llm_env und gibt Key=Value-Dict zurück (gecacht)."""
+    global _llm_env_cache
+    if _llm_env_cache is not None:
+        return _llm_env_cache
+    result: dict[str, str] = {}
+    try:
+        p = Path("/etc/hydrahive/llm_env")
+        if p.exists():
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                result[k.strip()] = v.strip()
+    except Exception:
+        pass
+    _llm_env_cache = result
+    return result
+
 class ShellExecTool(BaseTool):
 
     _bwrap_works: ClassVar[bool | None] = None
@@ -999,7 +1021,16 @@ class ShellExecTool(BaseTool):
                     logger.debug("pwd lookup failed (%s): %s", _candidate, _u_err)
                     _proj_user = None
             if _proj_user and _proj_user != "root":
-                exec_command = f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_quoted}"
+                # Env-Vars explizit via `env` durchreichen, weil sudo sie strippt.
+                _extra = _load_llm_env()
+                _env_prefix = " ".join(
+                    f"{k}={_shlex.quote(v)}" for k, v in _extra.items()
+                )
+                exec_command = (
+                    f"sudo -n -u {_shlex.quote(_proj_user)} env {_env_prefix} bash -c {_quoted}"
+                    if _env_prefix else
+                    f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_quoted}"
+                )
                 logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
                             agent_id, _proj_user, command[:120])
             elif os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
@@ -1053,11 +1084,13 @@ class ShellExecTool(BaseTool):
             logger.info("shell_exec [%s]: %s", agent_id, command[:120])
 
         try:
+            _merged_env = {**os.environ, **_load_llm_env()}
             proc = await asyncio.create_subprocess_shell(
                 exec_command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=safe_cwd,
+                env=_merged_env,
             )
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
