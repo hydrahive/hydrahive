@@ -28,8 +28,10 @@ _VMA_MAGIC = b"VMA"          # 3-byte prefix; byte 3 is version (0x01 standard, 
 _VMA_CLUSTER_SIZE = 65536   # 64 KB per cluster
 _VMA_EXTENT_HEADER_SIZE = 512
 _VMA_BLOCKS_PER_EXTENT = 59
-_VMA_DEV_ENTRY_SIZE = 88
+_VMA_DEV_ENTRY_SIZE = 80    # VmaDeviceInfo: devflags(4)+devid(4)+size(8)+devname(64)
 _VMA_MAX_DEVS = 255
+# VmaExtentHeader offsets: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16) = 40
+_VMA_BLOCKINFO_OFFSET = 40
 
 
 def _is_vma_filename(filename: str) -> bool:
@@ -112,6 +114,8 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
         # --- write raw image ---
         total_clusters = (image_size + _VMA_CLUSTER_SIZE - 1) // _VMA_CLUSTER_SIZE
         written_clusters = 0
+        logger.info("VMA header: dev=%s dev_id=%d image_size=%d (%.2f GiB) total_clusters=%d",
+                    devname, target_dev_id, image_size, image_size / 1073741824, total_clusters)
 
         with raw_path.open("wb") as out:
             out.truncate(image_size)
@@ -125,7 +129,8 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                     break
                 if extent_header[:4] != b"VMAE":
                     raise ValueError("Ungültiger Extent-Header — VMA beschädigt?")
-                block_infos = struct.unpack_from("<59Q", extent_header, 24)
+                # blockinfo starts at offset 40: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16)
+                block_infos = struct.unpack_from("<59Q", extent_header, _VMA_BLOCKINFO_OFFSET)
 
                 for bi in block_infos:
                     cluster_data = _readexact(f, _VMA_CLUSTER_SIZE)
@@ -137,6 +142,10 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                     cluster_num = bi & 0x00FFFFFFFFFFFFFF
                     allocated = bool(bi & (1 << 63))
                     if dev_id == target_dev_id and allocated:
+                        if cluster_num >= total_clusters:
+                            logger.warning("VMA: cluster_num %d out of bounds (max %d) — überspringe",
+                                           cluster_num, total_clusters)
+                            continue
                         out.seek(cluster_num * _VMA_CLUSTER_SIZE)
                         out.write(cluster_data)
                         written_clusters += 1
