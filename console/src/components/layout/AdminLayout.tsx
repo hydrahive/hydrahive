@@ -606,9 +606,10 @@ export function AdminLayout() {
       )}
 
       <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
-        {/* Header */}
-        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-2 backdrop-blur md:px-6">
-          <div className="flex items-center justify-between gap-3">
+        {/* Header — gleiche Höhe wie Sidebar-Logo-Box */}
+        <div className="sticky top-0 z-20 flex flex-col border-b border-border/60 bg-[hsl(var(--shell))/0.82] backdrop-blur min-h-[var(--sidebar-top-height,265px)] px-4 md:px-6">
+          {/* Zeile 1: Hamburger + Nav-Gruppen + Rechts-Controls */}
+          <div className="flex items-center justify-between gap-3 py-2">
             {/* Links: Hamburger (mobile) + horizontale Nav-Gruppen */}
             <div className="flex items-center gap-1 min-w-0">
               <button
@@ -687,6 +688,20 @@ export function AdminLayout() {
               <NotificationBell />
             </div>
           </div>
+
+          {/* Zeile 2: Seitentitel + Hint — füllt den Raum bis zur Unterkante der Logo-Box */}
+          {activeItem && (
+            <div className="flex flex-1 flex-col justify-end pb-5">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground leading-tight">
+                {activeItem.label}
+              </h1>
+              {activeItem.hint && (
+                <p className="mt-1 text-sm text-muted-foreground leading-snug max-w-xl">
+                  {activeItem.hint}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Content — Chat-Routen bekommen vollen Platz ohne Padding */}
