@@ -35,12 +35,17 @@ info "Neueste Version: ${LATEST_TAG}"
 # --- Schon installiert und aktuell? ---
 if [ -x "${AGH_BINARY}" ]; then
     INSTALLED_VERSION="$("${AGH_BINARY}" --version 2>/dev/null | grep -oP 'v[\d.]+' | head -1 || echo "")"
-    if [ "${INSTALLED_VERSION}" = "${LATEST_TAG}" ]; then
+    # Kaputte YAML mit Placeholder-Hash bereinigen (Legacy-Fix)
+    if grep -q "placeholder_run_setup_wizard" "${AGH_YAML}" 2>/dev/null; then
+        warn "Defekte YAML mit Placeholder-Hash gefunden — wird zurückgesetzt"
+        rm -f "${AGH_YAML}"
+    fi
+    if [ "${INSTALLED_VERSION}" = "${LATEST_TAG}" ] && [ -f "${AGH_YAML}" ]; then
         success "AdGuard Home ${INSTALLED_VERSION} ist bereits aktuell installiert"
         systemctl start adguardhome 2>/dev/null || true
         exit 0
     fi
-    info "Update von ${INSTALLED_VERSION} auf ${LATEST_TAG}..."
+    info "Update/Reset von ${INSTALLED_VERSION} auf ${LATEST_TAG}..."
     systemctl stop adguardhome 2>/dev/null || true
 fi
 
