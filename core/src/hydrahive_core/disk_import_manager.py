@@ -282,16 +282,19 @@ class DiskImportManager:
         vma_path = tmp_path
 
         try:
-            # Step 1 — decompress with chunked progress (2%→9%), multi-threaded where possible
+            # Step 1 — decompress with chunked progress (2%→70%), multi-threaded where possible
             import os as _os
             import shutil as _shutil
             _CPUS = str(_os.cpu_count() or 4)
-            # Dekomprimierung belegt 2-70% des Fortschritts.
-            # Decompressed-Größe unbekannt → Schätzung compressed * 4 (typisches VMA-Ratio).
-            # Wird weich gecappt: echte Bytes / geschätzte Bytes → nie über 69%.
-            if compression == "zst":
+            dec_path = self._import_dir / f"{job_id}_dec.vma"
+
+            # Bereits dekomprimiert (Retry nach Fehler)? Dann überspringen.
+            if compression and dec_path.exists() and dec_path.stat().st_size > 0:
+                logger.info("VMA %s: dekomprimierte Datei vorhanden — überspringe Dekomprimierung", job_id)
+                vma_path = dec_path
+                job.progress_pct = 10
+            elif compression == "zst":
                 job.progress_pct = 2
-                dec_path = self._import_dir / f"{job_id}_dec.vma"
                 compressed_size = tmp_path.stat().st_size
                 est_decomp = max(compressed_size * 4, 1)
                 proc = await asyncio.create_subprocess_exec(
@@ -315,7 +318,6 @@ class DiskImportManager:
                 vma_path = dec_path
             elif compression == "gz":
                 job.progress_pct = 2
-                dec_path = self._import_dir / f"{job_id}_dec.vma"
                 compressed_size = tmp_path.stat().st_size
                 est_decomp = max(compressed_size * 4, 1)
                 if _shutil.which("pigz"):
@@ -400,9 +402,9 @@ class DiskImportManager:
         finally:
             if not keep_source and tmp_path.exists():
                 tmp_path.unlink()
-            # cleanup decompressed temp
+            # Dekomprimierte Datei NUR bei Erfolg löschen — bei Fehler für Retry aufbewahren
             dec = self._import_dir / f"{job_id}_dec.vma"
-            if dec.exists():
+            if dec.exists() and job.status == "done":
                 dec.unlink()
             if raw_path.exists():
                 raw_path.unlink()
