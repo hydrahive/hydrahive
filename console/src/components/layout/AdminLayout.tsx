@@ -380,28 +380,28 @@ export function AdminLayout() {
   const sidebar = (
     <aside className="app-sidebar">
       <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
-        <div className="flex items-center justify-center relative">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
+          <div className="flex items-center justify-between relative">
             <img src="/hydrahive-logo.png" alt="HydraHive"
               className="h-[120px] w-[120px] rounded-2xl"
               style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="absolute right-0 top-0 rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
-            aria-label="Close menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
-          <div className="flex items-center justify-end">
-            {companionActive ? (
-              <div id="companion-dock" className="relative rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
-            ) : (
-              <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
-                {t("layout.assistantStatus")}
-              </span>
-            )}
+            <div className="flex flex-col items-end gap-2">
+              {companionActive ? (
+                <div id="companion-dock" className="relative rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
+              ) : (
+                <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                  {t("layout.assistantStatus")}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="absolute right-0 top-0 rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <button
             type="button"
