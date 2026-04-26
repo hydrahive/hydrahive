@@ -1021,16 +1021,16 @@ class ShellExecTool(BaseTool):
                     logger.debug("pwd lookup failed (%s): %s", _candidate, _u_err)
                     _proj_user = None
             if _proj_user and _proj_user != "root":
-                # Env-Vars explizit via `env` durchreichen, weil sudo sie strippt.
+                # Env-Vars in den bash-c-String einbetten (export KEY=val; cmd).
+                # sudo darf nur /bin/bash ausführen (Sudoers-Regel), daher kein
+                # `env KEY=val bash` — das würde /usr/bin/env erfordern.
                 _extra = _load_llm_env()
-                _env_prefix = " ".join(
-                    f"{k}={_shlex.quote(v)}" for k, v in _extra.items()
+                _exports = "".join(
+                    f"export {k}={_shlex.quote(v)}; "
+                    for k, v in _extra.items()
                 )
-                exec_command = (
-                    f"sudo -n -u {_shlex.quote(_proj_user)} env {_env_prefix} bash -c {_quoted}"
-                    if _env_prefix else
-                    f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_quoted}"
-                )
+                _full_cmd = _exports + command if _exports else command
+                exec_command = f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_shlex.quote(_full_cmd)}"
                 logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
                             agent_id, _proj_user, command[:120])
             elif os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
