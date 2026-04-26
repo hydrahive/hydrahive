@@ -6,3 +6,7 @@ export { AgentMetricWidget } from "./AgentMetricWidget";
 export { ProjectMetricWidget } from "./ProjectMetricWidget";
 export { RuntimeMetricWidget } from "./RuntimeMetricWidget";
 export { GPUMetricWidget } from "./GPUMetricWidget";
+export { ActivityStreamWidget } from "./ActivityStreamWidget";
+export { AttentionWidget } from "./AttentionWidget";
+export type { AttentionItem } from "./AttentionWidget";
+export { QuickActionsWidget } from "./QuickActionsWidget";
