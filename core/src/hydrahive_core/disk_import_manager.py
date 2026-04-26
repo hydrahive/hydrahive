@@ -48,19 +48,18 @@ def _vma_compression(filename: str) -> str | None:
     return None
 
 
-def _vma_extract(vma_path: Path, raw_path: Path,
+def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                  progress_cb: "Callable[[int], None]") -> tuple[int, str]:
     """
-    Parse a (decompressed) VMA file and write the first disk device as a raw image.
+    Parse a VMA stream/file and write the first disk device as a raw image.
+    vma_source: Path (opens file) oder bytes-Stream (z.B. subprocess stdout).
     Returns (image_size_bytes, devname).
-
-    VMA structure:
-      - Cluster 0: 512-byte mini-header + dev-info table + blob section
-      - Rest: extents, each 512-byte header + 59×65536-byte data blocks
     """
-    from typing import Callable  # local import to avoid top-level cycle
+    from typing import Callable, Any  # local import to avoid top-level cycle
 
-    with vma_path.open("rb") as f:
+    ctx = open(vma_source, "rb") if isinstance(vma_source, Path) else None
+    f = ctx if ctx is not None else vma_source
+    try:
         # --- header cluster ---
         header_cluster = f.read(_VMA_CLUSTER_SIZE)
         if len(header_cluster) < 512:
@@ -71,8 +70,6 @@ def _vma_extract(vma_path: Path, raw_path: Path,
         if magic[3:4] not in (b"\x01", b"\x00"):
             logger.warning("Unbekanntes VMA-Version-Byte %r — versuche trotzdem zu parsen", magic[3:4])
 
-        # dev_info table starts at offset 64, each entry 88 bytes
-        # (header layout: 4 magic, 4 version, 16 uuid, 8 ctime, 16 md5, 4+4+4 blob/size fields)
         dev_info_offset = 64
         target_dev_id: int | None = None
         image_size: int = 0
@@ -90,7 +87,6 @@ def _vma_extract(vma_path: Path, raw_path: Path,
                 continue
             name_bytes = header_cluster[off + 16: off + 80]
             name = name_bytes.split(b"\x00")[0].decode("utf-8", errors="replace")
-            # prefer the first disk device (devid = i+1)
             if target_dev_id is None:
                 target_dev_id = i + 1
                 image_size = img_size_raw
@@ -107,29 +103,25 @@ def _vma_extract(vma_path: Path, raw_path: Path,
         written_clusters = 0
 
         with raw_path.open("wb") as out:
-            # pre-allocate via truncate statt seek(size-1)+write — robuster auf allen Filesystemen
             out.truncate(image_size)
             out.seek(0)
 
             while True:
                 extent_header = f.read(_VMA_EXTENT_HEADER_SIZE)
                 if not extent_header:
-                    break  # EOF
+                    break
                 if len(extent_header) < _VMA_EXTENT_HEADER_SIZE:
                     break
-                # extent magic "VMAE" at offset 0
                 if extent_header[:4] != b"VMAE":
                     raise ValueError("Ungültiger Extent-Header — VMA beschädigt?")
-                # block_info: 59 × uint64 starting at offset 24
                 block_infos = struct.unpack_from("<59Q", extent_header, 24)
 
                 for bi in block_infos:
-                    # ALWAYS read cluster data — all 59 slots are written to file
                     cluster_data = f.read(_VMA_CLUSTER_SIZE)
                     if not cluster_data:
                         break
                     if bi == 0:
-                        continue  # unallocated slot, pre-zeroed in output
+                        continue
                     dev_id = (bi >> 56) & 0x7F
                     cluster_num = bi & 0x00FFFFFFFFFFFFFF
                     allocated = bool(bi & (1 << 63))
@@ -139,6 +131,10 @@ def _vma_extract(vma_path: Path, raw_path: Path,
                         written_clusters += 1
                         pct = 10 + int(written_clusters / max(total_clusters, 1) * 68)
                         progress_cb(min(78, pct))
+
+    finally:
+        if ctx is not None:
+            ctx.close()
 
     return image_size, devname
 
@@ -282,86 +278,56 @@ class DiskImportManager:
         vma_path = tmp_path
 
         try:
-            # Step 1 — decompress with chunked progress (2%→70%), multi-threaded where possible
             import os as _os
             import shutil as _shutil
+            import subprocess as _sp
             _CPUS = str(_os.cpu_count() or 4)
             dec_path = self._import_dir / f"{job_id}_dec.vma"
 
-            # Bereits dekomprimiert (Retry nach Fehler)? Dann überspringen.
+            # Bereits dekomprimiert (Retry nach Fehler)? Aus Datei lesen, kein Streaming.
             if compression and dec_path.exists() and dec_path.stat().st_size > 0:
                 logger.info("VMA %s: dekomprimierte Datei vorhanden — überspringe Dekomprimierung", job_id)
                 vma_path = dec_path
                 job.progress_pct = 10
-            elif compression == "zst":
+
+                def _do_extract() -> tuple[int, str]:
+                    return _vma_extract(vma_path, raw_path, lambda pct: self._set_progress(job_id, pct))
+                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
+
+            elif compression:
+                # Streaming-Pipeline: Dekomprimierung + VMA-Extraktion ohne Zwischendatei
+                # _vma_extract liest nur sequenziell (f.read) → funktioniert direkt auf Pipe-Stream
                 job.progress_pct = 2
                 compressed_size = tmp_path.stat().st_size
-                est_decomp = max(compressed_size * 4, 1)
-                proc = await asyncio.create_subprocess_exec(
-                    "zstd", "--decompress", "--force", "--stdout", f"-T{_CPUS}", str(tmp_path),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                )
-                assert proc.stdout is not None
-                written = 0
-                with dec_path.open("wb") as out_f:
-                    while True:
-                        chunk = await proc.stdout.read(4 * 1024 * 1024)
-                        if not chunk:
-                            break
-                        out_f.write(chunk)
-                        written += len(chunk)
-                        self._set_progress(job_id, 2 + min(67, int(written / est_decomp * 68)))
-                await proc.wait()
-                if proc.returncode != 0:
-                    err = await proc.stderr.read()
-                    raise RuntimeError(f"zstd Fehler: {err.decode(errors='replace')[-300:]}")
-                vma_path = dec_path
-            elif compression == "gz":
+
+                def _stream_extract() -> tuple[int, str]:
+                    if compression == "zst":
+                        cmd = ["zstd", "--decompress", "--force", "--stdout", f"-T{_CPUS}", str(tmp_path)]
+                    elif compression == "gz" and _shutil.which("pigz"):
+                        cmd = ["pigz", "--decompress", "--stdout", f"-p{_CPUS}", str(tmp_path)]
+                    else:
+                        cmd = ["gunzip", "--force", "--keep", "--stdout", str(tmp_path)]
+
+                    with _sp.Popen(cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, bufsize=16 * 1024 * 1024) as proc:
+                        assert proc.stdout is not None
+                        # Progress via komprimierter Input-Dateigröße schätzen (seek auf tmp_path)
+                        result = _vma_extract(proc.stdout, raw_path,
+                                              lambda pct: self._set_progress(job_id, 2 + int(pct * 0.96)))
+                        proc.stdout.close()
+                        rc = proc.wait()
+                        if rc != 0:
+                            err = proc.stderr.read().decode(errors="replace")[-300:]
+                            raise RuntimeError(f"Dekomprimierung fehlgeschlagen (rc={rc}): {err}")
+                    return result
+
+                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _stream_extract)
+
+            else:
+                # Keine Komprimierung — direkt parsen
                 job.progress_pct = 2
-                compressed_size = tmp_path.stat().st_size
-                est_decomp = max(compressed_size * 4, 1)
-                if _shutil.which("pigz"):
-                    proc = await asyncio.create_subprocess_exec(
-                        "pigz", "--decompress", "--stdout", f"-p{_CPUS}", str(tmp_path),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                    )
-                    assert proc.stdout is not None
-                    written = 0
-                    with dec_path.open("wb") as out_f:
-                        while True:
-                            chunk = await proc.stdout.read(4 * 1024 * 1024)
-                            if not chunk:
-                                break
-                            out_f.write(chunk)
-                            written += len(chunk)
-                            self._set_progress(job_id, 2 + min(67, int(written / est_decomp * 68)))
-                    await proc.wait()
-                    if proc.returncode != 0:
-                        err = await proc.stderr.read()
-                        raise RuntimeError(f"pigz Fehler: {err.decode(errors='replace')[-300:]}")
-                else:
-                    # Fallback: Python gzip (single-threaded)
-                    def _gunzip_with_progress() -> None:
-                        import gzip
-                        _CHUNK = 4 * 1024 * 1024
-                        _written = 0
-                        with gzip.open(str(tmp_path), "rb") as gz_in, dec_path.open("wb") as out_f:
-                            while True:
-                                chunk = gz_in.read(_CHUNK)
-                                if not chunk:
-                                    break
-                                out_f.write(chunk)
-                                _written += len(chunk)
-                                self._set_progress(job_id, 2 + min(67, int(_written / est_decomp * 68)))
-                    await asyncio.get_event_loop().run_in_executor(None, _gunzip_with_progress)
-                vma_path = dec_path
-
-            job.progress_pct = 10
-
-            # Step 2 — parse VMA in executor (blocking I/O)
-            def _do_extract() -> tuple[int, str]:
-                return _vma_extract(vma_path, raw_path, lambda pct: self._set_progress(job_id, pct))
-            total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
+                def _do_extract() -> tuple[int, str]:
+                    return _vma_extract(vma_path, raw_path, lambda pct: self._set_progress(job_id, pct))
+                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
             job.progress_pct = 80
             logger.info("VMA extract: dev=%s size=%d raw=%s", devname, total_size, raw_path)
 

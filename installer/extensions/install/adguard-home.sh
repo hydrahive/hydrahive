@@ -61,7 +61,7 @@ if [ -x "${AGH_BINARY}" ]; then
 fi
 
 # --- Abhängigkeiten ---
-apt-get install -y --quiet curl wget python3 sha256sum 2>/dev/null | grep -E "^(Get|Entpacken|Einrichten)" || true
+apt-get install -y --quiet curl wget python3 2>/dev/null | grep -E "^(Get|Entpacken|Einrichten)" || true
 command -v sha256sum &>/dev/null || apt-get install -y --quiet coreutils
 
 # --- Download-URLs zusammenbauen ---
