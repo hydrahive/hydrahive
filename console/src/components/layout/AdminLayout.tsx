@@ -775,80 +775,76 @@ export function AdminLayout() {
         </div>
       </div>
 
-      {/* Row 2: Info Widgets Bar */}
+      {/* Row 2: Info Widgets Bar — clickable pills */}
       <div className="flex items-center gap-2 px-4 lg:px-6 h-10 overflow-x-auto scrollbar-none border-t border-white/5">
-        {/* Core Status */}
-        <div className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium rounded-full px-2.5 py-1",
+
+        {/* Core Status — not clickable, just indicator */}
+        <div className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium rounded-full px-2.5 py-1 select-none cursor-default",
           coreHealthy === false ? "bg-red-500/15 text-red-400 border border-red-500/30" : coreHealthy === true ? "bg-green-500/15 text-green-400 border border-green-500/30" : "bg-muted text-muted-foreground border border-border/50"
         )}>
           <span className={cn("h-1.5 w-1.5 rounded-full", coreHealthy === false ? "bg-red-400 animate-pulse" : coreHealthy === true ? "bg-green-400" : "bg-muted-foreground")} />
           {coreHealthy === false ? t("dashboard.coreOffline") : coreHealthy === true ? t("dashboard.coreOnline") : "..."}
         </div>
 
-        {/* Agents */}
+        {/* Agents — clickable */}
         {agents != null && (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-violet-500/15 text-violet-400 border border-violet-500/25">
+          <button type="button" onClick={() => navigate("/agents")}
+            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-violet-500/15 text-violet-400 border border-violet-500/25 hover:bg-violet-500/25 transition-colors cursor-pointer">
             <Bot className="h-3 w-3" />
             Agents: {agents}
-          </div>
+          </button>
         )}
 
-        {/* Projects */}
+        {/* Projects — clickable */}
         {projects != null && (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
+          <button type="button" onClick={() => navigate("/projects")}
+            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 hover:bg-cyan-500/25 transition-colors cursor-pointer">
             <FolderKanban className="h-3 w-3" />
             Projects: {projects}
-          </div>
+          </button>
         )}
 
-        {/* Runtime */}
+        {/* Runtime — clickable */}
         {running > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-lime-500/15 text-lime-400 border border-lime-500/25">
+          <button type="button" onClick={() => navigate("/system")}
+            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-lime-500/15 text-lime-400 border border-lime-500/25 hover:bg-lime-500/25 transition-colors cursor-pointer">
             <Activity className="h-3 w-3" />
             Runtime: {running}
-          </div>
+          </button>
         )}
 
-        {/* GPU Temp */}
+        {/* GPU Temp — clickable */}
         {hottestGpu && (hottestGpu.temp_c ?? 0) > 0 && (
-          <div className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border",
-            (hottestGpu.temp_c ?? 0) >= 80
-              ? "bg-amber-500/15 text-amber-400 border-amber-500/25"
-              : "bg-amber-500/10 text-amber-400/70 border-amber-500/15"
-          )}>
+          <button type="button" onClick={() => navigate("/system")}
+            className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border transition-colors cursor-pointer",
+              (hottestGpu.temp_c ?? 0) >= 80
+                ? "bg-amber-500/15 text-amber-400 border-amber-500/25 hover:bg-amber-500/25"
+                : "bg-amber-500/10 text-amber-400/70 border-amber-500/15 hover:bg-amber-500/20"
+            )}>
             <Cpu className="h-3 w-3" />
             GPU: {hottestGpu.temp_c}°C
-          </div>
+          </button>
         )}
 
-        {/* Heartbeats */}
+        {/* Heartbeats — clickable */}
         {runningHeartbeats > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-muted text-muted-foreground border border-border/50">
+          <button type="button" onClick={() => navigate("/system")}
+            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-muted text-muted-foreground border border-border/50 hover:bg-muted/80 transition-colors cursor-pointer">
             <Radar className="h-3 w-3" />
             HB: {runningHeartbeats}
-          </div>
+          </button>
         )}
 
-        {/* Update status + trigger */}
+        {/* Update — clickable badge triggers update */}
         {(updateAvailable || updating) && isAdmin && (
-          <div className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border",
-            updating
-              ? "bg-amber-500/20 text-amber-400 border-amber-500/35"
-              : "bg-amber-500/15 text-amber-400 border-amber-500/25 cursor-pointer hover:bg-amber-500/25"
-          )}>
+          <button type="button" onClick={triggerUpdate} disabled={updating}
+            className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border transition-colors cursor-pointer disabled:cursor-not-allowed",
+              updating
+                ? "bg-amber-500/20 text-amber-400 border-amber-500/35"
+                : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/35"
+            )}>
             <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
             {updating ? t("layout.updateRunning") : t("layout.updateAvailable")}
-          </div>
-        )}
-        {isAdmin && !updating && updateAvailable && (
-          <button
-            type="button"
-            onClick={triggerUpdate}
-            className="flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
-            title={t("layout.triggerUpdate")}
-          >
-            <RefreshCw className="h-3 w-3" />
-            Update
           </button>
         )}
 
@@ -857,7 +853,7 @@ export function AdminLayout() {
 
         {/* Last sync */}
         {lastUpdated && (
-          <span className="text-[10px] text-muted-foreground shrink-0 hidden md:block">
+          <span className="text-[10px] text-muted-foreground shrink-0 hidden md:block select-none">
             {t("dashboard.updateSync", { time: lastUpdated.toLocaleTimeString("de-DE") })}
           </span>
         )}
