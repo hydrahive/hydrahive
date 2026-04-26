@@ -204,8 +204,11 @@ class DiskImportManager:
         job.status = "converting"
 
         if ext == ".vma":
+            # stable_dec_key: same source file → same decompressed cache → skip re-decompression
+            import hashlib as _hl
+            stable_dec_key = _hl.sha1(str(src).encode()).hexdigest()[:16]
             asyncio.create_task(self._extract_vma(job_id, src, _vma_compression(filename),
-                                                   keep_source=True))
+                                                   keep_source=True, stable_dec_key=stable_dec_key))
         else:
             asyncio.create_task(self._convert_from_path(job_id, src, ext))
         return job
@@ -288,7 +291,7 @@ class DiskImportManager:
         return job
 
     async def _extract_vma(self, job_id: str, tmp_path: Path, compression: str | None,
-                           keep_source: bool = False) -> None:
+                           keep_source: bool = False, stable_dec_key: str | None = None) -> None:
         """Proxmox VMA backup extractor — decompresses if needed, then parses VMA format."""
         job = self._jobs.get(job_id)
         if not job:
@@ -302,7 +305,9 @@ class DiskImportManager:
             import shutil as _shutil
             import subprocess as _sp
             _CPUS = str(_os.cpu_count() or 4)
-            dec_path = self._import_dir / f"{job_id}_dec.vma"
+            # stable_dec_key: server-path imports reuse the same dec file across retries
+            dec_name = f"_stable_{stable_dec_key}_dec.vma" if stable_dec_key else f"{job_id}_dec.vma"
+            dec_path = self._import_dir / dec_name
 
             # Bereits dekomprimiert (Retry nach Fehler)? Aus Datei lesen, kein Streaming.
             if compression and dec_path.exists() and dec_path.stat().st_size > 0:
