@@ -38,11 +38,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { TourProvider } from "@/components/tours/TourProvider";
+import { HeaderSlotCtx } from "@/components/layout/HeaderSlotContext";
 
 // ANSI-Farbcodes aus Log-Zeilen entfernen
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
@@ -358,6 +359,9 @@ export function AdminLayout() {
     });
   }, [location.pathname]);
 
+  const [headerSlot, setHeaderSlot] = useState<ReactNode>(null);
+  const headerSlotCtx = useMemo(() => ({ setSlot: setHeaderSlot }), []);
+
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -527,6 +531,7 @@ export function AdminLayout() {
   }, [logLines]);
 
   return (
+    <HeaderSlotCtx.Provider value={headerSlotCtx}>
     <TourProvider>
     <div className="app-shell lg:grid lg:h-viewport-safe lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
       {/* Update Live-Log Modal */}
@@ -689,17 +694,18 @@ export function AdminLayout() {
             </div>
           </div>
 
-          {/* Zeile 2: Seitentitel + Hint — füllt den Raum bis zur Unterkante der Logo-Box */}
+          {/* Zeile 2: Seitentitel + Hint + optionaler Slot (z.B. Tab-Bar) — flush mit Sidebar-Box */}
           {activeItem && (
-            <div className="flex flex-1 flex-col justify-end pb-5">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground leading-tight">
+            <div className="flex flex-1 flex-col justify-end">
+              <h1 className={`text-2xl font-bold tracking-tight text-foreground leading-tight ${headerSlot ? "mt-1" : "mb-5"}`}>
                 {activeItem.label}
               </h1>
               {activeItem.hint && (
-                <p className="mt-1 text-sm text-muted-foreground leading-snug max-w-xl">
+                <p className={`mt-1 text-sm text-muted-foreground leading-snug max-w-xl ${headerSlot ? "" : "mb-5"}`}>
                   {activeItem.hint}
                 </p>
               )}
+              {headerSlot}
             </div>
           )}
         </div>
@@ -755,5 +761,6 @@ export function AdminLayout() {
       <FloatingCompanion />
     </div>
     </TourProvider>
+    </HeaderSlotCtx.Provider>
   );
 }

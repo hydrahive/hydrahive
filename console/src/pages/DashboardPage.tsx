@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useHeaderSlot } from "@/components/layout/HeaderSlotContext";
 import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe, Brain, Zap, RotateCcw, GitBranch } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
@@ -93,70 +94,69 @@ export function DashboardPage() {
     : null;
 
   const customTab = config.custom_tabs.find(ct => ct.id === activeTab);
+  const companionActive = useRef(localStorage.getItem("hh_companion") === "1");
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 pt-6 pb-0 border-b border-border">
-        <div className="flex items-center gap-2 mb-1">
-          <LayoutDashboard size={20} className="text-muted-foreground" />
-          <h1 className="text-lg font-semibold text-foreground">{t("nav.dashboard")}</h1>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">{t("dashboard.subtitle")}</p>
-        {localStorage.getItem("hh_companion") !== "1" && (
-          <p className="text-[10px] text-muted-foreground/40 italic mb-2">
-            {t("dashboard.easterHint", { defaultValue: "Psst... ein kleines Wesen wartet darauf, dich zu begleiten. Finde die Version. Klopfe fünfmal. Es wird kommen." })}
-          </p>
-        )}
-        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
-          {BUILTIN_TABS.map(tab => (
+  useHeaderSlot(
+    <div className="mt-2">
+      {!companionActive.current && (
+        <p className="text-[10px] text-muted-foreground/40 italic mb-1.5">
+          {t("dashboard.easterHint", { defaultValue: "Psst... ein kleines Wesen wartet darauf, dich zu begleiten. Finde die Version. Klopfe fünfmal. Es wird kommen." })}
+        </p>
+      )}
+      <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
+        {BUILTIN_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => switchTab(tab.id)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px whitespace-nowrap",
+              activeTab === tab.id
+                ? "border-primary text-foreground bg-background"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            <tab.icon size={14} />
+            {t(tab.labelKey, { defaultValue: tab.id.charAt(0).toUpperCase() + tab.id.slice(1) })}
+          </button>
+        ))}
+        {config.custom_tabs.map(ct => {
+          const Icon = TAB_ICON_MAP[ct.icon] || FileText;
+          return (
             <button
-              key={tab.id}
-              onClick={() => switchTab(tab.id)}
+              key={ct.id}
+              onClick={() => switchTab(ct.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
-                activeTab === tab.id
+                "group flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px whitespace-nowrap",
+                activeTab === ct.id
                   ? "border-primary text-foreground bg-background"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <tab.icon size={14} />
-              {t(tab.labelKey, { defaultValue: tab.id.charAt(0).toUpperCase() + tab.id.slice(1) })}
-            </button>
-          ))}
-          {config.custom_tabs.map(ct => {
-            const Icon = TAB_ICON_MAP[ct.icon] || FileText;
-            return (
-              <button
-                key={ct.id}
-                onClick={() => switchTab(ct.id)}
-                className={cn(
-                  "group flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
-                  activeTab === ct.id
-                    ? "border-primary text-foreground bg-background"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
+              <Icon size={14} />
+              {ct.label}
+              <span
+                onClick={e => { e.stopPropagation(); setEditTab(ct); setShowEditor(true); }}
+                className="hidden group-hover:inline-flex ml-1 text-muted-foreground/50 hover:text-primary"
               >
-                <Icon size={14} />
-                {ct.label}
-                <span
-                  onClick={e => { e.stopPropagation(); setEditTab(ct); setShowEditor(true); }}
-                  className="hidden group-hover:inline-flex ml-1 text-muted-foreground/50 hover:text-primary"
-                >
-                  <Pencil size={10} />
-                </span>
-              </button>
-            );
-          })}
-          <button
-            onClick={() => { setEditTab(null); setShowEditor(true); }}
-            className="flex items-center gap-1 px-3 py-2.5 text-sm text-muted-foreground hover:text-primary transition-colors border-b-2 border-transparent -mb-px"
-            title={t("dashboard.addTab", { defaultValue: "Tab hinzufügen" })}
-          >
-            <Plus size={14} />
-          </button>
-        </div>
+                <Pencil size={10} />
+              </span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => { setEditTab(null); setShowEditor(true); }}
+          className="flex items-center gap-1 px-3 py-2.5 text-sm text-muted-foreground hover:text-primary transition-colors border-b-2 border-transparent -mb-px"
+          title={t("dashboard.addTab", { defaultValue: "Tab hinzufügen" })}
+        >
+          <Plus size={14} />
+        </button>
       </div>
+    </div>,
+    [activeTab, config.custom_tabs, t]
+  );
 
+  return (
+    <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto">
         {BuiltinContent ? <BuiltinContent />
           : customTab ? <CustomTabContent tab={customTab} />

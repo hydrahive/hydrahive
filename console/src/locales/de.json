@@ -251,7 +251,7 @@
     "nodeDiscordPost": "Discord-Nachricht"
   },
   "navHint": {
-    "dashboard": "Lagebild",
+    "dashboard": "Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivität",
     "myAgent": "Hauptansprechpartner",
     "projects": "Queues und Chats",
     "tools": "Aktionen und Skills",
