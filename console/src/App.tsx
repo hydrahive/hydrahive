@@ -20,7 +20,7 @@ function GuardLoading() {
 const AdminLayout       = lazy(() => import("@/components/layout/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LoginPage         = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const SetupPage         = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
-const DashboardPage     = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const DashboardPage     = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardOverview })));
 const ToolsPage         = lazy(() => import("@/pages/ToolsPage").then((m) => ({ default: m.ToolsPage })));
 const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 const ProjectsPage      = lazy(() => import("@/pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { WidgetProps } from "./WidgetShell";
 
 export interface AttentionItem {
-  tone: "critical" | "warn" | "ok";
+  tone: "critical" | "warn" | "info" | "ok";
   title: string;
   detail: string;
 }
@@ -15,10 +15,13 @@ interface AttentionWidgetProps extends WidgetProps {
 export function AttentionWidget({ items, className }: AttentionWidgetProps) {
   const hasCritical = items.some((i) => i.tone === "critical");
   const hasWarn = items.some((i) => i.tone === "warn");
+  const hasInfo = items.some((i) => i.tone === "info");
   const borderClass = hasCritical
     ? "border-l-4 border-l-destructive"
     : hasWarn
     ? "border-l-4 border-l-amber-400"
+    : hasInfo || items.some((i) => i.tone === "ok")
+    ? "border-l-4 border-l-green-400"
     : "border-l-4 border-l-green-400";
   const iconClass = hasCritical
     ? "text-destructive"
@@ -42,6 +45,8 @@ export function AttentionWidget({ items, className }: AttentionWidgetProps) {
                 ? "border-destructive/30 bg-destructive/5"
                 : item.tone === "warn"
                 ? "border-amber-400/30 bg-amber-500/5"
+                : item.tone === "info"
+                ? "border-blue-400/30 bg-blue-500/5"
                 : "border-green-400/20 bg-green-500/5"
             )}
           >
