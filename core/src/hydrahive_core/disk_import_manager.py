@@ -48,6 +48,17 @@ def _vma_compression(filename: str) -> str | None:
     return None
 
 
+def _readexact(f: "Any", n: int) -> bytes:
+    """Read exactly n bytes from f (handles short reads on pipes)."""
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = f.read(n - len(buf))
+        if not chunk:
+            break
+        buf.extend(chunk)
+    return bytes(buf)
+
+
 def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                  progress_cb: "Callable[[int], None]") -> tuple[int, str]:
     """
@@ -61,7 +72,7 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
     f = ctx if ctx is not None else vma_source
     try:
         # --- header cluster ---
-        header_cluster = f.read(_VMA_CLUSTER_SIZE)
+        header_cluster = _readexact(f, _VMA_CLUSTER_SIZE)
         if len(header_cluster) < 512:
             raise ValueError("VMA-Datei zu kurz — beschädigt?")
         magic = header_cluster[:4]
@@ -107,7 +118,7 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
             out.seek(0)
 
             while True:
-                extent_header = f.read(_VMA_EXTENT_HEADER_SIZE)
+                extent_header = _readexact(f, _VMA_EXTENT_HEADER_SIZE)
                 if not extent_header:
                     break
                 if len(extent_header) < _VMA_EXTENT_HEADER_SIZE:
@@ -117,7 +128,7 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                 block_infos = struct.unpack_from("<59Q", extent_header, 24)
 
                 for bi in block_infos:
-                    cluster_data = f.read(_VMA_CLUSTER_SIZE)
+                    cluster_data = _readexact(f, _VMA_CLUSTER_SIZE)
                     if not cluster_data:
                         break
                     if bi == 0:
