@@ -83,7 +83,7 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
         if magic[3:4] not in (b"\x01", b"\x00"):
             logger.warning("Unbekanntes VMA-Version-Byte %r — versuche trotzdem zu parsen", magic[3:4])
 
-        dev_info_offset = 64
+        dev_info_offset = 2048  # VmaHeader: 60 fixed + reserved[1988] = 2048
         target_dev_id: int | None = None
         image_size: int = 0
         devname: str = "disk0"
