@@ -1,15 +1,15 @@
 """
 disk_import_manager.py — VDI/VMDK/VHD/VMA Import Pipeline (#908)
 Lädt Disk-Images hoch, konvertiert zu QCOW2 via qemu-img.
-VMA (.vma, .vma.gz, .vma.zst) — Proxmox Backup Format — wird via Python extrahiert.
+VMA (.vma, .vma.gz, .vma.zst) — Proxmox Backup Format — wird via `vma extract` (Proxmox-Tool) extrahiert.
+Requires: apt install pve-qemu-kvm (Proxmox repo) für das `vma`-Binary.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
-import struct
-import subprocess
+import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -22,16 +22,6 @@ SUPPORTED_EXTENSIONS = {".vdi", ".vmdk", ".vhd", ".vhdx", ".raw", ".img", ".qcow
                         ".vma", ".gz", ".zst"}
 # .gz and .zst are only valid when the stem ends in .vma (e.g. backup.vma.zst)
 _PROGRESS_RE = re.compile(r'\((\d+(?:\.\d+)?)/100%\)')
-
-# VMA format constants
-_VMA_MAGIC = b"VMA"          # 3-byte prefix; byte 3 is version (0x01 standard, 0x00 seen in some builds)
-_VMA_CLUSTER_SIZE = 65536   # 64 KB per cluster
-_VMA_EXTENT_HEADER_SIZE = 512
-_VMA_BLOCKS_PER_EXTENT = 59
-_VMA_DEV_ENTRY_SIZE = 32    # VmaDeviceInfoHeader: devname_ptr(4)+reserved(4)+size(8)+reserved2(16)
-_VMA_MAX_DEVS = 255
-# VmaExtentHeader offsets: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16) = 40
-_VMA_BLOCKINFO_OFFSET = 40
 
 
 def _is_vma_filename(filename: str) -> bool:
@@ -50,127 +40,6 @@ def _vma_compression(filename: str) -> str | None:
     return None
 
 
-def _readexact(f: "Any", n: int) -> bytes:
-    """Read exactly n bytes from f (handles short reads on pipes)."""
-    buf = bytearray()
-    while len(buf) < n:
-        chunk = f.read(n - len(buf))
-        if not chunk:
-            break
-        buf.extend(chunk)
-    return bytes(buf)
-
-
-def _vma_extract(vma_source: "Path | Any", raw_path: Path,
-                 progress_cb: "Callable[[int], None]") -> tuple[int, str]:
-    """
-    Parse a VMA stream/file and write the first disk device as a raw image.
-    vma_source: Path (opens file) oder bytes-Stream (z.B. subprocess stdout).
-    Returns (image_size_bytes, devname).
-    """
-    from typing import Callable, Any  # local import to avoid top-level cycle
-
-    ctx = open(vma_source, "rb") if isinstance(vma_source, Path) else None
-    f = ctx if ctx is not None else vma_source
-    try:
-        # --- header cluster ---
-        header_cluster = _readexact(f, _VMA_CLUSTER_SIZE)
-        if len(header_cluster) < 512:
-            raise ValueError("VMA-Datei zu kurz — beschädigt?")
-        magic = header_cluster[:4]
-        if magic[:3] != _VMA_MAGIC:
-            raise ValueError(f"Kein VMA-Magic (got {magic!r}) — falsches Format?")
-        if magic[3:4] not in (b"\x01", b"\x00"):
-            logger.warning("Unbekanntes VMA-Version-Byte %r — versuche trotzdem zu parsen", magic[3:4])
-
-        # VmaHeader layout (all big-endian): magic(4)+version(4)+uuid(16)+ctime(8)+
-        # md5sum(16)+blob_buffer_offset(4 @ byte 48)+blob_buffer_size(4)+header_size(4)+...
-        # dev_info[256] starts at 0x1000 = 4096
-        blob_buffer_offset = struct.unpack_from(">I", header_cluster, 48)[0]
-        dev_info_offset = 4096
-        target_dev_id: int | None = None
-        image_size: int = 0
-        devname: str = "disk0"
-
-        for i in range(_VMA_MAX_DEVS):
-            off = dev_info_offset + i * _VMA_DEV_ENTRY_SIZE
-            if off + _VMA_DEV_ENTRY_SIZE > len(header_cluster):
-                break
-            # VmaDeviceInfoHeader: devname_ptr(4,BE)+reserved(4)+size(8,BE)+reserved2(16)
-            devname_ptr = struct.unpack_from(">I", header_cluster, off)[0]
-            if devname_ptr == 0:  # empty slot
-                continue
-            img_size_raw = struct.unpack_from(">Q", header_cluster, off + 8)[0]
-            if img_size_raw == 0:
-                continue
-            # devname lives in the blob buffer at blob_buffer_offset + devname_ptr
-            blob_name_start = blob_buffer_offset + devname_ptr
-            blob_name_end = min(blob_name_start + 64, len(header_cluster))
-            name = header_cluster[blob_name_start:blob_name_end].split(b"\x00")[0].decode(
-                "utf-8", errors="replace")
-            if target_dev_id is None:
-                target_dev_id = i + 1
-                image_size = img_size_raw
-                devname = name or f"dev{i+1}"
-
-        if target_dev_id is None:
-            raise ValueError("VMA enthält kein Disk-Device — Backup leer oder beschädigt?")
-        if image_size == 0:
-            raise ValueError(f"VMA Device '{devname}' hat Größe 0 — Header-Parsing fehlgeschlagen. "
-                             f"Magic={magic!r}, dev_id={target_dev_id}")
-
-        # --- write raw image ---
-        total_clusters = (image_size + _VMA_CLUSTER_SIZE - 1) // _VMA_CLUSTER_SIZE
-        written_clusters = 0
-        logger.info("VMA header: dev=%s dev_id=%d image_size=%d (%.2f GiB) total_clusters=%d",
-                    devname, target_dev_id, image_size, image_size / 1073741824, total_clusters)
-
-        with raw_path.open("wb") as out:
-            out.truncate(image_size)
-            out.seek(0)
-
-            while True:
-                extent_header = _readexact(f, _VMA_EXTENT_HEADER_SIZE)
-                if not extent_header:
-                    break
-                if len(extent_header) < _VMA_EXTENT_HEADER_SIZE:
-                    break
-                if extent_header[:4] != b"VMAE":
-                    raise ValueError("Ungültiger Extent-Header — VMA beschädigt?")
-                # offset 6: block_count (BE uint16) = number of data blocks that follow
-                # (only non-zero blockinfos have a data block; zero blockinfos = unallocated, no data)
-                block_count_val = struct.unpack_from(">H", extent_header, 6)[0]
-                block_infos = struct.unpack_from(">59Q", extent_header, _VMA_BLOCKINFO_OFFSET)
-
-                data_blocks_read = 0
-                for bi in block_infos:
-                    if bi == 0:
-                        continue  # unallocated cluster — no data block in file for this slot
-                    if data_blocks_read >= block_count_val:
-                        break  # all data blocks consumed
-                    cluster_data = _readexact(f, _VMA_CLUSTER_SIZE)
-                    data_blocks_read += 1
-                    if not cluster_data:
-                        break
-                    dev_id = (bi >> 56) & 0x7F
-                    cluster_num = bi & 0x00FFFFFFFFFFFFFF
-                    allocated = bool(bi & (1 << 63))
-                    if dev_id == target_dev_id and allocated:
-                        if cluster_num >= total_clusters:
-                            logger.warning("VMA: cluster_num %d out of bounds (max %d) — überspringe",
-                                           cluster_num, total_clusters)
-                            continue
-                        out.seek(cluster_num * _VMA_CLUSTER_SIZE)
-                        out.write(cluster_data)
-                        written_clusters += 1
-                        pct = 10 + int(written_clusters / max(total_clusters, 1) * 68)
-                        progress_cb(min(78, pct))
-
-    finally:
-        if ctx is not None:
-            ctx.close()
-
-    return image_size, devname
 
 
 @dataclass
@@ -306,71 +175,54 @@ class DiskImportManager:
 
     async def _extract_vma(self, job_id: str, tmp_path: Path, compression: str | None,
                            keep_source: bool = False, stable_dec_key: str | None = None) -> None:
-        """Proxmox VMA backup extractor — decompresses if needed, then parses VMA format."""
+        """Proxmox VMA backup extractor — decompresses if needed, then calls `vma extract`."""
         job = self._jobs.get(job_id)
         if not job:
             return
-        raw_path = self._import_dir / f"{job_id}.raw"
+        import os as _os
         out_path = self._import_dir / f"{job_id}.qcow2"
+        extract_dir = self._import_dir / f"{job_id}_vma"
+        dec_name = f"_stable_{stable_dec_key}_dec.vma" if stable_dec_key else f"{job_id}_dec.vma"
+        dec_path = self._import_dir / dec_name
         vma_path = tmp_path
 
         try:
-            import os as _os
-            import shutil as _shutil
-            import subprocess as _sp
-            _CPUS = str(_os.cpu_count() or 4)
-            # stable_dec_key: server-path imports reuse the same dec file across retries
-            dec_name = f"_stable_{stable_dec_key}_dec.vma" if stable_dec_key else f"{job_id}_dec.vma"
-            dec_path = self._import_dir / dec_name
-
-            # Bereits dekomprimiert (Retry nach Fehler)? Aus Datei lesen, kein Streaming.
+            # --- Step 1: decompress if needed ---
             if compression and dec_path.exists() and dec_path.stat().st_size > 0:
                 logger.info("VMA %s: dekomprimierte Datei vorhanden — überspringe Dekomprimierung", job_id)
                 vma_path = dec_path
                 job.progress_pct = 10
-
-                def _do_extract() -> tuple[int, str]:
-                    return _vma_extract(vma_path, raw_path, lambda pct: self._set_progress(job_id, pct))
-                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
-
             elif compression:
-                # Dekomprimierung in Datei, dann VMA parsen.
-                # Streaming-Pipe-Ansatz war wegen EFBIG unzuverlässig (bi==0 Blöcke, Alignment).
                 job.progress_pct = 2
+                _CPUS = str(_os.cpu_count() or 4)
                 compressed_size = tmp_path.stat().st_size
                 estimated_dec_size = max(compressed_size * 4, 1)
 
                 if compression == "zst":
                     dec_cmd = ["zstd", "--decompress", "--force", f"-T{_CPUS}",
                                str(tmp_path), "-o", str(dec_path)]
-                elif compression == "gz" and _shutil.which("pigz"):
+                    use_stdout = False
+                elif shutil.which("pigz"):
                     dec_cmd = ["pigz", "--decompress", "--keep", "--force",
                                f"-p{_CPUS}", "--stdout", str(tmp_path)]
+                    use_stdout = True
                 else:
                     dec_cmd = ["gunzip", "--force", "--keep", "--stdout", str(tmp_path)]
+                    use_stdout = True
 
-                # stdout in Datei schreiben wenn via --stdout
-                use_stdout = compression != "zst"
                 if use_stdout:
                     dec_fh = open(dec_path, "wb")
                     dec_proc = await asyncio.create_subprocess_exec(
-                        *dec_cmd,
-                        stdout=dec_fh.fileno(),
-                        stderr=asyncio.subprocess.PIPE,
-                    )
+                        *dec_cmd, stdout=dec_fh.fileno(), stderr=asyncio.subprocess.PIPE)
                 else:
                     dec_fh = None
                     dec_proc = await asyncio.create_subprocess_exec(
-                        *dec_cmd,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
+                        *dec_cmd, stderr=asyncio.subprocess.PIPE)
 
-                # Progress während Dekomprimierung via wachsende Ausgabedatei
                 while dec_proc.returncode is None:
                     await asyncio.sleep(2)
                     if dec_path.exists():
-                        done = dec_path.stat().st_size
-                        pct = min(68, int(done / estimated_dec_size * 68))
+                        pct = min(65, int(dec_path.stat().st_size / estimated_dec_size * 65))
                         self._set_progress(job_id, 2 + pct)
                     try:
                         await asyncio.wait_for(dec_proc.wait(), timeout=0.1)
@@ -379,37 +231,46 @@ class DiskImportManager:
 
                 if dec_fh:
                     dec_fh.close()
-                rc = dec_proc.returncode
-                if rc != 0:
-                    stderr_out = b""
-                    if dec_proc.stderr:
-                        stderr_out = await dec_proc.stderr.read()
+                if dec_proc.returncode != 0:
+                    stderr_out = await dec_proc.stderr.read() if dec_proc.stderr else b""
                     raise RuntimeError(
-                        f"Dekomprimierung fehlgeschlagen (rc={rc}): "
-                        f"{stderr_out.decode(errors='replace')[-300:]}"
-                    )
+                        f"Dekomprimierung fehlgeschlagen (rc={dec_proc.returncode}): "
+                        f"{stderr_out.decode(errors='replace')[-300:]}")
 
                 vma_path = dec_path
-                job.progress_pct = 70
+                job.progress_pct = 68
 
-                def _do_extract() -> tuple[int, str]:
-                    return _vma_extract(vma_path, raw_path,
-                                        lambda pct: self._set_progress(job_id, 70 + int(pct * 0.1)))
-                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
+            # --- Step 2: vma extract ---
+            extract_dir.mkdir(exist_ok=True)
+            job.progress_pct = max(job.progress_pct, 10)
+            logger.info("VMA %s: starte vma extract %s → %s", job_id, vma_path.name, extract_dir)
 
-            else:
-                # Keine Komprimierung — direkt parsen
-                job.progress_pct = 2
-                def _do_extract() -> tuple[int, str]:
-                    return _vma_extract(vma_path, raw_path, lambda pct: self._set_progress(job_id, pct))
-                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
+            vma_proc = await asyncio.create_subprocess_exec(
+                "vma", "extract", str(vma_path), str(extract_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            _, vma_stderr = await vma_proc.communicate()
+            if vma_proc.returncode != 0:
+                err = vma_stderr.decode(errors="replace").strip()
+                raise RuntimeError(f"vma extract fehlgeschlagen (rc={vma_proc.returncode}): {err[-400:]}")
+
+            # vma extract creates files named "disk-<devname>" in extract_dir
+            disk_files = sorted(extract_dir.glob("disk-*"))
+            if not disk_files:
+                contents = [p.name for p in extract_dir.iterdir()]
+                raise ValueError(f"vma extract hat keine disk-* Dateien erstellt. Inhalt: {contents}")
+
+            raw_file = disk_files[0]
+            devname = raw_file.name[len("disk-"):]
+            total_size = raw_file.stat().st_size
+            logger.info("VMA extract: dev=%s size=%d (%.2f GiB)", devname, total_size,
+                        total_size / 1073741824)
             job.progress_pct = 80
-            logger.info("VMA extract: dev=%s size=%d raw=%s", devname, total_size, raw_path)
 
-            # Step 3 — convert raw → qcow2
+            # --- Step 3: convert raw → qcow2 ---
             proc2 = await asyncio.create_subprocess_exec(
                 "qemu-img", "convert", "-p", "-f", "raw", "-O", "qcow2",
-                str(raw_path), str(out_path),
+                str(raw_file), str(out_path),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             stderr_buf: list[str] = []
@@ -422,9 +283,7 @@ class DiskImportManager:
                 stderr_buf.append(text)
                 m = _PROGRESS_RE.search(text)
                 if m and job_id in self._jobs:
-                    # map qemu-img 0-100 to 80-99
-                    q = int(float(m.group(1)))
-                    self._set_progress(job_id, 80 + int(q * 0.19))
+                    self._set_progress(job_id, 80 + int(float(m.group(1)) * 0.19))
             await proc2.wait()
             if proc2.returncode != 0:
                 raise RuntimeError("qemu-img: " + "".join(stderr_buf).strip()[-300:])
@@ -432,9 +291,15 @@ class DiskImportManager:
             job.output_path = str(out_path)
             job.progress_pct = 100
             job.status = "done"
+
         except FileNotFoundError as e:
             job.status = "error"
-            job.error = f"Tool nicht gefunden: {e.filename} — bitte zstd/qemu-img installieren"
+            fname = getattr(e, "filename", str(e))
+            if "vma" in str(fname):
+                job.error = ("'vma'-Tool nicht gefunden. Installation: "
+                             "Proxmox-Repo einrichten + apt install pve-qemu-kvm")
+            else:
+                job.error = f"Tool nicht gefunden: {fname}"
         except Exception as e:
             job.status = "error"
             job.error = str(e)[:500]
@@ -443,12 +308,10 @@ class DiskImportManager:
         finally:
             if not keep_source and tmp_path.exists():
                 tmp_path.unlink()
-            # Dekomprimierte Datei NUR bei Erfolg löschen — bei Fehler für Retry aufbewahren
-            dec = self._import_dir / f"{job_id}_dec.vma"
-            if dec.exists() and job.status == "done":
-                dec.unlink()
-            if raw_path.exists():
-                raw_path.unlink()
+            shutil.rmtree(str(extract_dir), ignore_errors=True)
+            # dec-Datei nur bei Erfolg löschen (bei Fehler für Retry aufbewahren)
+            if dec_path.exists() and job.status == "done":
+                dec_path.unlink()
         logger.info("VMA import %s: %s", job_id, job.status)
 
     def _set_progress(self, job_id: str, pct: int) -> None:
