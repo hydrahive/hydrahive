@@ -109,12 +109,6 @@ chown -R "${AGH_USER}:${AGH_USER}" "${AGH_DIR}"
 AGH_YAML="${AGH_CONF_DIR}/AdGuardHome.yaml"
 if [ ! -f "${AGH_YAML}" ]; then
     info "Erstelle initiale AdGuardHome.yaml..."
-    # Zufälliges Admin-Passwort (bcrypt) — wir nutzen python3 um bcrypt zu vermeiden
-    # AdGuard akzeptiert auch plain-sha256 für initiale Einrichtung
-    ADMIN_PASS="$(head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)"
-    # SHA256 des Passworts
-    ADMIN_PASS_HASH="$(printf '%s' "${ADMIN_PASS}" | sha256sum | awk '{print $1}')"
-
     cat > "${AGH_YAML}" << YAMLEOF
 http:
   pprof:
@@ -122,9 +116,7 @@ http:
     enabled: false
   address: 0.0.0.0:${WEB_PORT}
   session_ttl: 720h
-users:
-  - name: admin
-    password: \$2y\$10\$placeholder_run_setup_wizard
+users: []
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -297,11 +289,7 @@ schema_version: 28
 YAMLEOF
     chown "${AGH_USER}:${AGH_USER}" "${AGH_YAML}"
     chmod 640 "${AGH_YAML}"
-    # Passwort separat speichern
-    printf '%s\n' "${ADMIN_PASS}" > "${AGH_CONF_DIR}/.initial_admin_pass"
-    chown "${AGH_USER}:${AGH_USER}" "${AGH_CONF_DIR}/.initial_admin_pass"
-    chmod 600 "${AGH_CONF_DIR}/.initial_admin_pass"
-    success "Konfiguration erstellt — Ersteinrichtung im Web-UI erforderlich"
+    success "Konfiguration erstellt — Setup-Wizard beim ersten Aufruf des Web-UI"
 fi
 
 # --- systemd Service ---
@@ -354,7 +342,6 @@ fi
 
 # --- HydraHive Config ---
 mkdir -p /etc/hydrahive
-INITIAL_PASS_INFO="$(cat "${AGH_CONF_DIR}/.initial_admin_pass" 2>/dev/null || echo "im Web-UI gesetzt")"
 cat > "${HH_CONF}" << CFGEOF
 {
   "installed": true,
@@ -374,6 +361,6 @@ echo ""
 info "=== AdGuard Home installiert ==="
 info "Web-UI:   http://127.0.0.1:${WEB_PORT}"
 info "DNS-Port: ${DNS_PORT} (TCP/UDP)"
-info "Ersteinrichtung: Im Browser öffnen und Admin-Account anlegen"
+info "Ersteinrichtung: Im Browser öffnen → Setup-Wizard startet automatisch"
 warn "Hinweis: Port ${DNS_PORT} statt 53 — bei Bedarf Router-DNS auf diesen Port zeigen lassen"
 warn "oder iptables-Redirect: iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}"
