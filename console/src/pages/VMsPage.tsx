@@ -667,7 +667,9 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
         {/* Step: converting */}
         {step === "converting" && (
           <div className="space-y-4 py-4">
-            <p className="text-sm text-center text-muted-foreground">Konvertierung zu QCOW2…</p>
+            <p className="text-sm text-center text-muted-foreground">
+              {convertPct < 10 ? "Dekomprimiere…" : convertPct < 80 ? "Extrahiere VMA…" : "Konvertiere zu QCOW2…"}
+            </p>
             <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
               <div className="h-full bg-primary transition-all" style={{ width: `${convertPct}%` }} />
             </div>
