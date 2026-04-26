@@ -831,24 +831,30 @@ def _safe_memory_filename(filename: str) -> str:
 # =========================================================================
 
 _llm_env_cache: dict[str, str] | None = None
+_llm_env_cache_mtime: float = 0.0
 
 def _load_llm_env() -> dict[str, str]:
-    """Liest /etc/hydrahive/llm_env und gibt Key=Value-Dict zurück (gecacht)."""
-    global _llm_env_cache
-    if _llm_env_cache is not None:
-        return _llm_env_cache
+    """Liest /etc/hydrahive/llm_env und gibt Key=Value-Dict zurück (mtime-gecacht)."""
+    global _llm_env_cache, _llm_env_cache_mtime
     result: dict[str, str] = {}
     try:
         p = Path("/etc/hydrahive/llm_env")
-        if p.exists():
-            for line in p.read_text().splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                result[k.strip()] = v.strip()
+        if not p.exists():
+            _llm_env_cache = result
+            return result
+        current_mtime = os.stat(p).st_mtime
+        if _llm_env_cache is not None and current_mtime == _llm_env_cache_mtime:
+            return _llm_env_cache
+        for line in p.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            result[k.strip()] = v.strip()
+        _llm_env_cache_mtime = current_mtime
     except Exception:
-        pass
+        if _llm_env_cache is not None:
+            return _llm_env_cache
     _llm_env_cache = result
     return result
 
