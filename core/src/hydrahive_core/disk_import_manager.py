@@ -137,15 +137,21 @@ def _vma_extract(vma_source: "Path | Any", raw_path: Path,
                     break
                 if extent_header[:4] != b"VMAE":
                     raise ValueError("Ungültiger Extent-Header — VMA beschädigt?")
-                # blockinfo starts at offset 40: magic(4)+reserved(2)+block_count(2)+uuid(16)+md5sum(16)
+                # offset 6: block_count (BE uint16) = number of data blocks that follow
+                # (only non-zero blockinfos have a data block; zero blockinfos = unallocated, no data)
+                block_count_val = struct.unpack_from(">H", extent_header, 6)[0]
                 block_infos = struct.unpack_from(">59Q", extent_header, _VMA_BLOCKINFO_OFFSET)
 
+                data_blocks_read = 0
                 for bi in block_infos:
+                    if bi == 0:
+                        continue  # unallocated cluster — no data block in file for this slot
+                    if data_blocks_read >= block_count_val:
+                        break  # all data blocks consumed
                     cluster_data = _readexact(f, _VMA_CLUSTER_SIZE)
+                    data_blocks_read += 1
                     if not cluster_data:
                         break
-                    if bi == 0:
-                        continue
                     dev_id = (bi >> 56) & 0x7F
                     cluster_num = bi & 0x00FFFFFFFFFFFFFF
                     allocated = bool(bi & (1 << 63))
