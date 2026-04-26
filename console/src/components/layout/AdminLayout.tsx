@@ -42,7 +42,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
-import { TourProvider, TourLauncher } from "@/components/tours/TourProvider";
+import { TourProvider } from "@/components/tours/TourProvider";
 
 // ANSI-Farbcodes aus Log-Zeilen entfernen
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
@@ -393,29 +393,8 @@ export function AdminLayout() {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[hsl(var(--sidebar-foreground))]">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">{user?.username ?? t("layout.unknown")}</span>
-            {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <NavLink to="/quickstart"
-              className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/10">
-              <Rocket className="h-3.5 w-3.5" />
-              Quickstart
-            </NavLink>
-            <TourLauncher />
-          </div>
-        </div>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
-          <p className="text-[0.62rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">
-            {t("layout.assistantKicker")}
-          </p>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold leading-tight">{t("layout.assistantName")}</h2>
-              <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.assistantSubtitle")}</p>
-            </div>
+          <div className="flex items-center justify-end">
             {companionActive ? (
               <div id="companion-dock" className="relative rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
             ) : (
@@ -427,7 +406,7 @@ export function AdminLayout() {
           <button
             type="button"
             onClick={() => navigate("/my-agent")}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15"
           >
             <MessageSquare className="h-4 w-4" />
             {t("layout.assistantChatOpen")}
