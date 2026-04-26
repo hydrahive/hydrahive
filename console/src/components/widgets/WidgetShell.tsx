@@ -8,6 +8,7 @@ export interface WidgetProps {
   isEditing?: boolean;
   className?: string;
   children?: React.ReactNode;
+  onRemove?: () => void;
 }
 
 export function WidgetShell({
@@ -15,6 +16,7 @@ export function WidgetShell({
   isEditing = false,
   className = "",
   children,
+  onRemove,
 }: WidgetProps) {
   const {
     attributes,
@@ -53,11 +55,11 @@ export function WidgetShell({
       )}
 
       {/* Remove button — only in edit mode */}
-      {isEditing && (
+      {isEditing && onRemove && (
         <button
           type="button"
+          onClick={onRemove}
           className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md bg-destructive/80 text-destructive-foreground hover:bg-destructive"
-          // onRemove handled by parent via widgetId
         >
           <X className="h-3 w-3" />
         </button>

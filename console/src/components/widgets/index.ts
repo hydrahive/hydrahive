@@ -1,7 +1,8 @@
 export { WidgetShell } from "./WidgetShell";
 export type { WidgetProps } from "./WidgetShell";
 export { DashboardGrid } from "./DashboardGrid";
-export type { DashboardWidget } from "./DashboardGrid";
+export type { WidgetComponent } from "./DashboardGrid";
+export type { WidgetConfig } from "./types";
 export { AgentMetricWidget } from "./AgentMetricWidget";
 export { ProjectMetricWidget } from "./ProjectMetricWidget";
 export { RuntimeMetricWidget } from "./RuntimeMetricWidget";
@@ -15,5 +16,7 @@ export { OAuthWidget } from "./OAuthWidget";
 export { CodexWidget } from "./CodexWidget";
 export { MiniMaxWidget } from "./MiniMaxWidget";
 export { SettingsDrawer } from "./SettingsDrawer";
-export type { WidgetConfig } from "./SettingsDrawer";
+export type { WidgetConfig as SettingsWidgetConfig } from "./SettingsDrawer";
 export { EditBar } from "./EditBar";
+export { useWidgetDashboard } from "./useWidgetDashboard";
+export type { WidgetState } from "./useWidgetDashboard";
