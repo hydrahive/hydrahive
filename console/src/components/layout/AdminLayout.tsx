@@ -381,19 +381,10 @@ export function AdminLayout() {
     <aside className="app-sidebar">
       <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
-          <div className="flex items-center justify-between relative">
-            <img src="/hydrahive-logo.png" alt="HydraHive"
-              className="h-[120px] w-[120px] rounded-2xl"
-              style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
-            <div className="flex flex-col items-end gap-2">
-              {companionActive ? (
-                <div id="companion-dock" className="relative rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
-              ) : (
-                <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
-                  {t("layout.assistantStatus")}
-                </span>
-              )}
-            </div>
+          <div className="relative flex justify-center">
+            {companionActive && (
+              <div id="companion-dock" className="absolute right-0 top-0 rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
+            )}
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
@@ -402,6 +393,9 @@ export function AdminLayout() {
             >
               <X className="h-5 w-5" />
             </button>
+            <img src="/hydrahive-logo.png" alt="HydraHive"
+              className="h-[120px] w-[120px] rounded-2xl"
+              style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
           </div>
           <button
             type="button"
@@ -411,6 +405,11 @@ export function AdminLayout() {
             <MessageSquare className="h-4 w-4" />
             {t("layout.assistantChatOpen")}
           </button>
+          {lastCommit && (
+            <p className="mt-2 text-center text-[10px] text-[hsl(var(--sidebar-muted))] cursor-default" onClick={companionTap}>
+              {t("layout.lastCommit", { commit: lastCommit })}
+            </p>
+          )}
         </div>
       </div>
 
@@ -465,12 +464,6 @@ export function AdminLayout() {
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
-        {/* Versionsanzeige — immer sichtbar für Admins (enthält Companion-Aktivierung) */}
-        {isAdmin && !showDeploymentPanel && lastCommit && (
-          <p className="mb-2 text-[10px] text-[hsl(var(--sidebar-muted))] cursor-default text-center" onClick={companionTap}>
-            {t("layout.lastCommit", { commit: lastCommit })}
-          </p>
-        )}
         {showDeploymentPanel && (
           <div className="mb-3 rounded-2xl border border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 p-3 text-xs text-[hsl(var(--sidebar-foreground))] shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.18)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
