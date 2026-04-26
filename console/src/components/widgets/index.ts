@@ -14,3 +14,6 @@ export { ContextMetricsWidget } from "./ContextMetricsWidget";
 export { OAuthWidget } from "./OAuthWidget";
 export { CodexWidget } from "./CodexWidget";
 export { MiniMaxWidget } from "./MiniMaxWidget";
+export { SettingsDrawer } from "./SettingsDrawer";
+export type { WidgetConfig } from "./SettingsDrawer";
+export { EditBar } from "./EditBar";
