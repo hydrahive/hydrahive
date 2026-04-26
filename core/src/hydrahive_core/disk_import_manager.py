@@ -281,13 +281,17 @@ class DiskImportManager:
         vma_path = tmp_path
 
         try:
-            # Step 1 — decompress with chunked progress (2%→9%)
+            # Step 1 — decompress with chunked progress (2%→9%), multi-threaded where possible
+            import os as _os
+            import shutil as _shutil
+            _CPUS = str(_os.cpu_count() or 4)
             if compression == "zst":
                 job.progress_pct = 2
                 dec_path = self._import_dir / f"{job_id}_dec.vma"
                 total_bytes = tmp_path.stat().st_size
+                # -T0 = alle CPU-Kerne nutzen
                 proc = await asyncio.create_subprocess_exec(
-                    "zstd", "--decompress", "--force", "--stdout", str(tmp_path),
+                    "zstd", "--decompress", "--force", "--stdout", f"-T{_CPUS}", str(tmp_path),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
                 assert proc.stdout is not None
@@ -310,24 +314,45 @@ class DiskImportManager:
                 job.progress_pct = 2
                 dec_path = self._import_dir / f"{job_id}_dec.vma"
                 total_bytes = tmp_path.stat().st_size
-
-                def _gunzip_with_progress() -> None:
-                    import gzip
-                    _CHUNK = 4 * 1024 * 1024
-                    with gzip.open(str(tmp_path), "rb") as gz_in, dec_path.open("wb") as out_f:
+                if _shutil.which("pigz"):
+                    # pigz: paralleler gzip mit allen Kernen
+                    proc = await asyncio.create_subprocess_exec(
+                        "pigz", "--decompress", "--stdout", f"-p{_CPUS}", str(tmp_path),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    )
+                    assert proc.stdout is not None
+                    written = 0
+                    with dec_path.open("wb") as out_f:
                         while True:
-                            chunk = gz_in.read(_CHUNK)
+                            chunk = await proc.stdout.read(4 * 1024 * 1024)
                             if not chunk:
                                 break
                             out_f.write(chunk)
-                            try:
-                                pos = gz_in.fileobj.tell()  # type: ignore[attr-defined]
-                                if total_bytes > 0:
-                                    self._set_progress(job_id, 2 + min(7, int(pos / total_bytes * 7)))
-                            except Exception:
-                                pass
-
-                await asyncio.get_event_loop().run_in_executor(None, _gunzip_with_progress)
+                            written += len(chunk)
+                            if total_bytes > 0:
+                                self._set_progress(job_id, 2 + min(7, int(written / total_bytes * 28)))
+                    await proc.wait()
+                    if proc.returncode != 0:
+                        err = await proc.stderr.read()
+                        raise RuntimeError(f"pigz Fehler: {err.decode(errors='replace')[-300:]}")
+                else:
+                    # Fallback: Python gzip (single-threaded)
+                    def _gunzip_with_progress() -> None:
+                        import gzip
+                        _CHUNK = 4 * 1024 * 1024
+                        with gzip.open(str(tmp_path), "rb") as gz_in, dec_path.open("wb") as out_f:
+                            while True:
+                                chunk = gz_in.read(_CHUNK)
+                                if not chunk:
+                                    break
+                                out_f.write(chunk)
+                                try:
+                                    pos = gz_in.fileobj.tell()  # type: ignore[attr-defined]
+                                    if total_bytes > 0:
+                                        self._set_progress(job_id, 2 + min(7, int(pos / total_bytes * 7)))
+                                except Exception:
+                                    pass
+                    await asyncio.get_event_loop().run_in_executor(None, _gunzip_with_progress)
                 vma_path = dec_path
 
             job.progress_pct = 10
