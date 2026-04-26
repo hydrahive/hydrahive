@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useHeaderSlot } from "@/components/layout/HeaderSlotContext";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe, Brain, Zap, RotateCcw, GitBranch, MessageSquare } from "lucide-react";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe, Brain, Zap, RotateCcw, GitBranch } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { ActivityPage } from "@/pages/ActivityPage";
@@ -308,8 +306,6 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
   function isVisible(id: string) { return !hidden.has(id); }
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [gpu, setGpu] = useState<GpuInfo | null>(null);
@@ -362,13 +358,17 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
     return () => { alive = false; };
   }, []);
 
+  // Fast OAuth-Usage polling (3s) — leichtgewichtig, nur ein kleiner JSON-Call
   useEffect(() => {
     let alive = true;
-    const poll = () => { api.oauthUsage().then(d => { if (alive) setOauthUsage(d as Record<string,unknown>); }).catch(() => {}); };
+    const poll = () => {
+      api.oauthUsage().then(d => { if (alive) setOauthUsage(d as Record<string,unknown>); }).catch(() => {});
+    };
     const t = setInterval(poll, 3000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Fast Codex + MiniMax polling (3s)
   useEffect(() => {
     let alive = true;
     const poll = () => {
@@ -385,8 +385,13 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   useEffect(() => {
     let disposed = false;
     loadDashboard(false);
-    const timer = setInterval(() => { if (!disposed) loadDashboard(true); }, 15000);
-    return () => { disposed = true; clearInterval(timer); };
+    const timer = setInterval(() => {
+      if (!disposed) loadDashboard(true);
+    }, 15000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
   }, [loadDashboard]);
 
   const runtime = status?.runtime as Record<string, any> | undefined;
@@ -398,17 +403,27 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   const hottestGpu = gpuList.length > 0 ? [...gpuList].sort((a, b) => (b.temp_c ?? -1) - (a.temp_c ?? -1))[0] : null;
   const updateState = update?.status ?? "unknown";
   const updateAvailable = Boolean(update?.available);
+  const runningHeartbeats = heartbeatTasks.length;
+  const updateIsUrgent = updateState === "running" || updateState === "error" || updateAvailable;
   const problemAgents = useMemo(() => {
     return Object.entries(agentMap)
       .map(([id, entry]) => {
         if (id.endsWith("_template") || id.endsWith("-template")) return null;
         const runtimeState = entry?.runtime;
-        if (!runtimeState) return { id, severity: "warn" as const, summary: t("agents.noRuntime"), detail: t("dashboard.agentConfiguredNotStarted") };
-        if (runtimeState.status !== "running") return { id, severity: "critical" as const, summary: `Runtime ${runtimeState.status}`, detail: t("dashboard.agentNotRunning") };
-        if (runtimeState.restart_count > 0) return { id, severity: "warn" as const, summary: `${runtimeState.restart_count} Restarts`, detail: t("dashboard.agentRestarted") };
+        if (!runtimeState) {
+          return { id, severity: "warn", summary: t("agents.noRuntime"), detail: t("dashboard.agentConfiguredNotStarted") };
+        }
+        if (runtimeState.status !== "running") {
+          return { id, severity: "critical", summary: `Runtime ${runtimeState.status}`, detail: t("dashboard.agentNotRunning") };
+        }
+        if (runtimeState.restart_count > 0) {
+          return { id, severity: "warn", summary: `${runtimeState.restart_count} Restarts`, detail: t("dashboard.agentRestarted") };
+        }
         const heartbeatAge = Number(runtimeState.last_heartbeat_age ?? 0);
         const heartbeatTimeout = Number(runtimeState.heartbeat_timeout ?? 0);
-        if (heartbeatTimeout > 0 && heartbeatAge > heartbeatTimeout * 0.75) return { id, severity: "warn" as const, summary: t("dashboard.heartbeatLate"), detail: t("dashboard.heartbeatLateDetail", { age: heartbeatAge.toFixed(0) }) };
+        if (heartbeatTimeout > 0 && heartbeatAge > heartbeatTimeout * 0.75) {
+          return { id, severity: "warn", summary: t("dashboard.heartbeatLate"), detail: t("dashboard.heartbeatLateDetail", { age: heartbeatAge.toFixed(0) }) };
+        }
         return null;
       })
       .filter((entry): entry is { id: string; severity: "warn" | "critical"; summary: string; detail: string } => entry !== null)
@@ -417,76 +432,169 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   const projectSignals = useMemo(() => {
     return activeProjects.map((id) => {
       const entry = projectMap[id];
-      if (!entry) return { id, title: id, summary: t("dashboard.sessionNoProject"), meta: t("dashboard.sessionNoProjectDetail"), tone: "warn" as const };
+      if (!entry) {
+        return {
+          id,
+          title: id,
+          summary: t("dashboard.sessionNoProject"),
+          meta: t("dashboard.sessionNoProjectDetail"),
+          tone: "warn",
+        };
+      }
       const workerCount = Array.isArray(entry.workers) ? entry.workers.length : 0;
-      return { id, title: entry.name || id, summary: `Boss ${entry.boss || "-"}`, meta: `${workerCount} Worker · ${entry.matrix_room ? t("dashboard.matrixActive") : t("dashboard.noMatrixRoom")}`, tone: "ok" as const };
+      return {
+        id,
+        title: entry.name || id,
+        summary: `Boss ${entry.boss || "-"}`,
+        meta: `${workerCount} Worker · ${entry.matrix_room ? t("dashboard.matrixActive") : t("dashboard.noMatrixRoom")}`,
+        tone: "ok",
+      };
     });
-  }, [activeProjects, projectMap, t]);
+  }, [activeProjects, projectMap]);
+
+  const cards = [
+    {
+      icon: Activity,
+      label: t("dashboard.coreLabel", { defaultValue: "Core" }),
+      value: healthy === null ? "..." : healthy ? t("dashboard.coreOnline") : t("dashboard.coreOffline"),
+      meta: healthy === false ? t("dashboard.coreApiUnstable") : t("dashboard.coreApiOk"),
+      state: healthy === false ? "problem" : "ok",
+    },
+    {
+      icon: Bot,
+      label: t("dashboard.agentsLabel"),
+      value: agents ?? "...",
+      meta: t("dashboard.agentsNote"),
+      state: "ok",
+    },
+    {
+      icon: FolderKanban,
+      label: t("dashboard.projectsLabel"),
+      value: projects ?? "...",
+      meta: t("dashboard.projectsNote"),
+      state: "ok",
+    },
+    {
+      icon: Cpu,
+      label: t("dashboard.runtimeLabel"),
+      value: running,
+      meta: t("dashboard.runtimeNote"),
+      state: "ok",
+    },
+  ];
+
+  const healthTone = healthy === false ? "bg-destructive/12 text-destructive" : "status-pill-ok";
+  const systemFacts = useMemo(
+    () => [
+      { label: "Discovery", value: agents ?? "...", note: t("dashboard.discoveryNote") },
+      { label: "Projects", value: projects ?? "...", note: t("dashboard.projectsActive") },
+      { label: "Runtime", value: running, note: t("dashboard.runtimeRunning") },
+      { label: "Heartbeats", value: runningHeartbeats, note: t("dashboard.heartbeatNote") },
+      { label: "Sessions", value: activeProjects.length, note: t("dashboard.sessionsNote") },
+    ],
+    [activeProjects.length, agents, projects, running, runningHeartbeats, t],
+  );
   const attentionItems = useMemo(() => {
     const items: { tone: "critical" | "warn" | "info"; title: string; detail: string }[] = [];
-    if (healthy === false) items.push({ tone: "critical", title: t("dashboard.coreDisturbed2"), detail: t("dashboard.coreDisturbed2Detail") });
-    if (updateState === "error") items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || t("dashboard.updateErrorFallback") });
-    else if (updateState === "running") items.push({ tone: "info", title: t("dashboard.updateRunning2"), detail: t("dashboard.updateRunning2Detail") });
-    else if (updateAvailable) items.push({ tone: "warn", title: t("dashboard.updateAlertTitle"), detail: t("dashboard.updateAlertAvailable", { commit: update?.commit ?? t("dashboard.commitUnknown") }) });
+    if (healthy === false) {
+      items.push({ tone: "critical", title: t("dashboard.coreDisturbed2"), detail: t("dashboard.coreDisturbed2Detail") });
+    }
+    if (updateState === "error") {
+      items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || t("dashboard.updateErrorFallback") });
+    } else if (updateState === "running") {
+      items.push({ tone: "info", title: t("dashboard.updateRunning2"), detail: t("dashboard.updateRunning2Detail") });
+    } else if (updateAvailable) {
+      items.push({
+        tone: "warn",
+        title: t("dashboard.updateAlertTitle"),
+        detail: t("dashboard.updateAlertAvailable", { commit: update?.commit ?? t("dashboard.commitUnknown") }),
+      });
+    }
     if (problemAgents.length > 0) {
       const critical = problemAgents.filter((entry) => entry.severity === "critical").length;
-      items.push({ tone: critical > 0 ? "critical" : "warn", title: problemAgents.length !== 1 ? t("dashboard.agentSignalCountPlural", { count: problemAgents.length }) : t("dashboard.agentSignalCount", { count: problemAgents.length }), detail: critical > 0 ? t("dashboard.criticalAgents", { critical }) : t("dashboard.heartbeatWarn") });
+      items.push({
+        tone: critical > 0 ? "critical" : "warn",
+        title: problemAgents.length !== 1
+          ? t("dashboard.agentSignalCountPlural", { count: problemAgents.length })
+          : t("dashboard.agentSignalCount", { count: problemAgents.length }),
+        detail: critical > 0
+          ? t("dashboard.criticalAgents", { critical })
+          : t("dashboard.heartbeatWarn"),
+      });
     }
-    if (hottestGpu && (hottestGpu.temp_c ?? 0) >= 80) items.push({ tone: "warn", title: t("dashboard.gpuHot", { temp: hottestGpu.temp_c ?? "-" }), detail: t("dashboard.gpuHotDetail", { name: hottestGpu.name }) });
-    if (items.length === 0) items.push({ tone: "info", title: t("dashboard.noIssues"), detail: t("dashboard.noIssuesDetail") });
+    if (hottestGpu && (hottestGpu.temp_c ?? 0) >= 80) {
+      items.push({
+        tone: "warn",
+        title: t("dashboard.gpuHot", { temp: hottestGpu.temp_c ?? "-" }),
+        detail: t("dashboard.gpuHotDetail", { name: hottestGpu.name }),
+      });
+    }
+    if (items.length === 0) {
+      items.push({ tone: "info", title: t("dashboard.noIssues"), detail: t("dashboard.noIssuesDetail") });
+    }
     return items.slice(0, 4);
   }, [healthy, hottestGpu, problemAgents, update?.commit, update?.error, updateAvailable, updateState, t]);
-
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return t("dashboard.goodMorning", { defaultValue: "Guten Morgen" });
-    if (h < 18) return t("dashboard.goodAfternoon", { defaultValue: "Guten Tag" });
-    return t("dashboard.goodEvening", { defaultValue: "Guten Abend" });
-  })();
-
-  const activityItems = audit.slice(0, 6).map((entry) => {
-    let dotColor = "bg-muted";
-    if (entry.action.toLowerCase().includes("start") || entry.action.toLowerCase().includes("created")) dotColor = "bg-green-400";
-    else if (entry.action.toLowerCase().includes("error") || entry.action.toLowerCase().includes("fail")) dotColor = "bg-red-400";
-    else if (entry.action.toLowerCase().includes("stop") || entry.action.toLowerCase().includes("delete")) dotColor = "bg-orange-400";
-    return { dotColor, text: `${entry.action} — ${entry.target}`, time: new Date(entry.timestamp).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) };
-  });
-
-  const totalCacheHitRate = useMemo(() => {
-    const entries = Object.values(sessionMetrics) as any[];
-    if (entries.length === 0) return null;
-    const total = entries.reduce((sum: number, m: any) => sum + (m.cache_hit_rate ?? 0), 0);
-    return Math.round((total / entries.length) * 100);
-  }, [sessionMetrics]);
-
-  const totalToolRounds = useMemo(() => {
-    const entries = Object.values(sessionMetrics) as any[];
-    return entries.reduce((sum: number, m: any) => sum + (m.tool_rounds_total ?? 0), 0);
-  }, [sessionMetrics]);
+  const attentionTone = attentionItems.some((item) => item.tone === "critical")
+    ? "bg-destructive/12 text-destructive"
+    : attentionItems.some((item) => item.tone === "warn")
+      ? "bg-accent/15 text-accent"
+      : "status-pill-ok";
 
   if (status === null) {
     return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center gap-4">
-          <div className="animate-pulse rounded-lg bg-muted/50 h-8 w-64" />
-          <div className="animate-pulse rounded-full bg-muted/50 h-6 w-32" />
+      <div className="space-y-6">
+        {/* Hero skeleton */}
+        <div className="hero-panel">
+          <div className="relative z-10 shell-grid">
+            <div className="space-y-5 lg:col-span-8">
+              <div className="flex gap-3">
+                <div className="animate-pulse rounded-full bg-muted/50 h-6 w-28" />
+                <div className="animate-pulse rounded-full bg-muted/50 h-6 w-24" />
+              </div>
+              <div className="space-y-3">
+                <div className="animate-pulse rounded-lg bg-muted/50 h-8 w-64" />
+                <div className="animate-pulse rounded-lg bg-muted/50 h-5 w-96 max-w-full" />
+              </div>
+            </div>
+            <div className="lg:col-span-4">
+              <div className="animate-pulse rounded-xl bg-muted/50 h-44" />
+            </div>
+          </div>
         </div>
-        <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
+
+        {/* Metric cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-4">
-              <div className="animate-pulse rounded-lg bg-muted/50 h-4 w-20 mb-3" />
-              <div className="animate-pulse rounded-lg bg-muted/50 h-8 w-12" />
+            <div key={i} className="metric-card">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-3">
+                  <div className="animate-pulse rounded-lg bg-muted/50 h-4 w-20" />
+                  <div className="animate-pulse rounded-lg bg-muted/50 h-8 w-16" />
+                </div>
+                <div className="animate-pulse rounded-2xl bg-muted/50 h-11 w-11" />
+              </div>
+              <div className="animate-pulse rounded-lg bg-muted/50 h-4 w-32 mt-3" />
             </div>
           ))}
         </div>
-        <div className="grid gap-4 grid-cols-[2fr_1fr]">
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="animate-pulse rounded-lg bg-muted/50 h-5 w-32 mb-4" />
-            <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="animate-pulse rounded-lg bg-muted/50 h-10 w-full" />)}</div>
+
+        {/* Bottom sections skeleton */}
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+          <div className="section-card">
+            <div className="animate-pulse rounded-lg bg-muted/50 h-6 w-40" />
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="animate-pulse rounded-2xl bg-muted/50 h-24" />
+              ))}
+            </div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="animate-pulse rounded-lg bg-muted/50 h-5 w-28 mb-4" />
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="animate-pulse rounded-lg bg-muted/50 h-12 w-full" />)}</div>
+          <div className="section-card">
+            <div className="animate-pulse rounded-lg bg-muted/50 h-6 w-36" />
+            <div className="mt-4 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse rounded-2xl bg-muted/50 h-16" />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -494,156 +602,113 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* HERO ZONE */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{greeting}{user ? `, ${user.username || ""}` : ""}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">HydraHive Übersicht</p>
-          </div>
-          <div className={cn("flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium", healthy === false ? "bg-destructive/15 text-destructive" : "bg-green-500/15 text-green-400")}>
-            <span className={cn("h-1.5 w-1.5 rounded-full", healthy === false ? "bg-destructive" : "bg-green-400")} />
-            {healthy === false ? t("dashboard.coreOffline") : t("dashboard.coreOnline")}
-          </div>
-        </div>
+    <div className="space-y-6 relative">
+      {/* Widget-Settings Button */}
+      <button
+        onClick={() => setShowWidgetSettings(s => !s)}
+        className="absolute top-4 right-4 z-10 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title={t("dashboard.widgetSettings", { defaultValue: "Widgets ein-/ausblenden" })}
+      >
+        <Layers3 size={16} />
+      </button>
 
-        {/* Slim Metric Cards */}
-        <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground font-medium">{t("dashboard.agentsLabel", { defaultValue: "Agents" })}</p>
-            <p className="text-3xl font-bold tracking-tight mt-1" style={{ color: "hsl(var(--candy-violet))" }}>{agents ?? "..."}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground font-medium">{t("dashboard.projectsLabel", { defaultValue: "Projects" })}</p>
-            <p className="text-3xl font-bold tracking-tight mt-1" style={{ color: "hsl(var(--candy-cyan))" }}>{projects ?? "..."}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground font-medium">{t("dashboard.runtimeLabel", { defaultValue: "Runtime" })}</p>
-            <p className="text-3xl font-bold tracking-tight mt-1" style={{ color: "hsl(var(--candy-lime))" }}>{running}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground font-medium">{hottestGpu ? "GPU Temp" : "Uptime"}</p>
-            <p className="text-3xl font-bold tracking-tight mt-1" style={{ color: "hsl(var(--candy-amber))" }}>
-              {hottestGpu ? `${hottestGpu.temp_c ?? "-"}°C` : (status?.uptime ? `${Math.floor(Number(status.uptime) / 86400)}d` : "...")}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* TWO-COLUMN LAYOUT */}
-      <div className="grid gap-4 grid-cols-[2fr_1fr]">
-        {/* LEFT COLUMN */}
-        <div className="space-y-4">
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Activity className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Activity Stream</h2>
-            </div>
-            <div className="space-y-2">
-              {activityItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">Keine Aktivitäten</p>
-              ) : activityItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 py-1.5">
-                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", item.dotColor)} />
-                  <span className="text-sm text-foreground flex-1 truncate">{item.text}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{item.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Brain className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">Context-Metriken</h2>
-            </div>
-            <div className="space-y-3">
-              {totalCacheHitRate !== null ? (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-muted-foreground">Token-Cache</span>
-                    <span className="text-xs font-medium" style={{ color: "hsl(var(--candy-cyan))" }}>{totalCacheHitRate}%</span>
-                  </div>
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${totalCacheHitRate}%`, backgroundColor: "hsl(var(--candy-cyan))" }} />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Keine aktiven Sessions</p>
-              )}
-              {totalToolRounds > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Tool-Loops</span>
-                  <span className="text-xs font-medium text-foreground">{totalToolRounds} total</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="space-y-4">
-          <div className="bg-card border border-border rounded-xl p-5"
-            style={{ borderLeftWidth: "3px", borderLeftColor: attentionItems.some(i => i.tone === "critical") ? "hsl(var(--destructive))" : attentionItems.some(i => i.tone === "warn") ? "hsl(var(--candy-amber))" : "hsl(var(--candy-violet))" }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Attention</h2>
-            </div>
-            <div className="space-y-2">
-              {attentionItems.map((item, i) => (
-                <div key={i} className="flex items-start gap-2 py-1">
-                  {item.tone === "warn" && <span className="text-amber-400 mt-0.5 shrink-0">●</span>}
-                  {item.tone === "critical" && <span className="text-destructive mt-0.5 shrink-0">●</span>}
-                  {item.tone === "info" && <span className="text-violet-400 mt-0.5 shrink-0">●</span>}
-                  <div className="min-w-0">
-                    <p className="text-sm text-foreground truncate">{item.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{item.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">Quick Actions</h2>
-            </div>
-            <div className="space-y-2">
-              <button onClick={() => navigate("/agents/new")} className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:border-primary/30">
-                <span className="flex items-center gap-2"><Plus className="h-4 w-4 text-primary" />Neuer Agent</span>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+      {/* Widget Toggle Panel */}
+      {showWidgetSettings && (
+        <div className="mx-4 rounded-xl border bg-card p-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("dashboard.widgetSettings", { defaultValue: "Widgets ein-/ausblenden" })}</p>
+          <div className="flex flex-wrap gap-2">
+            {WIDGET_DEFS.map(w => (
+              <button key={w.id} onClick={() => toggleWidget(w.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border transition-colors",
+                  isVisible(w.id) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground line-through opacity-50"
+                )}>
+                {w.label}
               </button>
-              <button onClick={() => navigate("/admin/backups")} className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:border-primary/30">
-                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Backup starten</span>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-              <button onClick={() => navigate("/my-agent")} className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:border-primary/30">
-                <span className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" />Session öffnen</span>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isVisible("status") && <section className="hero-panel">
+        <div className="relative z-10 shell-grid">
+          <div className="space-y-5 lg:col-span-8">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={healthTone + " status-pill"}>
+                <span className={"dot " + (healthy === false ? "bg-destructive" : "bg-primary")} />
+                {healthy === false ? t("dashboard.coreDisturbed") : t("dashboard.coreReachable")}
+              </span>
+              <span className="status-pill">
+                <Radar className="h-3.5 w-3.5" />
+                {t("dashboard.dashboardLabel")}
+              </span>
+            </div>
+
+            <div>
+              <h1 className="shell-title">{t("dashboard.title")}</h1>
+              <p className="shell-copy mt-3 max-w-2xl">
+                {t("dashboard.subtitle")}
+              </p>
+            </div>
+          </div>
+
+          <div className="lg:col-span-4">
+            <div className="app-panel app-panel-muted p-5">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Workflow className="h-4 w-4 text-primary" />
+                {t("dashboard.focusToday")}
+              </div>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <div className="flex items-start justify-between gap-3">
+                  <span>{t("dashboard.focus1")}</span>
+                  <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span>{t("dashboard.focus2")}</span>
+                  <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span>{t("dashboard.focus3")}</span>
+                  <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className={`status-pill ${attentionTone}`}>
+                  <Radar className="h-3.5 w-3.5" />
+                  {attentionItems[0]?.title}
+                </span>
+                <span className="status-pill">
+                  <TimerReset className="h-3.5 w-3.5" />
+                  {lastUpdated ? t("dashboard.updateSync", { time: lastUpdated.toLocaleTimeString("de-DE") }) : t("dashboard.firstSync")}
+                </span>
+                {isRefreshing && (
+                  <span className="status-pill">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    {t("dashboard.liveRefresh")}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>}
 
-      {/* FULL-WIDTH: OAuth */}
+      {/* OAuth Usage — kompakt */}
       {oauthUsage && (oauthUsage.available || oauthUsage.message) ? (
-        <div className="bg-card border border-border rounded-xl p-4">
+        <section className="section-card">
           <div className="flex items-center gap-3">
-            <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Activity className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <span className="text-sm font-medium">Claude OAuth</span>
-            <button onClick={() => { api.oauthUsageFetch().then(d => { if (d && (d as any).available) api.oauthUsage().then(c => setOauthUsage(c as Record<string,unknown>)).catch(() => {}); }).catch(() => {}); }} className="p-0.5 rounded hover:bg-muted transition-colors" aria-label="OAuth Refresh">
+            <button onClick={() => { api.oauthUsageFetch().then(d => { if (d && (d as any).available) { api.oauthUsage().then(c => setOauthUsage(c as Record<string,unknown>)).catch(() => {}); } }).catch(() => {}); }}
+              className="p-0.5 rounded hover:bg-muted transition-colors" title="Live von Anthropic abrufen" aria-label="OAuth Refresh">
               <RefreshCw className="h-3 w-3 text-muted-foreground" />
             </button>
             {!oauthUsage.available ? (
               <span className="text-xs text-muted-foreground ml-auto">{String(oauthUsage.message)}</span>
             ) : (
               <div className="flex items-center gap-4 ml-auto">
-                {(["5h", "7d"] as const).map(w => {
-                  const d = oauthUsage[w] as { utilization_pct: number; label: string } | undefined;
+                {["5h", "7d"].map(w => {
+                  const d = oauthUsage[w] as { utilization_pct: number; label: string; reset?: string } | undefined;
                   if (!d) return null;
                   const pct = d.utilization_pct ?? 0;
                   const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : pct >= 40 ? "bg-yellow-500" : "bg-green-500";
@@ -651,75 +716,439 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
                     <div key={w} className="flex items-center gap-2 min-w-[140px]">
                       <span className="text-xs text-muted-foreground whitespace-nowrap">{d.label}</span>
                       <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden min-w-[60px]">
-                        <div className={cn("h-full rounded-full", color)} style={{ width: `${Math.min(100, pct)}%` }} />
+                        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, pct)}%` }} />
                       </div>
                       <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
                     </div>
                   );
                 })}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  oauthUsage.status === "allowed" ? "bg-green-500/15 text-green-500" :
+                  oauthUsage.status === "allowed_warning" ? "bg-orange-500/15 text-orange-500" :
+                  "bg-destructive/15 text-destructive"
+                }`}>{String(oauthUsage.status || "")}</span>
               </div>
             )}
           </div>
-        </div>
+        </section>
       ) : null}
 
-      {/* FULL-WIDTH: Codex + MiniMax */}
-      {(codex?.configured || minimax?.available) ? (
-        <div className="grid gap-4 grid-cols-2">
-          {codex?.configured ? (
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Codex — Token-Plan</span>
-              </div>
-              <div className="space-y-2">
-                {(() => {
-                  const rl = codex.rate_limits || {};
-                  const primary = parseInt(rl["x-codex-primary-used-percent"] ?? "", 10);
-                  const secondary = parseInt(rl["x-codex-secondary-used-percent"] ?? "", 10);
-                  return [
-                    { label: "Session (5h)", pct: isNaN(primary) ? 0 : primary },
-                    { label: "Woche (7d)", pct: isNaN(secondary) ? 0 : secondary },
-                  ].map((b, idx) => {
-                    const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
-                    return (
-                      <div key={idx} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-28">{b.label}</span>
-                        <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
-                          <div className={cn("h-full rounded-full", color)} style={{ width: `${Math.min(100, b.pct)}%` }} />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground w-10 text-right">{b.pct}%</span>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          ) : null}
-
-          {minimax?.available ? (
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">MiniMax — Token-Plan</span>
-              </div>
-              <div className="space-y-2">
-                {(minimax.models ?? []).slice(0, 2).map(m => (
-                  <div key={m.name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium">{m.label}</span>
-                      <span className="text-[10px] text-muted-foreground">{m.interval_pct}%</span>
+      {/* Codex Usage Widget */}
+      {isVisible("codex") && codex && codex.configured ? (
+        <section className="section-card">
+          <div className="flex items-center gap-3">
+            <Cpu className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium">Codex — Nutzungslimits</span>
+            <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+              {codex.rate_limits?.["x-codex-plan-type"] || "plus"}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {(() => {
+              const rl = codex.rate_limits || {};
+              const primary = parseInt(rl["x-codex-primary-used-percent"] ?? "", 10);
+              const secondary = parseInt(rl["x-codex-secondary-used-percent"] ?? "", 10);
+              const bars = [
+                { key: "5h", label: "Session (5h)", pct: isNaN(primary) ? 0 : primary },
+                { key: "7d", label: "Woche (7d)", pct: isNaN(secondary) ? 0 : secondary },
+              ];
+              return bars.map(b => {
+                const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+                return (
+                  <div key={b.key} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-28">{b.label}</span>
+                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, b.pct)}%` }} />
                     </div>
-                    <div className="h-1 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-violet-400" style={{ width: `${Math.min(100, m.interval_pct)}%` }} />
+                    <span className="text-[10px] text-muted-foreground w-10 text-right">{b.pct}%</span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </section>
+      ) : null}
+
+      {/* MiniMax Token-Plan Widget */}
+      {isVisible("minimax") && minimax && minimax.available ? (
+        <section className="section-card">
+          <div className="flex items-center gap-3 mb-3">
+            <Zap className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium">MiniMax — Token-Plan</span>
+          </div>
+          <div className="space-y-3">
+            {(minimax.models ?? []).map(m => {
+              const iColor = m.interval_pct >= 90 ? "bg-red-500" : m.interval_pct >= 70 ? "bg-orange-500" : m.interval_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+              const wColor = m.weekly_pct >= 90 ? "bg-red-500" : m.weekly_pct >= 70 ? "bg-orange-500" : m.weekly_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+              const fmtReset = (s: number) => {
+                if (s <= 0) return "jetzt";
+                const h = Math.floor(s / 3600);
+                const m2 = Math.floor((s % 3600) / 60);
+                return h > 0 ? `${h}h ${m2}m` : `${m2}m`;
+              };
+              return (
+                <div key={m.name} className="border-b border-border/40 last:border-0 pb-2 last:pb-0">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-medium">{m.label}</span>
+                    <span className="text-muted-foreground">Reset in {fmtReset(m.interval_reset_in_s)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">5h</span>
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${iColor}`} style={{ width: `${Math.min(100, m.interval_pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8">{m.interval_pct}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">7d</span>
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${wColor}`} style={{ width: `${Math.min(100, m.weekly_pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8">{m.weekly_pct}%</span>
                     </div>
                   </div>
-                ))}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {isVisible("agents") && <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <div className="section-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="metric-kicker">{t("dashboard.attention")}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{t("dashboard.attentionTitle")}</h2>
+            </div>
+            <span className={`status-pill ${attentionTone}`}>
+              <Siren className="h-3.5 w-3.5" />
+              {attentionItems.some((item) => item.tone === "critical")
+                ? t("dashboard.critical")
+                : attentionItems.some((item) => item.tone === "warn")
+                  ? t("dashboard.warn")
+                  : t("dashboard.stable")}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {attentionItems.map((item) => (
+              <div key={`${item.title}-${item.detail}`} className={`rounded-2xl border px-4 py-4 ${item.tone === "critical" ? "border-destructive/20 bg-destructive/5" : item.tone === "warn" ? "border-accent/20 bg-accent/5" : "bg-background/55"}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-2xl p-2 ${item.tone === "critical" ? "bg-destructive/10 text-destructive" : item.tone === "warn" ? "bg-accent/15 text-accent" : "bg-primary/10 text-primary"}`}>
+                    {item.tone === "critical" ? <AlertTriangle className="h-4 w-4" /> : item.tone === "warn" ? <Siren className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="metric-kicker">{t("dashboard.liveLabel")}</p>
+              <h2 className="mt-2 text-lg font-semibold tracking-tight">{t("dashboard.realtimeState")}</h2>
+            </div>
+            <span className="status-pill status-pill-ok">15s</span>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span>{t("dashboard.polling")}</span>
+                <span className="status-pill">{isRefreshing ? t("layout.running") : t("layout.ready")}</span>
               </div>
             </div>
-          ) : null}
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.lastSync")}</div>
+              <div className="mt-2 font-medium text-foreground">{lastUpdated ? lastUpdated.toLocaleTimeString("de-DE") : t("dashboard.noSync")}</div>
+            </div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.activeObservers")}</div>
+              <div className="mt-2 text-foreground">{t("dashboard.observerSummaryInline", { hb: runningHeartbeats, sessions: activeProjects.length, signals: problemAgents.length })}</div>
+            </div>
+          </div>
         </div>
-      ) : null}
+      </section>}
+
+      {isVisible("metrics") && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map(({ icon: Icon, label, value, meta, state }) => (
+          <div key={label} className="metric-card">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="metric-kicker">{label}</p>
+                <p className={"metric-value " + (state === "problem" ? "text-destructive" : "")}>{String(value)}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary p-3 text-secondary-foreground">
+                <Icon className="h-5 w-5" />
+              </div>
+            </div>
+            <p className="metric-meta">{meta}</p>
+          </div>
+        ))}
+      </section>}
+
+      {isVisible("context") && (() => {
+        const entries = Object.entries(sessionMetrics);
+        if (entries.length === 0) return (
+          <section className="section-card">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-4 w-4 text-primary" />
+              <h2 className="text-lg font-semibold tracking-tight">Context-Metriken</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">Keine aktiven Sessions</p>
+          </section>
+        );
+        return (
+          <section className="space-y-4">
+            {entries.map(([pid, m]: [string, any]) => (
+              <div key={pid} className="section-card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="h-4 w-4 text-primary" />
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    {(projectMap as Record<string,any>)[pid]?.name || pid}
+                  </h2>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {m.llm_call_count} LLM-Calls
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Input-Tokens</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{(m.total_input_tokens / 1000).toFixed(1)}k</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Output: {(m.total_output_tokens / 1000).toFixed(1)}k</p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cache-Hit</p>
+                    <p className={`mt-2 text-2xl font-semibold tracking-tight ${m.cache_hit_rate > 0.5 ? "text-green-400" : m.cache_hit_rate > 0.2 ? "text-yellow-400" : "text-red-400"}`}>
+                      {(m.cache_hit_rate * 100).toFixed(0)}%
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Read: {(m.total_cache_read / 1000).toFixed(1)}k / Write: {(m.total_cache_write / 1000).toFixed(1)}k
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Compactions</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{m.compaction_count}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {m.compaction_stages.length > 0 ? `Stufen: ${m.compaction_stages.join(", ")}` : "Keine"}
+                      {m.overflow_count > 0 && <span className="text-red-400"> · {m.overflow_count} Overflow</span>}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tool-Loop</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{m.tool_rounds_total} Rounds</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {m.tool_calls_total} Calls · {m.avg_latency_ms}ms avg
+                      {m.signature_aborts > 0 && <span className="text-yellow-400"> · {m.signature_aborts} Abbrüche</span>}
+                    </p>
+                  </div>
+                </div>
+                {(m.retries > 0 || m.failovers > 0 || m.session_resets > 0) && (
+                  <div className="mt-3 flex gap-3 text-sm">
+                    {m.retries > 0 && <span className="flex items-center gap-1 text-yellow-400"><RotateCcw className="h-3 w-3" />{m.retries} Retries</span>}
+                    {m.failovers > 0 && <span className="flex items-center gap-1 text-orange-400"><GitBranch className="h-3 w-3" />{m.failovers} Failovers</span>}
+                    {m.session_resets > 0 && <span className="flex items-center gap-1 text-red-400"><Zap className="h-3 w-3" />{m.session_resets} Resets</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        );
+      })()}
+
+      {isVisible("heartbeat") && <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <div className="section-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="metric-kicker">{t("dashboard.overviewKicker")}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{t("dashboard.overviewTitle")}</h2>
+            </div>
+            <span className="status-pill status-pill-ok">{t("dashboard.overview")}</span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {systemFacts.map((item) => (
+              <div key={item.label} className="rounded-2xl border bg-background/55 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight">{String(item.value)}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{item.note}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+          <div className={`section-card ${updateIsUrgent ? "border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.14)] backdrop-blur" : ""}`}>
+          <div className="flex items-center gap-2">
+            {updateIsUrgent ? <Siren className="h-4 w-4 text-red-400" /> : <RefreshCw className="h-4 w-4 text-primary" />}
+            <h2 className={`text-lg font-semibold tracking-tight ${updateIsUrgent ? "text-red-100" : ""}`}>
+              {updateIsUrgent ? t("dashboard.updateAlertTitle") : t("dashboard.updateStatus")}
+            </h2>
+          </div>
+          {updateIsUrgent && (
+            <p className="mt-2 text-sm text-red-100/80">
+              {updateState === "running"
+                ? t("dashboard.updateAlertRunning")
+                : updateAvailable
+                  ? t("dashboard.updateAlertAvailable", { commit: update?.commit ?? t("dashboard.commitUnknown") })
+                  : t("dashboard.updateAlertError")}
+            </p>
+          )}
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <div className={`rounded-2xl px-4 py-3 ${updateIsUrgent ? "bg-red-500/10" : "bg-secondary/55"}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span>Status</span>
+                <span className={updateState === "ok" && !updateAvailable ? "status-pill status-pill-ok" : "status-pill bg-red-500/20 text-red-100"}>
+                  {updateState === "running"
+                    ? t("layout.running")
+                    : updateAvailable
+                      ? t("layout.updateAvailable")
+                      : updateState === "error"
+                        ? t("dashboard.updateError")
+                        : updateState}
+                </span>
+              </div>
+            </div>
+            <div className={`rounded-2xl px-4 py-3 ${updateIsUrgent ? "bg-red-500/10" : "bg-secondary/55"}`}>
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.commit")}</div>
+              <div className="mt-2 font-mono text-foreground">{update?.commit ?? t("dashboard.commitUnknown")}</div>
+            </div>
+            {update?.error && <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-red-100">{update.error}</div>}
+          </div>
+        </div>
+      </section>}
+
+      {isVisible("gpu") && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.15fr_1fr_1fr]">
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.gpuSignal")}</h2>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            {!gpu?.available || gpuList.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">{t("dashboard.noGpu")}</div>
+            ) : (
+              gpuList.slice(0, 2).map((entry) => (
+                <div key={entry.name} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{entry.name}</span>
+                    <span className="status-pill">{entry.temp_c ?? "-"}°C</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div>GPU: {entry.util_gpu_pct ?? "-"}%</div>
+                    <div>VRAM: {entry.util_mem_pct ?? "-"}%</div>
+                    <div>Power: {entry.power_draw_w ?? "-"}W</div>
+                    <div>Used: {entry.mem_used_mb ?? "-"} MB</div>
+                  </div>
+                </div>
+              ))
+            )}
+            {hottestGpu && <div className="text-xs text-muted-foreground">{t("dashboard.hottestGpu", { name: hottestGpu.name, temp: hottestGpu.temp_c ?? "-" })}</div>}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.heartbeatTasks")}</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {heartbeatTasks.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">{t("dashboard.noHeartbeat")}</div>
+            ) : (
+              heartbeatTasks.slice(0, 4).map((task) => (
+                <div key={task.task_id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{task.agent_id}</span>
+                    <span className="status-pill">{task.interval ? `${task.interval}s` : task.schedule ?? t("dashboard.manual")}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{task.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="section-card md:col-span-2 xl:col-span-1">
+          <div className="flex items-center gap-2">
+            <Layers3 className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.lastAudit")}</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {audit.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">{t("dashboard.noAudit")}</div>
+            ) : (
+              audit.map((entry) => (
+                <div key={entry.id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{entry.action}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(entry.timestamp).toLocaleTimeString("de-DE")}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{entry.user} to {entry.target}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>}
+
+      {isVisible("update") && <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.agentSignals")}</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {problemAgents.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">
+                {t("dashboard.noAgentSignals")}
+              </div>
+            ) : (
+              problemAgents.slice(0, 5).map((agent) => (
+                <div key={agent.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{agent.id}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{agent.detail}</div>
+                    </div>
+                    <span className={agent.severity === "critical" ? "status-pill bg-destructive/12 text-destructive" : "status-pill bg-accent/15 text-accent"}>
+                      {agent.summary}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.activeProjects")}</h2>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            {projectSignals.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">{t("dashboard.noActiveSessions")}</div>
+            ) : (
+              projectSignals.slice(0, 5).map((project) => (
+                <div key={project.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="font-medium text-foreground">{project.title}</span>
+                    <span className={project.tone === "warn" ? "status-pill bg-accent/15 text-accent" : "status-pill status-pill-ok"}>
+                      {t("dashboard.active")}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{project.summary}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{project.meta}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>}
     </div>
   );
 }
