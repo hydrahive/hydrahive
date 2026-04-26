@@ -306,32 +306,68 @@ class DiskImportManager:
                 total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
 
             elif compression:
-                # Streaming-Pipeline: Dekomprimierung + VMA-Extraktion ohne Zwischendatei
-                # _vma_extract liest nur sequenziell (f.read) → funktioniert direkt auf Pipe-Stream
+                # Dekomprimierung in Datei, dann VMA parsen.
+                # Streaming-Pipe-Ansatz war wegen EFBIG unzuverlässig (bi==0 Blöcke, Alignment).
                 job.progress_pct = 2
                 compressed_size = tmp_path.stat().st_size
+                estimated_dec_size = max(compressed_size * 4, 1)
 
-                def _stream_extract() -> tuple[int, str]:
-                    if compression == "zst":
-                        cmd = ["zstd", "--decompress", "--force", "--stdout", f"-T{_CPUS}", str(tmp_path)]
-                    elif compression == "gz" and _shutil.which("pigz"):
-                        cmd = ["pigz", "--decompress", "--stdout", f"-p{_CPUS}", str(tmp_path)]
-                    else:
-                        cmd = ["gunzip", "--force", "--keep", "--stdout", str(tmp_path)]
+                if compression == "zst":
+                    dec_cmd = ["zstd", "--decompress", "--force", f"-T{_CPUS}",
+                               str(tmp_path), "-o", str(dec_path)]
+                elif compression == "gz" and _shutil.which("pigz"):
+                    dec_cmd = ["pigz", "--decompress", "--keep", "--force",
+                               f"-p{_CPUS}", "--stdout", str(tmp_path)]
+                else:
+                    dec_cmd = ["gunzip", "--force", "--keep", "--stdout", str(tmp_path)]
 
-                    with _sp.Popen(cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, bufsize=16 * 1024 * 1024) as proc:
-                        assert proc.stdout is not None
-                        # Progress via komprimierter Input-Dateigröße schätzen (seek auf tmp_path)
-                        result = _vma_extract(proc.stdout, raw_path,
-                                              lambda pct: self._set_progress(job_id, 2 + int(pct * 0.96)))
-                        proc.stdout.close()
-                        rc = proc.wait()
-                        if rc != 0:
-                            err = proc.stderr.read().decode(errors="replace")[-300:]
-                            raise RuntimeError(f"Dekomprimierung fehlgeschlagen (rc={rc}): {err}")
-                    return result
+                # stdout in Datei schreiben wenn via --stdout
+                use_stdout = compression != "zst"
+                if use_stdout:
+                    dec_fh = open(dec_path, "wb")
+                    dec_proc = await asyncio.create_subprocess_exec(
+                        *dec_cmd,
+                        stdout=dec_fh.fileno(),
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                else:
+                    dec_fh = None
+                    dec_proc = await asyncio.create_subprocess_exec(
+                        *dec_cmd,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
 
-                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _stream_extract)
+                # Progress während Dekomprimierung via wachsende Ausgabedatei
+                while dec_proc.returncode is None:
+                    await asyncio.sleep(2)
+                    if dec_path.exists():
+                        done = dec_path.stat().st_size
+                        pct = min(68, int(done / estimated_dec_size * 68))
+                        self._set_progress(job_id, 2 + pct)
+                    try:
+                        await asyncio.wait_for(dec_proc.wait(), timeout=0.1)
+                    except asyncio.TimeoutError:
+                        pass
+
+                if dec_fh:
+                    dec_fh.close()
+                rc = dec_proc.returncode
+                if rc != 0:
+                    stderr_out = b""
+                    if dec_proc.stderr:
+                        stderr_out = await dec_proc.stderr.read()
+                    raise RuntimeError(
+                        f"Dekomprimierung fehlgeschlagen (rc={rc}): "
+                        f"{stderr_out.decode(errors='replace')[-300:]}"
+                    )
+
+                vma_path = dec_path
+                job.progress_pct = 70
+
+                def _do_extract() -> tuple[int, str]:
+                    return _vma_extract(vma_path, raw_path,
+                                        lambda pct: self._set_progress(job_id, 70 + int(pct * 0.1)))
+                total_size, devname = await asyncio.get_event_loop().run_in_executor(None, _do_extract)
 
             else:
                 # Keine Komprimierung — direkt parsen
