@@ -285,11 +285,14 @@ class DiskImportManager:
             import os as _os
             import shutil as _shutil
             _CPUS = str(_os.cpu_count() or 4)
+            # Dekomprimierung belegt 2-70% des Fortschritts.
+            # Decompressed-Größe unbekannt → Schätzung compressed * 4 (typisches VMA-Ratio).
+            # Wird weich gecappt: echte Bytes / geschätzte Bytes → nie über 69%.
             if compression == "zst":
                 job.progress_pct = 2
                 dec_path = self._import_dir / f"{job_id}_dec.vma"
-                total_bytes = tmp_path.stat().st_size
-                # -T0 = alle CPU-Kerne nutzen
+                compressed_size = tmp_path.stat().st_size
+                est_decomp = max(compressed_size * 4, 1)
                 proc = await asyncio.create_subprocess_exec(
                     "zstd", "--decompress", "--force", "--stdout", f"-T{_CPUS}", str(tmp_path),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -303,8 +306,7 @@ class DiskImportManager:
                             break
                         out_f.write(chunk)
                         written += len(chunk)
-                        if total_bytes > 0:
-                            self._set_progress(job_id, 2 + min(7, int(written / total_bytes * 28)))
+                        self._set_progress(job_id, 2 + min(67, int(written / est_decomp * 68)))
                 await proc.wait()
                 if proc.returncode != 0:
                     err = await proc.stderr.read()
@@ -313,9 +315,9 @@ class DiskImportManager:
             elif compression == "gz":
                 job.progress_pct = 2
                 dec_path = self._import_dir / f"{job_id}_dec.vma"
-                total_bytes = tmp_path.stat().st_size
+                compressed_size = tmp_path.stat().st_size
+                est_decomp = max(compressed_size * 4, 1)
                 if _shutil.which("pigz"):
-                    # pigz: paralleler gzip mit allen Kernen
                     proc = await asyncio.create_subprocess_exec(
                         "pigz", "--decompress", "--stdout", f"-p{_CPUS}", str(tmp_path),
                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -329,8 +331,7 @@ class DiskImportManager:
                                 break
                             out_f.write(chunk)
                             written += len(chunk)
-                            if total_bytes > 0:
-                                self._set_progress(job_id, 2 + min(7, int(written / total_bytes * 28)))
+                            self._set_progress(job_id, 2 + min(67, int(written / est_decomp * 68)))
                     await proc.wait()
                     if proc.returncode != 0:
                         err = await proc.stderr.read()
@@ -340,18 +341,15 @@ class DiskImportManager:
                     def _gunzip_with_progress() -> None:
                         import gzip
                         _CHUNK = 4 * 1024 * 1024
+                        _written = 0
                         with gzip.open(str(tmp_path), "rb") as gz_in, dec_path.open("wb") as out_f:
                             while True:
                                 chunk = gz_in.read(_CHUNK)
                                 if not chunk:
                                     break
                                 out_f.write(chunk)
-                                try:
-                                    pos = gz_in.fileobj.tell()  # type: ignore[attr-defined]
-                                    if total_bytes > 0:
-                                        self._set_progress(job_id, 2 + min(7, int(pos / total_bytes * 7)))
-                                except Exception:
-                                    pass
+                                _written += len(chunk)
+                                self._set_progress(job_id, 2 + min(67, int(_written / est_decomp * 68)))
                     await asyncio.get_event_loop().run_in_executor(None, _gunzip_with_progress)
                 vma_path = dec_path
 
