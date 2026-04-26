@@ -442,8 +442,8 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   // ── Skeleton ───────────────────────────────────────────────────────
   if (status === null) {
     return (
-      <div className="space-y-5">
-        <div className="rounded-2xl border bg-card p-6 animate-pulse">
+      <div className="space-y-3">
+        <div className="rounded-xl border bg-card p-4 animate-pulse">
           <div className="h-6 w-48 bg-muted rounded-full mb-4" />
           <div className="h-8 w-64 bg-muted rounded-lg mb-2" />
           <div className="h-4 w-96 bg-muted rounded-lg max-w-full" />
@@ -451,9 +451,9 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[...Array(4)].map((_, i) => <div key={i} className="rounded-xl border bg-card p-5 animate-pulse"><div className="h-4 w-20 bg-muted rounded mb-3" /><div className="h-8 w-16 bg-muted rounded" /></div>)}
         </div>
-        <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-          <div className="rounded-xl border bg-card p-5 animate-pulse"><div className="h-5 w-40 bg-muted rounded mb-4" /><div className="space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}</div></div>
-          <div className="rounded-xl border bg-card p-5 animate-pulse"><div className="h-5 w-32 bg-muted rounded mb-4" /><div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-lg" />)}</div></div>
+        <div className="grid gap-3 xl:grid-cols-[1fr_300px]">
+          <div className="rounded-xl border bg-card p-4 animate-pulse"><div className="h-5 w-40 bg-muted rounded mb-3" /><div className="space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}</div></div>
+          <div className="rounded-xl border bg-card p-4 animate-pulse"><div className="h-5 w-32 bg-muted rounded mb-3" /><div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-lg" />)}</div></div>
         </div>
       </div>
     );
@@ -463,7 +463,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
     <div className="space-y-5">
 
       {/* ── HERO ZONE ────────────────────────────────────────────── */}
-      <div className="card-accent rounded-2xl border bg-card p-6 lg:p-8">
+      <div className="card-accent rounded-xl border bg-card p-4 lg:p-5">
         {/* Greeting + Core Status */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="flex-1 min-w-0">
@@ -483,55 +483,55 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         {/* 4 Slim Metric Cards */}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {/* Agents */}
-          <div className="rounded-xl border bg-card p-4 flex items-center justify-between gap-4">
+          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.agentsLabel")}</p>
-              <p className="mt-2 text-3xl font-bold" style={{ color: "hsl(var(--candy-violet))" }}>{agents ?? "…"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("dashboard.agentsNote")}</p>
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.agentsLabel")}</p>
+              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-violet))" }}>{agents ?? "…"}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.agentsNote")}</p>
             </div>
-            <div className="rounded-2xl p-3" style={{ background: "hsl(268 78% 62% / 0.15)" }}>
+            <div className="rounded-xl p-2" style={{ background: "hsl(268 78% 62% / 0.15)" }}>
               <Bot className="h-5 w-5" style={{ color: "hsl(var(--candy-violet))" }} />
             </div>
           </div>
 
           {/* Projects */}
-          <div className="rounded-xl border bg-card p-4 flex items-center justify-between gap-4">
+          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.projectsLabel")}</p>
-              <p className="mt-2 text-3xl font-bold" style={{ color: "hsl(var(--candy-cyan))" }}>{projects ?? "…"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("dashboard.projectsNote")}</p>
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.projectsLabel")}</p>
+              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-cyan))" }}>{projects ?? "…"}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.projectsNote")}</p>
             </div>
-            <div className="rounded-2xl p-3" style={{ background: "hsl(188 90% 52% / 0.15)" }}>
+            <div className="rounded-xl p-2" style={{ background: "hsl(188 90% 52% / 0.15)" }}>
               <FolderKanban className="h-5 w-5" style={{ color: "hsl(var(--candy-cyan))" }} />
             </div>
           </div>
 
           {/* Runtime */}
-          <div className="rounded-xl border bg-card p-4 flex items-center justify-between gap-4">
+          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.runtimeLabel")}</p>
-              <p className="mt-2 text-3xl font-bold" style={{ color: "hsl(var(--candy-lime))" }}>{running}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("dashboard.runtimeNote")}</p>
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.runtimeLabel")}</p>
+              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-lime))" }}>{running}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.runtimeNote")}</p>
             </div>
-            <div className="rounded-2xl p-3" style={{ background: "hsl(150 70% 52% / 0.15)" }}>
+            <div className="rounded-xl p-2" style={{ background: "hsl(150 70% 52% / 0.15)" }}>
               <Activity className="h-5 w-5" style={{ color: "hsl(var(--candy-lime))" }} />
             </div>
           </div>
 
           {/* GPU or Heartbeats */}
-          <div className="rounded-xl border bg-card p-4 flex items-center justify-between gap-4">
+          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
                 {gpuList.length > 0 ? "GPU Temp" : t("dashboard.heartbeats", { defaultValue: "Heartbeats" })}
               </p>
-              <p className="mt-2 text-3xl font-bold" style={{ color: "hsl(var(--candy-amber))" }}>
+              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-amber))" }}>
                 {gpuList.length > 0 ? `${hottestGpu?.temp_c ?? "-"}°C` : runningHeartbeats}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 {gpuList.length > 0 ? hottestGpu?.name ?? "—" : t("dashboard.heartbeatNote")}
               </p>
             </div>
-            <div className="rounded-2xl p-3" style={{ background: "hsl(28 90% 58% / 0.15)" }}>
+            <div className="rounded-xl p-2" style={{ background: "hsl(28 90% 58% / 0.15)" }}>
               {gpuList.length > 0 ? <Cpu className="h-5 w-5" style={{ color: "hsl(var(--candy-amber))" }} /> : <Radar className="h-5 w-5" style={{ color: "hsl(var(--candy-amber))" }} />}
             </div>
           </div>
@@ -561,15 +561,15 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       </div>
 
       {/* ── TWO-COLUMN LAYOUT ────────────────────────────────────── */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-3 xl:grid-cols-[1fr_300px]">
 
         {/* LEFT: Activity Stream + Context-Metriken */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Activity Stream */}
-          <div className="card-accent rounded-xl border bg-card p-5">
+          <div className="card-accent rounded-xl border bg-card p-4">
             <div className="flex items-center gap-2 mb-4">
               <Activity className="h-4 w-4 text-primary" />
-              <h2 className="text-base font-semibold tracking-tight">{t("dashboard.activityStream", { defaultValue: "Activity Stream" })}</h2>
+              <h2 className="text-sm font-semibold tracking-tight">{t("dashboard.activityStream", { defaultValue: "Activity Stream" })}</h2>
             </div>
             <div className="space-y-2">
               {audit.length === 0 && projectSignals.length === 0 ? (
@@ -601,10 +601,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
           {/* Context-Metriken (nur wenn Daten da) */}
           {Object.keys(sessionMetrics).length > 0 && (
-            <div className="card-accent rounded-xl border bg-card p-5">
+            <div className="card-accent rounded-xl border bg-card p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Brain className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-semibold tracking-tight">{t("dashboard.contextMetrics", { defaultValue: "Context-Metriken" })}</h2>
+                <h2 className="text-sm font-semibold tracking-tight">{t("dashboard.contextMetrics", { defaultValue: "Context-Metriken" })}</h2>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {Object.entries(sessionMetrics).slice(0, 2).map(([pid, m]: [string, any]) => (
@@ -633,10 +633,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         {/* RIGHT: Attention + Quick Actions */}
         <div className="space-y-4">
           {/* Attention */}
-          <div className={cn("rounded-xl border bg-card p-5", attentionItems.some(i => i.tone === "critical") ? "border-l-4 border-l-destructive" : attentionItems.some(i => i.tone === "warn") ? "border-l-4 border-l-amber-400" : "border-l-4 border-l-green-400")}>
+          <div className={cn("rounded-xl border bg-card p-4", attentionItems.some(i => i.tone === "critical") ? "border-l-4 border-l-destructive" : attentionItems.some(i => i.tone === "warn") ? "border-l-4 border-l-amber-400" : "border-l-4 border-l-green-400")}>
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle className={cn("h-4 w-4", attentionItems.some(i => i.tone === "critical") ? "text-destructive" : attentionItems.some(i => i.tone === "warn") ? "text-amber-400" : "text-green-400")} />
-              <h2 className="text-base font-semibold tracking-tight">{t("dashboard.attention", { defaultValue: "Attention" })}</h2>
+              <h2 className="text-sm font-semibold tracking-tight">{t("dashboard.attention", { defaultValue: "Attention" })}</h2>
             </div>
             <div className="space-y-2">
               {attentionItems.map((item, idx) => (
@@ -649,18 +649,18 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           </div>
 
           {/* Quick Actions */}
-          <div className="card-accent rounded-xl border bg-card p-5">
-            <h2 className="text-base font-semibold tracking-tight mb-4">{t("dashboard.quickActions", { defaultValue: "Quick Actions" })}</h2>
+          <div className="card-accent rounded-xl border bg-card p-4">
+            <h2 className="text-sm font-semibold tracking-tight mb-3">{t("dashboard.quickActions", { defaultValue: "Quick Actions" })}</h2>
             <div className="space-y-2">
-              <button onClick={() => navigate("/agents/new")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
+              <button onClick={() => navigate("/agents/new")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
                 <span className="flex items-center gap-2"><Plus className="h-4 w-4 text-primary" />{t("dashboard.newAgent", { defaultValue: "Neuer Agent"})}</span>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </button>
-              <button onClick={() => navigate("/projects?new=1")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
+              <button onClick={() => navigate("/projects?new=1")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
                 <span className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-primary" />{t("dashboard.newProject", { defaultValue: "Neues Projekt"})}</span>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </button>
-              <button onClick={() => navigate("/my-agent")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
+              <button onClick={() => navigate("/my-agent")} className="w-full flex items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors hover:bg-accent/10 hover:border-primary/30">
                 <span className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" />{t("dashboard.openChat", { defaultValue: "Chat öffnen"})}</span>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </button>
@@ -671,10 +671,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* ── FULL-WIDTH: OAuth + Token-Pläne ─────────────────────── */}
       {oauthUsage && (oauthUsage.available || oauthUsage.message) ? (
-        <div className="card-accent rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-4">
           <div className="flex items-center gap-3 mb-4">
             <Activity className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold tracking-tight">Claude OAuth</h2>
+            <h2 className="text-sm font-semibold tracking-tight">Claude OAuth</h2>
             <button onClick={() => { api.oauthUsageFetch().then(d => { if (d && (d as any).available) api.oauthUsage().then(c => setOauthUsage(c as Record<string,unknown>)).catch(() => {}); }).catch(() => {}); }} className="ml-auto p-1 rounded hover:bg-muted transition-colors" title="Live abrufen"><RefreshCw className="h-3.5 w-3.5 text-muted-foreground" /></button>
           </div>
           {!oauthUsage.available ? (
@@ -706,10 +706,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* Codex + MiniMax */}
       {codex && codex.configured ? (
-        <div className="card-accent rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-4">
           <div className="flex items-center gap-3 mb-4">
             <Cpu className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold tracking-tight">Codex</h2>
+            <h2 className="text-sm font-semibold tracking-tight">Codex</h2>
             <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{codex.rate_limits?.["x-codex-plan-type"] || "plus"}</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -739,10 +739,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       ) : null}
 
       {minimax && minimax.available ? (
-        <div className="card-accent rounded-xl border bg-card p-5">
+        <div className="card-accent rounded-xl border bg-card p-4">
           <div className="flex items-center gap-3 mb-4">
             <Zap className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold tracking-tight">MiniMax</h2>
+            <h2 className="text-sm font-semibold tracking-tight">MiniMax</h2>
           </div>
           <div className="space-y-3">
             {(minimax.models ?? []).map(m => {

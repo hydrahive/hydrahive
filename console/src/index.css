@@ -363,7 +363,7 @@
     );
     color: hsl(var(--panel-foreground));
     border-color: hsl(var(--border) / 0.9);
-    box-shadow: 0 12px 40px hsl(var(--shadow-soft) / 0.16);
+    box-shadow: 0 4px 20px hsl(var(--shadow-soft) / 0.12);
     backdrop-filter: blur(16px);
   }
 
@@ -410,7 +410,7 @@
 
   /* ── Hero Panel (dark) ── */
   .hero-panel {
-    @apply relative overflow-hidden rounded-2xl border p-6 lg:p-8;
+    @apply relative overflow-hidden rounded-xl border p-4 lg:p-5;
     background:
       radial-gradient(circle at 0% 0%, hsl(var(--candy-violet) / 0.18), transparent 40%),
       radial-gradient(circle at 100% 0%, hsl(var(--candy-pink)   / 0.14), transparent 45%),
@@ -424,7 +424,7 @@
 
   /* ── Metric Card (dark) ── */
   .metric-card {
-    @apply app-panel p-5;
+    @apply app-panel p-4;
     transition: border-color .2s, box-shadow .2s, transform .1s;
     border-color: hsl(var(--candy-violet) / 0.18) !important;
     box-shadow:

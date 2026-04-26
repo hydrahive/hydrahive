@@ -865,10 +865,10 @@ export function AdminLayout() {
 
       {/* Page header with slot (tabs) — only on non-chat routes */}
       {!location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) && (
-        <div className="px-4 lg:px-8 pt-4 lg:pt-6 pb-0">
+        <div className="px-3 lg:px-5 pt-3 lg:pt-4 pb-0">
           {activeItem && (
-            <div className="mb-4">
-              <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">
+            <div className="mb-3">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground leading-tight">
                 {activeItem.label}
               </h1>
               {activeItem.hint && (
@@ -888,7 +888,7 @@ export function AdminLayout() {
           <Outlet />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 lg:px-8 lg:pt-0 pb-20 lg:pb-8">
+        <div className="flex-1 overflow-y-auto px-3 lg:px-5 lg:pt-0 pb-20 lg:pb-5">
           <Outlet />
         </div>
       )}
