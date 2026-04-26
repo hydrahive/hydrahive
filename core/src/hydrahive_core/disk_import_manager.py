@@ -24,7 +24,7 @@ SUPPORTED_EXTENSIONS = {".vdi", ".vmdk", ".vhd", ".vhdx", ".raw", ".img", ".qcow
 _PROGRESS_RE = re.compile(r'\((\d+(?:\.\d+)?)/100%\)')
 
 # VMA format constants
-_VMA_MAGIC = b"VMA\x01"
+_VMA_MAGIC = b"VMA"          # 3-byte prefix; byte 3 is version (0x01 standard, 0x00 seen in some builds)
 _VMA_CLUSTER_SIZE = 65536   # 64 KB per cluster
 _VMA_EXTENT_HEADER_SIZE = 512
 _VMA_BLOCKS_PER_EXTENT = 59
@@ -66,8 +66,10 @@ def _vma_extract(vma_path: Path, raw_path: Path,
         if len(header_cluster) < 512:
             raise ValueError("VMA-Datei zu kurz — beschädigt?")
         magic = header_cluster[:4]
-        if magic != _VMA_MAGIC:
+        if magic[:3] != _VMA_MAGIC:
             raise ValueError(f"Kein VMA-Magic (got {magic!r}) — falsches Format?")
+        if magic[3:4] not in (b"\x01", b"\x00"):
+            logger.warning("Unbekanntes VMA-Version-Byte %r — versuche trotzdem zu parsen", magic[3:4])
 
         # dev_info table starts at offset 64, each entry 88 bytes
         # (header layout: 4 magic, 4 version, 16 uuid, 8 ctime, 16 md5, 4+4+4 blob/size fields)
