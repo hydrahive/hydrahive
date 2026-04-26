@@ -467,10 +467,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         {/* Greeting + Core Status */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">
               {greeting}, <span className="text-primary">{user?.username || ""}</span>
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("dashboard.title")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("dashboard.title")}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className={cn("status-pill", healthy === false ? "bg-destructive/12 text-destructive" : "status-pill-ok")}>
@@ -480,59 +480,53 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           </div>
         </div>
 
-        {/* 4 Slim Metric Cards */}
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {/* 4 Metric Cards als 2×2 Grid — kompakt in einer Box */}
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
           {/* Agents */}
-          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.agentsLabel")}</p>
-              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-violet))" }}>{agents ?? "…"}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.agentsNote")}</p>
+          <div className="rounded-lg border bg-card p-3 flex items-center gap-2">
+            <div className="rounded-lg p-1.5 shrink-0" style={{ background: "hsl(268 78% 62% / 0.15)" }}>
+              <Bot className="h-4 w-4" style={{ color: "hsl(var(--candy-violet))" }} />
             </div>
-            <div className="rounded-xl p-2" style={{ background: "hsl(268 78% 62% / 0.15)" }}>
-              <Bot className="h-5 w-5" style={{ color: "hsl(var(--candy-violet))" }} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">{t("dashboard.agentsLabel")}</p>
+              <p className="text-xl font-bold" style={{ color: "hsl(var(--candy-violet))" }}>{agents ?? "…"}</p>
             </div>
           </div>
 
           {/* Projects */}
-          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.projectsLabel")}</p>
-              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-cyan))" }}>{projects ?? "…"}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.projectsNote")}</p>
+          <div className="rounded-lg border bg-card p-3 flex items-center gap-2">
+            <div className="rounded-lg p-1.5 shrink-0" style={{ background: "hsl(188 90% 52% / 0.15)" }}>
+              <FolderKanban className="h-4 w-4" style={{ color: "hsl(var(--candy-cyan))" }} />
             </div>
-            <div className="rounded-xl p-2" style={{ background: "hsl(188 90% 52% / 0.15)" }}>
-              <FolderKanban className="h-5 w-5" style={{ color: "hsl(var(--candy-cyan))" }} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">{t("dashboard.projectsLabel")}</p>
+              <p className="text-xl font-bold" style={{ color: "hsl(var(--candy-cyan))" }}>{projects ?? "…"}</p>
             </div>
           </div>
 
           {/* Runtime */}
-          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{t("dashboard.runtimeLabel")}</p>
-              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-lime))" }}>{running}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.runtimeNote")}</p>
+          <div className="rounded-lg border bg-card p-3 flex items-center gap-2">
+            <div className="rounded-lg p-1.5 shrink-0" style={{ background: "hsl(150 70% 52% / 0.15)" }}>
+              <Activity className="h-4 w-4" style={{ color: "hsl(var(--candy-lime))" }} />
             </div>
-            <div className="rounded-xl p-2" style={{ background: "hsl(150 70% 52% / 0.15)" }}>
-              <Activity className="h-5 w-5" style={{ color: "hsl(var(--candy-lime))" }} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">{t("dashboard.runtimeLabel")}</p>
+              <p className="text-xl font-bold" style={{ color: "hsl(var(--candy-lime))" }}>{running}</p>
             </div>
           </div>
 
           {/* GPU or Heartbeats */}
-          <div className="rounded-xl border bg-card p-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-                {gpuList.length > 0 ? "GPU Temp" : t("dashboard.heartbeats", { defaultValue: "Heartbeats" })}
+          <div className="rounded-lg border bg-card p-3 flex items-center gap-2">
+            <div className="rounded-lg p-1.5 shrink-0" style={{ background: "hsl(28 90% 58% / 0.15)" }}>
+              {gpuList.length > 0 ? <Cpu className="h-4 w-4" style={{ color: "hsl(var(--candy-amber))" }} /> : <Radar className="h-4 w-4" style={{ color: "hsl(var(--candy-amber))" }} />}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">
+                {gpuList.length > 0 ? "GPU Temp" : "Heartbeats"}
               </p>
-              <p className="mt-1.5 text-2xl font-bold" style={{ color: "hsl(var(--candy-amber))" }}>
+              <p className="text-xl font-bold" style={{ color: "hsl(var(--candy-amber))" }}>
                 {gpuList.length > 0 ? `${hottestGpu?.temp_c ?? "-"}°C` : runningHeartbeats}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {gpuList.length > 0 ? hottestGpu?.name ?? "—" : t("dashboard.heartbeatNote")}
-              </p>
-            </div>
-            <div className="rounded-xl p-2" style={{ background: "hsl(28 90% 58% / 0.15)" }}>
-              {gpuList.length > 0 ? <Cpu className="h-5 w-5" style={{ color: "hsl(var(--candy-amber))" }} /> : <Radar className="h-5 w-5" style={{ color: "hsl(var(--candy-amber))" }} />}
             </div>
           </div>
         </div>
@@ -577,20 +571,20 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
               ) : (
                 <>
                   {audit.slice(0, 5).map(entry => (
-                    <div key={entry.id} className="flex items-start gap-3 py-2 border-b border-border/30 last:border-0">
+                    <div key={entry.id} className="flex items-start gap-2 py-1 border-b border-border/30 last:border-0">
                       <span className="dot mt-1.5 bg-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{entry.action}</p>
-                        <p className="text-xs text-muted-foreground">{entry.user} · {new Date(entry.timestamp).toLocaleTimeString("de-DE")}</p>
+                        <p className="text-xs font-medium truncate">{entry.action}</p>
+                        <p className="text-[10px] text-muted-foreground">{entry.user} · {new Date(entry.timestamp).toLocaleTimeString("de-DE")}</p>
                       </div>
                     </div>
                   ))}
-                  {projectSignals.slice(0, 4).map(proj => (
-                    <div key={proj.id} className="flex items-start gap-3 py-2 border-b border-border/30 last:border-0">
+                  {projectSignals.slice(0, 5).map(proj => (
+                    <div key={proj.id} className="flex items-start gap-2 py-1 border-b border-border/30 last:border-0">
                       <span className={cn("dot mt-1.5 shrink-0", proj.tone === "warn" ? "bg-amber-400" : "bg-green-400")} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{proj.title}</p>
-                        <p className="text-xs text-muted-foreground">{proj.summary} · {proj.meta}</p>
+                        <p className="text-xs font-medium truncate">{proj.title}</p>
+                        <p className="text-[10px] text-muted-foreground">{proj.summary} · {proj.meta}</p>
                       </div>
                     </div>
                   ))}
@@ -601,15 +595,15 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
           {/* Context-Metriken (nur wenn Daten da) */}
           {Object.keys(sessionMetrics).length > 0 && (
-            <div className="card-accent rounded-xl border bg-card p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Brain className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold tracking-tight">{t("dashboard.contextMetrics", { defaultValue: "Context-Metriken" })}</h2>
+            <div className="card-accent rounded-xl border bg-card p-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="h-3.5 w-3.5 text-primary" />
+                <h2 className="text-xs font-semibold tracking-tight">Context-Metriken</h2>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {Object.entries(sessionMetrics).slice(0, 2).map(([pid, m]: [string, any]) => (
-                  <div key={pid} className="rounded-xl border bg-muted/30 p-4">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">{(projectMap as Record<string,any>)[pid]?.name || pid}</p>
+                  <div key={pid} className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[10px] font-medium text-muted-foreground mb-1.5">{(projectMap as Record<string,any>)[pid]?.name || pid}</p>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Cache-Hit</span>
@@ -633,16 +627,16 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
         {/* RIGHT: Attention + Quick Actions */}
         <div className="space-y-4">
           {/* Attention */}
-          <div className={cn("rounded-xl border bg-card p-4", attentionItems.some(i => i.tone === "critical") ? "border-l-4 border-l-destructive" : attentionItems.some(i => i.tone === "warn") ? "border-l-4 border-l-amber-400" : "border-l-4 border-l-green-400")}>
-            <div className="flex items-center gap-2 mb-4">
+          <div className={cn("rounded-xl border bg-card p-3", attentionItems.some(i => i.tone === "critical") ? "border-l-4 border-l-destructive" : attentionItems.some(i => i.tone === "warn") ? "border-l-4 border-l-amber-400" : "border-l-4 border-l-green-400")}>
+            <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className={cn("h-4 w-4", attentionItems.some(i => i.tone === "critical") ? "text-destructive" : attentionItems.some(i => i.tone === "warn") ? "text-amber-400" : "text-green-400")} />
               <h2 className="text-sm font-semibold tracking-tight">{t("dashboard.attention", { defaultValue: "Attention" })}</h2>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {attentionItems.map((item, idx) => (
-                <div key={idx} className={cn("rounded-lg border px-3 py-2.5", item.tone === "critical" ? "border-destructive/30 bg-destructive/5" : item.tone === "warn" ? "border-amber-400/30 bg-amber-500/5" : "border-green-400/20 bg-green-500/5")}>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
+                <div key={idx} className={cn("rounded-lg border px-2.5 py-2", item.tone === "critical" ? "border-destructive/30 bg-destructive/5" : item.tone === "warn" ? "border-amber-400/30 bg-amber-500/5" : "border-green-400/20 bg-green-500/5")}>
+                  <p className="text-xs font-medium">{item.title}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{item.detail}</p>
                 </div>
               ))}
             </div>
@@ -671,28 +665,28 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* ── FULL-WIDTH: OAuth + Token-Pläne ─────────────────────── */}
       {oauthUsage && (oauthUsage.available || oauthUsage.message) ? (
-        <div className="card-accent rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <Activity className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold tracking-tight">Claude OAuth</h2>
+        <div className="card-accent rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="h-3.5 w-3.5 text-primary" />
+            <h2 className="text-xs font-semibold tracking-tight">Claude OAuth</h2>
             <button onClick={() => { api.oauthUsageFetch().then(d => { if (d && (d as any).available) api.oauthUsage().then(c => setOauthUsage(c as Record<string,unknown>)).catch(() => {}); }).catch(() => {}); }} className="ml-auto p-1 rounded hover:bg-muted transition-colors" title="Live abrufen"><RefreshCw className="h-3.5 w-3.5 text-muted-foreground" /></button>
           </div>
           {!oauthUsage.available ? (
             <p className="text-sm text-muted-foreground">{String(oauthUsage.message)}</p>
           ) : (
-            <div className="flex flex-wrap items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4">
               {(["5h", "7d"] as const).map(w => {
                 const d = oauthUsage[w] as { utilization_pct: number; label: string } | undefined;
                 if (!d) return null;
                 const pct = d.utilization_pct ?? 0;
                 const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : pct >= 40 ? "bg-yellow-500" : "bg-green-500";
                 return (
-                  <div key={w} className="flex items-center gap-3 min-w-[160px]">
-                    <span className="text-xs text-muted-foreground w-12">{d.label}</span>
-                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden max-w-[120px]">
+                  <div key={w} className="flex items-center gap-2 min-w-[140px]">
+                    <span className="text-[10px] text-muted-foreground w-10">{d.label}</span>
+                    <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden max-w-[100px]">
                       <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, pct)}%` }} />
                     </div>
-                    <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                    <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
                   </div>
                 );
               })}
@@ -706,10 +700,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
 
       {/* Codex + MiniMax */}
       {codex && codex.configured ? (
-        <div className="card-accent rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <Cpu className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold tracking-tight">Codex</h2>
+        <div className="card-accent rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Cpu className="h-3.5 w-3.5 text-primary" />
+            <h2 className="text-xs font-semibold tracking-tight">Codex</h2>
             <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{codex.rate_limits?.["x-codex-plan-type"] || "plus"}</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -725,8 +719,8 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
                 const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
                 return (
                   <div key={b.label} className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-28 shrink-0">{b.label}</span>
-                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                    <span className="text-[10px] text-muted-foreground w-20 shrink-0">{b.label}</span>
+                    <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, b.pct)}%` }} />
                     </div>
                     <span className="text-xs text-muted-foreground w-10 text-right">{b.pct}%</span>
@@ -739,36 +733,36 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       ) : null}
 
       {minimax && minimax.available ? (
-        <div className="card-accent rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <Zap className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold tracking-tight">MiniMax</h2>
+        <div className="card-accent rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            <h2 className="text-xs font-semibold tracking-tight">MiniMax</h2>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {(minimax.models ?? []).map(m => {
               const iColor = m.interval_pct >= 90 ? "bg-red-500" : m.interval_pct >= 70 ? "bg-orange-500" : m.interval_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
               const wColor = m.weekly_pct >= 90 ? "bg-red-500" : m.weekly_pct >= 70 ? "bg-orange-500" : m.weekly_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
               const fmtReset = (s: number) => { if (s <= 0) return "jetzt"; const h = Math.floor(s / 3600); const m2 = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h ${m2}m` : `${m2}m`; };
               return (
-                <div key={m.name} className="border-b border-border/30 last:border-0 pb-3 last:pb-0">
-                  <div className="flex items-center justify-between text-xs mb-2">
+                <div key={m.name} className="border-b border-border/30 last:border-0 pb-2 last:pb-0">
+                  <div className="flex items-center justify-between text-[10px] mb-1.5">
                     <span className="font-medium">{m.label}</span>
-                    <span className="text-muted-foreground">Reset in {fmtReset(m.interval_reset_in_s)}</span>
+                    <span className="text-muted-foreground">Reset {fmtReset(m.interval_reset_in_s)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-6">5h</span>
-                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground w-4">5h</span>
+                      <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${iColor}`} style={{ width: `${Math.min(100, m.interval_pct)}%` }} />
                       </div>
-                      <span className="text-[10px] text-muted-foreground w-8">{m.interval_pct}%</span>
+                      <span className="text-[10px] text-muted-foreground w-6">{m.interval_pct}%</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-6">7d</span>
-                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground w-4">7d</span>
+                      <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${wColor}`} style={{ width: `${Math.min(100, m.weekly_pct)}%` }} />
                       </div>
-                      <span className="text-[10px] text-muted-foreground w-8">{m.weekly_pct}%</span>
+                      <span className="text-[10px] text-muted-foreground w-6">{m.weekly_pct}%</span>
                     </div>
                   </div>
                 </div>
