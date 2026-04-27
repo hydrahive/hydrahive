@@ -1102,7 +1102,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                       ))}
                     </div>
                   ) : null}
-                  <CollabComposer yjs={yjs} runtime={runtime} />
+                  <CollabComposer yjs={yjs} runtime={runtime} projectId={target?.kind === "project" ? target.id : undefined} />
                 </ThreadPrimitive.ViewportFooter>
               ) : (
                 <Composer

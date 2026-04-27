@@ -12,7 +12,8 @@
  * wenn der Collab-Composer stabil ist.
  */
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, RefreshCw, Send, Square, X } from "lucide-react";
+import { ImagePlus, Paperclip, RefreshCw, Send, Square, X } from "lucide-react";
+import { api } from "@/lib/api";
 import * as Y from "yjs";
 import getCaretCoordinates from "textarea-caret";
 import type { ProjectYjs } from "@/hooks/useProjectYjs";
@@ -52,10 +53,12 @@ export function CollabComposer({
   yjs,
   runtime,
   disabled,
+  projectId,
 }: {
   yjs: ProjectYjs;
   runtime: HydraHiveRuntime;
   disabled?: boolean;
+  projectId?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -354,6 +357,27 @@ export function CollabComposer({
             <Square className="h-4 w-4" />
           </button>
         ) : null}
+        {projectId && (
+          <label className="btn-glass inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl">
+            <input
+              type="file"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const result = await api.uploadFile(projectId, file);
+                  const sizeKB = (result.size / 1024).toFixed(1);
+                  insertIntoYjsComposer(yjs, `[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                } catch (err) {
+                  console.error('Upload failed:', err);
+                }
+                e.target.value = '';
+              }}
+            />
+            <Paperclip className="h-4 w-4" />
+          </label>
+        )}
         <button
           type="button"
           onClick={() => void sendNow(false)}
