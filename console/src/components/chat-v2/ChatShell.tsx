@@ -1102,7 +1102,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                       ))}
                     </div>
                   ) : null}
-                  <CollabComposer yjs={yjs} runtime={runtime} projectId={target?.kind === "project" ? target.id : undefined} />
+                  <CollabComposer yjs={yjs} runtime={runtime} projectId={target?.kind === "project" ? target.id : (target?.kind === "me" ? "me" : undefined)} />
                 </ThreadPrimitive.ViewportFooter>
               ) : (
                 <Composer
@@ -1126,10 +1126,12 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                   onTranscript={appendTranscript}
                   onConfirm={runtime.confirmTool}
                   onComposerActivity={onComposerActivity}
-                  onUploadFile={target?.kind === "project" ? async (file) => {
-                    const result = await api.uploadFile(target.id, file);
+                  onUploadFile={target?.kind === "project" || target?.kind === "me" ? async (file) => {
+                    const result = target.kind === "project"
+                      ? await api.uploadFile(target.id, file)
+                      : await api.uploadFileMe(file);
                     const sizeKB = (result.size / 1024).toFixed(1);
-                    runtime.aui.composer().setText(`[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                    runtime.aui.composer().setText(`📎 ${result.filename} (${sizeKB} KB) → ${result.path}`);
                   } : undefined}
                 />
               )}

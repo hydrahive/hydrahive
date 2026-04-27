@@ -228,6 +228,7 @@ export function ChatPage() {
         <div className="flex-1 min-h-0">
           <ChatShell
             runtime={runtime}
+            target={target}
             hideHeader
             typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
             presenceUsers={collab ? awarenessUsers : subscribe.onlineUsers}

@@ -1667,6 +1667,28 @@ def register_project_routes(
         asyncio.create_task(_run())
         return {"ok": True, "skipped": False, "started": True, "project_id": project_id}
     # ── File-Upload (#960) ────────────────────────────────────────────────────
+    @auth_router.post("/me/upload")
+    async def upload_file_me(
+        file: UploadFile = File(...),
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Upload a file to the personal user workspace (max 50 MB)."""
+        from .settings import settings as _s
+        username = _auth[0]
+        MAX_BYTES = 50 * 1024 * 1024
+        data = await file.read()
+        if len(data) > MAX_BYTES:
+            raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 50 MB)")
+        upload_dir = _s.users_data_dir / username / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        dest = upload_dir / file.filename
+        dest.write_bytes(data)
+        return {
+            "path": str(dest),
+            "filename": file.filename,
+            "size": len(data),
+        }
+
     @auth_router.post("/projects/{project_id}/upload")
     async def upload_file(
         project_id: str,

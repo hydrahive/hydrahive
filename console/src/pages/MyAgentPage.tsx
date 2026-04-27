@@ -330,7 +330,7 @@ export function MyAgentPage() {
                   ))}
                 </div>
                 <div className="flex-1 min-h-0">
-                  <ChatShell runtime={runtime} hideHeader />
+                  <ChatShell runtime={runtime} target={meTarget} hideHeader />
                 </div>
               </div>
             </section>

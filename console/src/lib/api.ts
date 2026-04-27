@@ -499,6 +499,18 @@ export const api = {
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     return res.json();
   },
+
+  uploadFileMe: async (file: File): Promise<{ path: string; filename: string; size: number }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/me/upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  },
 };
 
 export interface A2APeer {
