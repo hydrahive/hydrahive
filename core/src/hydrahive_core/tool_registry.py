@@ -858,6 +858,70 @@ def _load_llm_env() -> dict[str, str]:
     _llm_env_cache = result
     return result
 
+
+def _build_server_ssh_snippet(project_id: str) -> str:
+    """Baut ein Shell-Snippet das ~/.ssh/config + Keys für alle zugewiesenen Server
+    des Projekts schreibt. Wird in unrestricted shell_exec vorangestellt, damit der
+    Agent direkt ssh/scp/rsync <server_id> nutzen kann."""
+    import json as _json
+    import base64 as _b64
+    import re as _re_safe
+    from .project_targets import get_project_targets
+
+    targets = get_project_targets(project_id)
+    servers = targets.get("servers") or []
+    if not servers:
+        return ""
+
+    home = f"{settings.projects_dir}/{project_id}"
+    ssh_dir = f"{home}/.ssh"
+    parts: list[str] = [f"mkdir -p {ssh_dir} && chmod 700 {ssh_dir}"]
+    config_lines: list[str] = []
+
+    _safe = _re_safe.compile(r"^[a-zA-Z0-9_-]+$")
+    for s in servers:
+        sid = s.get("server_id", "")
+        if not sid or not _safe.match(sid):
+            continue
+        srv_path = settings.servers_dir / f"{sid}.json"
+        key_path = settings.server_keys_dir / sid
+        if not srv_path.exists() or not key_path.exists():
+            continue
+        try:
+            srv = _json.loads(srv_path.read_text(encoding="utf-8"))
+            key_b64 = _b64.b64encode(key_path.read_bytes()).decode()
+        except Exception:
+            continue
+        key_dest = f"{ssh_dir}/hh_{sid}"
+        # key inline via base64 — kein Permission-Problem (läuft als proj_*-User)
+        parts.append(
+            f"printf %s {_shlex_shell.quote(key_b64)} | base64 -d > {_shlex_shell.quote(key_dest)}"
+            f" && chmod 600 {_shlex_shell.quote(key_dest)}"
+        )
+        config_lines.append(
+            f"Host {sid}\n"
+            f"  HostName {srv.get('ip', '')}\n"
+            f"  User {srv.get('ssh_user', 'root')}\n"
+            f"  Port {int(srv.get('ssh_port', 22) or 22)}\n"
+            f"  IdentityFile {key_dest}\n"
+            f"  StrictHostKeyChecking no\n"
+            f"  UserKnownHostsFile /dev/null\n"
+        )
+
+    if not config_lines:
+        return ""
+
+    cfg_b64 = _b64.b64encode("\n".join(config_lines).encode()).decode()
+    config_dest = f"{ssh_dir}/config"
+    parts.append(
+        f"printf %s {_shlex_shell.quote(cfg_b64)} | base64 -d > {_shlex_shell.quote(config_dest)}"
+        f" && chmod 600 {_shlex_shell.quote(config_dest)}"
+    )
+    # HOME setzen damit ssh ~/.ssh/config automatisch findet
+    parts.append(f"export HOME={_shlex_shell.quote(home)}")
+    return " && ".join(parts)
+
+
 class ShellExecTool(BaseTool):
 
     _bwrap_works: ClassVar[bool | None] = None
@@ -1036,6 +1100,14 @@ class ShellExecTool(BaseTool):
                     for k, v in _extra.items()
                 )
                 _full_cmd = _exports + command if _exports else command
+                # SSH-Config für zugewiesene Server injizieren — Agent kann dann
+                # ssh/scp/rsync <server_id> direkt nutzen ohne Extra-Tool.
+                try:
+                    _ssh_snippet = _build_server_ssh_snippet(project_id) if project_id else ""
+                except Exception:
+                    _ssh_snippet = ""
+                if _ssh_snippet:
+                    _full_cmd = _ssh_snippet + " && " + _full_cmd
                 exec_command = f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_shlex.quote(_full_cmd)}"
                 logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
                             agent_id, _proj_user, command[:120])
