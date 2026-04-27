@@ -699,6 +699,7 @@ function Composer({
   onTranscript,
   onConfirm,
   onComposerActivity,
+  onUploadFile,
 }: {
   isRunning: boolean;
   pendingConfirms: PendingToolConfirm[];
@@ -720,6 +721,7 @@ function Composer({
   onTranscript: (text: string) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
   onComposerActivity?: (hasText: boolean) => void;
+  onUploadFile?: (file: File) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasText = useAuiState((s: any) => Boolean(s?.thread?.composer?.text?.trim?.()));
@@ -864,11 +866,9 @@ function Composer({
             className="hidden"
             onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (!file || !runtime?.project_id) return;
+              if (!file || !onUploadFile) return;
               try {
-                const result = await api.uploadFile(runtime.project_id, file);
-                const sizeKB = (result.size / 1024).toFixed(1);
-                composer.setText(`[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                await onUploadFile(file);
               } catch (err) {
                 console.error('Upload failed:', err);
               }
@@ -1126,6 +1126,11 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                   onTranscript={appendTranscript}
                   onConfirm={runtime.confirmTool}
                   onComposerActivity={onComposerActivity}
+                  onUploadFile={target?.kind === "project" ? async (file) => {
+                    const result = await api.uploadFile(target.id, file);
+                    const sizeKB = (result.size / 1024).toFixed(1);
+                    runtime.aui.composer().setText(`[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                  } : undefined}
                 />
               )}
             </ThreadPrimitive.Viewport>
