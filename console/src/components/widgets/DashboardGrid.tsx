@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -6,6 +7,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -45,6 +48,8 @@ export function DashboardGrid({
   onRemoveWidget,
   className,
 }: DashboardGridProps) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -54,7 +59,12 @@ export function DashboardGrid({
     useSensor(KeyboardSensor)
   );
 
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -69,11 +79,13 @@ export function DashboardGrid({
   const sortedIds = widgets.map((w) => w.id);
   const enabledIds = new Set(widgetStates.filter((w) => w.enabled).map((w) => w.id));
   const visibleWidgets = widgets.filter((w) => enabledIds.has(w.id));
+  const activeWidget = activeId ? visibleWidgets.find((w) => w.id === activeId) : null;
 
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={sortedIds} strategy={rectSortingStrategy}>
@@ -88,6 +100,7 @@ export function DashboardGrid({
             const cfg = widgetConfigs[id] ?? {};
             const span = cfg.span ?? 2;
             const rowSpan = cfg.rowSpan ?? 1;
+            const isBeingDragged = activeId === id;
 
             return (
               <div
@@ -97,7 +110,8 @@ export function DashboardGrid({
                   span === 2 && "col-span-2",
                   span === 3 && "col-span-3",
                   span === 4 && "col-span-4",
-                  rowSpan === 2 && "row-span-2"
+                  rowSpan === 2 && "row-span-2",
+                  isBeingDragged && "opacity-30"
                 )}
               >
                 <WidgetShell
@@ -112,6 +126,17 @@ export function DashboardGrid({
             );
           })}
         </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activeWidget ? (
+            <div className="w-80 rounded-xl border bg-card overflow-hidden shadow-2xl ring-2 ring-primary">
+              <activeWidget.component
+                widgetId={activeWidget.id}
+                isEditing={isEditing}
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
       </SortableContext>
     </DndContext>
   );
