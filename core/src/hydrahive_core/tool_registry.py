@@ -1187,11 +1187,11 @@ class ShellExecTool(BaseTool):
             # #791: Image-Handling — erstes gefundenes Bild als data-URI.
             _image_data_uri: str | None = None
             import re as _re
-            _img_paths = _re.findall(r"\S+\.(?:jpg|jpeg|png|webp|gif)\b", out)
+            _img_paths = _re.findall(r"[^\s\"']+\.(?:jpg|jpeg|png|webp|gif)\b", out)
             if _img_paths:
                 import mimetypes as _mt, pathlib as _pathlib
                 for _img_path in _img_paths:
-                    _p = _pathlib.Path(_img_path)
+                    _p = _pathlib.Path(_img_path.strip("\"'"))
                     try:
                         _root = str(workspace_root(project_id)) if project_id else ""
                         _allowed = (
@@ -1219,11 +1219,11 @@ class ShellExecTool(BaseTool):
             _media_path: str | None = None
             _media_mime: str | None = None
             import re as _re2
-            _media_paths = _re2.findall(r"\S+\.(?:mp3|wav|ogg|flac|mp4|webm|mov)\b", out)
+            _media_paths = _re2.findall(r"[^\s\"']+\.(?:mp3|wav|ogg|flac|mp4|webm|mov)\b", out)
             if _media_paths:
                 import mimetypes as _mt2, pathlib as _pathlib2
                 for _mp in _media_paths:
-                    _mp_p = _pathlib2.Path(_mp)
+                    _mp_p = _pathlib2.Path(_mp.strip("\"'"))
                     try:
                         _mp_root = str(workspace_root(project_id)) if project_id else ""
                         _mp_allowed = (
@@ -1240,7 +1240,7 @@ class ShellExecTool(BaseTool):
                             _mp_mime.startswith("audio/") or _mp_mime.startswith("video/")
                         ):
                             continue
-                        _media_path = _mp
+                        _media_path = _mp.strip("\"'")
                         _media_mime = _mp_mime
                         break
                     except Exception:
