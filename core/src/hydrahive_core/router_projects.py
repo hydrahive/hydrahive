@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 import re
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from typing import Optional
 from pydantic import BaseModel
 
@@ -1666,6 +1666,43 @@ def register_project_routes(
 
         asyncio.create_task(_run())
         return {"ok": True, "skipped": False, "started": True, "project_id": project_id}
+    # ── File-Upload (#960) ────────────────────────────────────────────────────
+    @auth_router.post("/projects/{project_id}/upload")
+    async def upload_file(
+        project_id: str,
+        file: UploadFile = File(...),
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Upload a file to the project workspace (max 50 MB)."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        MAX_BYTES = 50 * 1024 * 1024
+        if file.size is not None and file.size > MAX_BYTES:
+            raise HTTPException(413, f"Datei zu groß: {file.size / 1024 / 1024:.1f} MB (max 50 MB)")
+
+        upload_dir = Path(projects_dir) / project_id / "workspace" / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        dest = upload_dir / file.filename
+        written = 0
+        with dest.open('wb') as f:
+            async for chunk in file.iter_chunked(64 * 1024):
+                written += len(chunk)
+                if written > MAX_BYTES:
+                    f.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(413, "Datei zu groß (max 50 MB)")
+                f.write(chunk)
+
+        return {
+            "path": str(dest.relative_to(Path(projects_dir) / project_id)),
+            "filename": file.filename,
+            "size": written,
+        }
+
 
     @auth_router.get("/projects/{project_id}/bootstrap-memory")
     def get_bootstrap_memory_status(

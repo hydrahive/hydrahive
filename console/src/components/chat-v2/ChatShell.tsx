@@ -8,7 +8,7 @@ import {
   type ThreadMessage,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, History, ImagePlus, Loader2, Network, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, Volume2, VolumeX, X } from "lucide-react";
+import { Bot, Check, History, ImagePlus, Loader2, Network, Paperclip, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
@@ -858,6 +858,25 @@ function Composer({
         >
           <Square className="h-4 w-4" />
         </ComposerPrimitive.Cancel>
+        <label className="btn-glass inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl">
+          <input
+            type="file"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || !runtime?.project_id) return;
+              try {
+                const result = await api.uploadFile(runtime.project_id, file);
+                const sizeKB = (result.size / 1024).toFixed(1);
+                composer.setText(`[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+              } catch (err) {
+                console.error('Upload failed:', err);
+              }
+              e.target.value = '';
+            }}
+          />
+          <Paperclip className="h-4 w-4" />
+        </label>
         <ComposerPrimitive.Send className="btn-candy inline-flex h-10 w-10 items-center justify-center rounded-xl">
           <Send className="h-4 w-4" />
         </ComposerPrimitive.Send>

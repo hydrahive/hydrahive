@@ -1054,3 +1054,14 @@ export interface JobMeta {
   artifacts:         JobArtifact[];
   error:             string | null;
 }
+  uploadFile: async (projectId: string, file: File): Promise<{ path: string; filename: string; size: number }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${BASE_URL}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  },
