@@ -408,6 +408,9 @@ export const api = {
   },
   jobsGet:    (jobId: string) => api.get<JobMeta>(`/admin/jobs/${jobId}`),
   jobsCancel: (jobId: string) => api.post<JobMeta>(`/admin/jobs/${jobId}/cancel`, {}),
+  // #933: Media Generation
+  jobsGenerate: (body: { type: string; prompt: string; options?: Record<string,unknown>; project_id?: string; agent_id?: string }) =>
+    api.post<JobMeta>(`/admin/jobs/generate`, body),
   // Tailscale (#111)
   tailscaleStatus:    () => api.get<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null;dns_name?:string;online:boolean}}>("/admin/tailscale/status"),
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
@@ -433,6 +436,28 @@ export const api = {
   clawhubPackages:    (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
   clawhubInstallSkill: (slug: string, agent_id: string, force?: boolean) =>
     api.post<{installed:boolean;skill_name:string;agent_id:string;file:string}>("/hub/clawhub/skill/install", { slug, agent_id, force: force ?? false }),
+
+  // ── #955 VMs ─────────────────────────────────────────────────────────────
+  vmsList:           () => api.get<{vms?: any[]; items?: any[]}>(`/admin/vms`),
+  vmsGet:            (vmId: string) =>
+    api.get<any>(`/admin/vms/${vmId}`),
+  vmsCreate:         (body: { name: string; cpu: number; ram_mb: number; disk_gb: number; iso_file?: string|null; network_mode?: string; bridge_iface?: string; import_job_id?: string }) =>
+    api.post<any>('/admin/vms', body),
+  vmsPatch:          (vmId: string, body: { cpu: number; ram_mb: number; disk_gb: number; network_mode: string; bridge_iface: string }) =>
+    api.patch<any>(`/admin/vms/${vmId}`, body),
+  vmsStart:          (vmId: string) => api.post<any>(`/admin/vms/${vmId}/start`, {}),
+  vmsStop:           (vmId: string) => api.post<any>(`/admin/vms/${vmId}/stop`, {}),
+  vmsPoweroff:       (vmId: string) => api.post<any>(`/admin/vms/${vmId}/poweroff`, {}),
+  vmsDelete:         (vmId: string) => api.delete<any>(`/admin/vms/${vmId}`),
+  vmsLog:            (vmId: string, lines?: number) =>
+    api.get<{lines:string[];size_bytes:number}>(`/admin/vms/${vmId}/log?lines=${lines ?? 200}`),
+  vmsIsoList:        () => api.get<{isos?: any[]}>(`/admin/vms/isos`),
+  vmsIsoDelete:      (filename: string) =>
+    api.delete<any>(`/admin/vms/isos/${encodeURIComponent(filename)}`),
+  vmsImportFromPath:  (body: { path: string }) =>
+    api.post<{job_id:string}>(`/admin/vms/import/from-path`, body),
+  vmsImportStatus:   (jobId: string) =>
+    api.get<{status:string;progress_pct?:number;error?:string}>(`/admin/vms/import/${jobId}/status`),
 
   // ── #312/#314 Blueprints ─────────────────────────────────────────────────
   blueprintList:      () => api.get<any[]>(`/admin/blueprints`),

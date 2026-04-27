@@ -5,6 +5,7 @@ import {
   X, ChevronRight, AlertCircle, Network, Pencil, ScrollText, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDetail(detail: unknown, fallback: string): string {
@@ -68,12 +69,9 @@ function VMLogModal({ vm, onClose }: { vm: VMInfo; onClose: () => void }) {
   async function fetchLog() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/vms/${vm.vm_id}/log?lines=200`, { credentials: "include" });
-      if (res.ok) {
-        const d = await res.json();
-        setLines(d.lines ?? []);
-        setSizeBytes(d.size_bytes ?? 0);
-      }
+      const d = await api.vmsLog(vm.vm_id, 200);
+      setLines(d.lines ?? []);
+      setSizeBytes(d.size_bytes ?? 0);
     } finally {
       setLoading(false);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -134,16 +132,7 @@ function EditNetworkModal({ vm, onClose, onUpdated }: EditNetworkModalProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/vms/${vm.vm_id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cpu, ram_mb: ramMb, disk_gb: diskGb, network_mode: networkMode, bridge_iface: bridgeIface }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
-      }
+      await api.vmsPatch(vm.vm_id, { cpu, ram_mb: ramMb, disk_gb: diskGb, network_mode: networkMode, bridge_iface: bridgeIface });
       onUpdated();
       onClose();
     } catch (e: unknown) {
@@ -246,24 +235,7 @@ function CreateVMModal({ isos, onClose, onCreated }: CreateVMModalProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/vms", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          cpu,
-          ram_mb: ramMb,
-          disk_gb: diskGb,
-          iso_file: selectedIso,
-          network_mode: networkMode,
-          bridge_iface: bridgeIface,
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
-      }
+      await api.vmsCreate({ name, cpu, ram_mb: ramMb, disk_gb: diskGb, iso_file: selectedIso, network_mode: networkMode, bridge_iface: bridgeIface });
       onCreated();
       onClose();
     } catch (e: unknown) {
@@ -434,14 +406,7 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
   async function startImportFromPath() {
     setStep("converting");
     try {
-      const res = await fetch("/api/admin/vms/import/from-path", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: serverPath.trim() }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
+      const d = await api.vmsImportFromPath({ path: serverPath.trim() });
       setJobId(d.job_id);
     } catch (e: unknown) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
@@ -500,9 +465,7 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
     cleanup();
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/admin/vms/import/${jobId}/status`, { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = await res.json();
+        const d = await api.vmsImportStatus(jobId);
         setConvertPct(d.progress_pct ?? 0);
         if (d.status === "done") {
           cleanup();
@@ -524,24 +487,7 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
   async function createVM(jid: string) {
     setStep("creating");
     try {
-      const res = await fetch("/api/admin/vms", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          cpu,
-          ram_mb: ramMb,
-          disk_gb: 20, // wird vom Backend aus der tatsächlichen Disk-Größe ermittelt
-          import_job_id: jid,
-          network_mode: networkMode,
-          bridge_iface: bridgeIface,
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
-      }
+      await api.vmsCreate({ name: name.trim(), cpu, ram_mb: ramMb, disk_gb: 20, import_job_id: jid, network_mode: networkMode, bridge_iface: bridgeIface });
       onCreated();
       onClose();
     } catch (e: unknown) {
@@ -725,10 +671,8 @@ export function VMsPage() {
 
   const fetchVms = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/vms", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setVms(Array.isArray(data) ? data : data.vms ?? []);
+      const data = await api.vmsList();
+      setVms(Array.isArray(data) ? data : data.vms ?? data.items ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -736,9 +680,7 @@ export function VMsPage() {
 
   const fetchIsos = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/vms/isos", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await api.vmsIsoList();
       setIsos(Array.isArray(data) ? data : data.isos ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -765,13 +707,10 @@ export function VMsPage() {
   async function handleAction(vmId: string, action: "start" | "stop" | "poweroff" | "delete") {
     setActionLoading(prev => ({ ...prev, [vmId]: true }));
     try {
-      const method: Record<string, string> = { start: "POST", stop: "POST", poweroff: "POST", delete: "DELETE" };
-      const url = action === "delete" ? `/api/admin/vms/${vmId}` : `/api/admin/vms/${vmId}/${action}`;
-      const res = await fetch(url, { method: method[action], credentials: "include" });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
-      }
+      if (action === "delete") await api.vmsDelete(vmId);
+      else if (action === "start")    await api.vmsStart(vmId);
+      else if (action === "stop")     await api.vmsStop(vmId);
+      else if (action === "poweroff") await api.vmsPoweroff(vmId);
       await fetchVms();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -783,11 +722,7 @@ export function VMsPage() {
   async function handleDeleteIso(filename: string) {
     if (!window.confirm(`ISO "${filename}" wirklich löschen?`)) return;
     try {
-      const res = await fetch(`/api/admin/vms/isos/${encodeURIComponent(filename)}`, { method: "DELETE", credentials: "include" });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(fmtDetail(d.detail, `HTTP ${res.status}`));
-      }
+      await api.vmsIsoDelete(filename);
       setIsos(prev => prev.filter(i => i.filename !== filename));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
