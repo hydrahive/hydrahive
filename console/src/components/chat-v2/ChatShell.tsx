@@ -931,7 +931,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
     <AuiProvider value={runtime.aui}>
       <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-background">
         {hideHeader ? null : (
-          <div className="border-b border-border/70 bg-background/95 px-4 py-3">
+          <div className="border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
               <div>
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat v2 Demo</div>

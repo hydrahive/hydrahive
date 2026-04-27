@@ -208,10 +208,10 @@ export function AgentChatPage() {
   }, [id]);
 
   return (
-    <section className="flex h-full">
+    <section className="flex h-full min-h-0 overflow-hidden">
       {/* Main Column */}
-      <div className="flex flex-col flex-1 min-h-0">
-        {/* Header — flex-shrink-0: nimmt nur seine Höhe, scrollt nie */}
+      <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
+        {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
           <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
             <ArrowLeft className="h-4 w-4" />
@@ -310,14 +310,14 @@ export function AgentChatPage() {
           ))}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0">
           <ChatShell runtime={runtime} hideHeader />
         </div>
       </div>
 
       {/* Info-Sidebar (Desktop only) */}
       {showSidebar && (
-        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 overflow-y-auto sticky top-0 max-h-[100vh]">
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 overflow-y-auto">
           {/* Tab-Switcher */}
           <div className="flex border-b border-white/5 flex-shrink-0">
             <button
