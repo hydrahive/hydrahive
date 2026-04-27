@@ -3210,7 +3210,7 @@ class ServerLocalFileCopyTool(BaseTool):
             "type": "object",
             "properties": {
                 "server_id":   {"type": "string"},
-                "local_path":  {"type": "string", "description": "Pfad relativ zum Projekt-Workspace, z.B. 'uploads/player.sql'"},
+                "local_path":  {"type": "string", "description": "Pfad zur Quelldatei — relativ zum Projekt-Root oder absolut. Z.B. 'workspace/uploads/player.sql' oder '/projects/metin2/workspace/uploads/player.sql'."},
                 "dest_path":   {"type": "string", "description": "Absoluter Zielpfad auf dem Server, z.B. '/tmp/player.sql'"},
             },
             "required": ["server_id", "local_path", "dest_path"],
@@ -3236,11 +3236,12 @@ class ServerLocalFileCopyTool(BaseTool):
         if not local_path or not dest_path:
             return {"error": "local_path und dest_path sind Pflicht.", "exit_code": -1}
 
-        from .settings import get_settings as _get_settings
-        workspace_base = _Path(_get_settings().projects_dir) / project_id / "workspace"
-        src = (workspace_base / local_path).resolve()
-        if not str(src).startswith(str(workspace_base)):
-            return {"error": "local_path muss innerhalb des Workspace liegen.", "exit_code": -1}
+        project_root = _Path(PROJECTS_ROOT) / project_id
+        raw = _Path(local_path)
+        src = raw if raw.is_absolute() else (project_root / local_path)
+        src = src.resolve()
+        if not str(src).startswith(str(project_root.resolve())):
+            return {"error": "local_path muss innerhalb des Projekt-Verzeichnisses liegen.", "exit_code": -1}
         if not src.exists():
             return {"error": f"Datei nicht gefunden: {src}", "exit_code": -1}
 
