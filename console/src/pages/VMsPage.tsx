@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus, Play, Square, Trash2, Upload, Loader2,
   Monitor, Server, HardDrive, Cpu, Activity,
@@ -654,6 +655,7 @@ function ImportVMModal({ onClose, onCreated }: ImportVMModalProps) {
 // ── VMsPage ────────────────────────────────────────────────────────────────────
 export function VMsPage() {
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
 
   const [vms, setVms] = useState<VMInfo[]>([]);
   const [isos, setIsos] = useState<ISOInfo[]>([]);
@@ -841,7 +843,7 @@ export function VMsPage() {
                     <>
                       <button
                         className="btn btn-sm flex items-center gap-1"
-                        onClick={() => window.open(`/vms/${vm.vm_id}/console`, `hh-vm-console-${vm.vm_id}`)}
+                        onClick={() => navigate(`/vms/${vm.vm_id}/console`)}
                         disabled={busy(vm.vm_id)}
                       >
                         <Monitor className="w-3.5 h-3.5" />Konsole
