@@ -212,7 +212,7 @@ export function AgentChatPage() {
       {/* Main Column */}
       <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0 sticky top-0 z-20 bg-background">
           <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -317,7 +317,7 @@ export function AgentChatPage() {
 
       {/* Info-Sidebar (Desktop only) */}
       {showSidebar && (
-        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 overflow-y-auto">
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 overflow-y-auto sticky top-0 h-fit max-h-[100vh]">
           {/* Tab-Switcher */}
           <div className="flex border-b border-white/5 flex-shrink-0">
             <button

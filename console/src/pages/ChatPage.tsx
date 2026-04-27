@@ -171,7 +171,7 @@ export function ChatPage() {
       {/* Main Column: Header + Content */}
       <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0 sticky top-0 z-20 bg-background">
           <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -239,7 +239,7 @@ export function ChatPage() {
 
       {/* Info-Sidebar (Desktop only) */}
       {showSidebar && (
-        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto">
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto sticky top-0 h-fit max-h-[100vh]">
           <div className="space-y-4">
             {/* Live Panel */}
             <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
