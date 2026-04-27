@@ -37,7 +37,8 @@
     "secrets": "Geheimnisse",
     "more": "Mehr",
     "mcp": "MCP",
-    "targetSystems": "Zielsysteme"
+    "targetSystems": "Zielsysteme",
+    "jobs": "Jobs"
   },
   "usage": {
     "title": "API Usage",
@@ -280,7 +281,8 @@
     "usermanagement": "Benutzer, Gruppen & Berechtigungen",
     "secrets": "API-Keys & Tokens für Agenten",
     "mcp": "MCP-Server",
-    "targetSystems": "WKS und Root-/Remote-Server verwalten"
+    "targetSystems": "WKS und Root-/Remote-Server verwalten",
+    "jobs": "Laufende und abgeschlossene Hintergrund-Tasks"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1472,7 +1474,8 @@
     "secretsName": "Eindeutiger Name (z.B. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich",
     "hub": "Plugin-Hub durchsuchen und installieren",
-    "projects": "Deine Projekte verwalten"
+    "projects": "Deine Projekte verwalten",
+    "jobs": "Alle Jobs — Image, Video, Music Generation, Smoke Tests."
   },
   "plugins": {
     "installed": "{{count}} Plugin(s) installiert",
@@ -1812,5 +1815,12 @@
     "title": "Proaktive Tasks",
     "noTasks": "Keine proaktiven Tasks vorhanden",
     "noTasksHint": "Erstelle einen Task über 'Neuer Task'."
+  },
+  "jobs": {
+    "infoTitle": "Jobs Übersicht",
+    "infoText": "Zeigt alle Jobs inkl. Image/Video/Music-Generation. Artifacts können direkt heruntergeladen werden.",
+    "empty": "Noch keine Jobs vorhanden.",
+    "cancelConfirmTitle": "Job abbrechen?",
+    "cancelConfirmMsg": "Job \"{{id}}\" wirklich abbrechen? Dies kann nicht rückgängig gemacht werden."
   }
 }

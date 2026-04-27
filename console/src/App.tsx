@@ -35,6 +35,7 @@ const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({
 const SearchPage        = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })));
 const CodeEditorPage    = lazy(() => import("@/pages/CodeEditorPage").then((m) => ({ default: m.CodeEditorPage })));
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
+const JobsPage          = lazy(() => import("@/pages/JobsPage"));
 const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
 const HubPage           = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
 const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="search"            element={<SearchPage />} />
             <Route path="code-editor"       element={<CodeEditorPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
+            <Route path="jobs"              element={<JobsPage />} />
             <Route path="blueprint"         element={<BlueprintPage />} />
             <Route path="hub"               element={<HubPage />} />
             <Route path="brain"             element={<HydraBrainPage />} />

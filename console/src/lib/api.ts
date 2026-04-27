@@ -395,6 +395,17 @@ export const api = {
       headers: params ? { "Content-Type": "application/json" } : undefined,
       body: params ? JSON.stringify({ params }) : undefined,
     }),
+  // Jobs (JobsPage — #929)
+  jobsList:   (filters?: { status?: string; type?: string; project_id?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.status)     params.set("status",     filters.status);
+    if (filters?.type)       params.set("type",       filters.type);
+    if (filters?.project_id) params.set("project_id", filters.project_id);
+    const qs = params.toString();
+    return api.get<{jobs: JobMeta[]}>(`/admin/jobs${qs ? `?${qs}` : ""}`);
+  },
+  jobsGet:    (jobId: string) => api.get<JobMeta>(`/admin/jobs/${jobId}`),
+  jobsCancel: (jobId: string) => api.post<JobMeta>(`/admin/jobs/${jobId}/cancel`),
   // Tailscale (#111)
   tailscaleStatus:    () => api.get<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null;dns_name?:string;online:boolean}}>("/admin/tailscale/status"),
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
@@ -979,4 +990,34 @@ export interface ClawhubPackageItem {
   latestVersion: string;
   ownerHandle: string;
   updatedAt:   number;
+}
+
+// Jobs (JobsPage — #929)
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface JobArtifact {
+  filename:    string;
+  size:        number;
+  mime:        string;
+  created_at:  string;
+  download_url?: string;
+}
+
+export interface JobMeta {
+  job_id:            string;
+  type:              string;
+  provider:          string;
+  status:            JobStatus;
+  created_at:        string;
+  updated_at:        string;
+  started_at:        string | null;
+  finished_at:       string | null;
+  created_by:        string | null;
+  project_id:        string | null;
+  agent_id:          string | null;
+  input_summary:     Record<string, unknown>;
+  progress_percent:  number | null;
+  progress_message:  string | null;
+  artifacts:         JobArtifact[];
+  error:             string | null;
 }

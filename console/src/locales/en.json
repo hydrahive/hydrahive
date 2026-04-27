@@ -37,7 +37,8 @@
     "secrets": "Secrets",
     "more": "More",
     "mcp": "MCP",
-    "targetSystems": "Target Systems"
+    "targetSystems": "Target Systems",
+    "jobs": "Jobs"
   },
   "usage": {
     "title": "API Usage",
@@ -280,7 +281,8 @@
     "usermanagement": "Accounts, groups & access control",
     "secrets": "API keys & tokens for agents",
     "mcp": "MCP servers",
-    "targetSystems": "Manage WKS and root/remote servers"
+    "targetSystems": "Manage WKS and root/remote servers",
+    "jobs": "Running and completed background tasks"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1472,7 +1474,8 @@
     "secretsName": "Unique name (e.g. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "The secret value — stored encrypted and only accessible by agent tools",
     "hub": "Browse and install plugins",
-    "projects": "Manage your projects"
+    "projects": "Manage your projects",
+    "jobs": "All jobs — Image, Video, Music Generation, Smoke Tests."
   },
   "plugins": {
     "installed": "{{count}} plugin(s) installed",
@@ -1812,5 +1815,12 @@
     "title": "Proactive Tasks",
     "noTasks": "No proactive tasks found",
     "noTasksHint": "Create a task via 'New Task'."
+  },
+  "jobs": {
+    "infoTitle": "Jobs Overview",
+    "infoText": "Shows all jobs including Image/Video/Music generation. Artifacts can be downloaded directly.",
+    "empty": "No jobs yet.",
+    "cancelConfirmTitle": "Cancel job?",
+    "cancelConfirmMsg": "Are you sure you want to cancel job \"{{id}}\"? This cannot be undone."
   }
 }

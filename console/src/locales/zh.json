@@ -41,7 +41,8 @@
     "secrets": "密钥",
     "more": "更多",
     "mcp": "MCP",
-    "targetSystems": "目标系统"
+    "targetSystems": "目标系统",
+    "jobs": "任务"
   },
   "navHint": {
     "dashboard": "概览与状态",
@@ -73,7 +74,8 @@
     "usermanagement": "账户、组与访问控制",
     "secrets": "智能体的 API 密钥与令牌",
     "mcp": "MCP 服务器",
-    "targetSystems": "管理工作站和远程服务器"
+    "targetSystems": "管理工作站和远程服务器",
+    "jobs": "运行中和已完成的后台任务"
   },
   "layout": {
     "controlFabric": "控制中枢",
@@ -1433,7 +1435,8 @@
     "secretsName": "唯一名称（例如 GITHUB_TOKEN、SLACK_WEBHOOK）",
     "secretsValue": "密钥值 — 加密存储，仅代理工具可访问",
     "hub": "浏览并安装插件",
-    "projects": "管理你的项目"
+    "projects": "管理你的项目",
+    "jobs": "所有任务 — 图片、视频、音乐生成，烟雾测试。"
   },
   "llm": {
     "minimax": {
@@ -1816,5 +1819,12 @@
     "title": "主动任务",
     "noTasks": "暂无主动任务",
     "noTasksHint": "点击新建任务创建一个任务。"
+  },
+  "jobs": {
+    "infoTitle": "任务概览",
+    "infoText": "显示所有任务，包括图片/视频/音乐生成。产物可直接下载。",
+    "empty": "暂无任务。",
+    "cancelConfirmTitle": "取消任务？",
+    "cancelConfirmMsg": "确定要取消任务 \"{{id}}\" 吗？此操作无法撤销。"
   }
 }
