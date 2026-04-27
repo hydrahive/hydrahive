@@ -167,11 +167,11 @@ export function ChatPage() {
   }, [id, runtime.isRunning, subscribe.isConnected, runtime.reloadHistory]);
 
   return (
-    <section className="flex h-full min-h-0 overflow-hidden">
+    <section className="flex h-full">
       {/* Main Column: Header + Content */}
-      <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0 sticky top-0 z-20 bg-background">
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Header — flex-shrink-0: nimmt nur seine Höhe, scrollt nie */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
           <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -225,7 +225,7 @@ export function ChatPage() {
           ))}
         </div>
 
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <ChatShell
             runtime={runtime}
             hideHeader
@@ -239,7 +239,7 @@ export function ChatPage() {
 
       {/* Info-Sidebar (Desktop only) */}
       {showSidebar && (
-        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto sticky top-0 h-fit max-h-[100vh]">
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto sticky top-0 max-h-[100vh]">
           <div className="space-y-4">
             {/* Live Panel */}
             <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
