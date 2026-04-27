@@ -362,6 +362,22 @@ export const api = {
   a2aTestPeer:    (name: string) => api.post<A2ATestResult>(`/admin/a2a/test/${name}`, {}),
   a2aSendTask:    (peer: string, agent_id: string, message: string) =>
     api.post<{ok:boolean;response:string;status:number}>(`/admin/a2a/send/${peer}`, { agent_id, message }),
+  // Migration (MigrationPage refactor — #956)
+  migrationExport: async (includeAmem: boolean): Promise<Blob> => {
+    const res = await fetch(`/api/admin/migration/export?include_amem=${includeAmem}`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) { const d = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(d.detail || `HTTP ${res.status}`); }
+    return res.blob();
+  },
+  migrationImport: async (file: File): Promise<{ imported: boolean }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/admin/migration/import", { method: "POST", credentials: "include", body: form });
+    if (!res.ok) { const d = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(d.detail || `HTTP ${res.status}`); }
+    return res.json();
+  },
   // HydraHub
   hubIndex:     () => api.get<HubIndex>("/hub/index"),
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
@@ -369,6 +385,15 @@ export const api = {
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
   hubUninstallPlugin: (pluginId: string) => api.delete<{uninstalled:boolean;plugin_id:string}>(`/hub/installed/plugin/${pluginId}`),
+  // Extensions (ExtensionsPage refactor — #956)
+  extensionList:   () => api.get<Extension[]>("/admin/extensions"),
+  extensionAction: (id: string, action: "install" | "uninstall", params?: Record<string, string>) =>
+    fetch(`/api/admin/extensions/${id}/${action}`, {
+      method: "POST",
+      credentials: "include",
+      headers: params ? { "Content-Type": "application/json" } : undefined,
+      body: params ? JSON.stringify({ params }) : undefined,
+    }),
   // Tailscale (#111)
   tailscaleStatus:    () => api.get<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null;dns_name?:string;online:boolean}}>("/admin/tailscale/status"),
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
@@ -917,6 +942,25 @@ export interface PluginInfo {
   hook_count:  number;
   permissions: string[];
   agents?:     string[];
+}
+
+// Extensions (ExtensionsPage refactor — #956)
+export interface Extension {
+  id:           string;
+  name:         string;
+  description:  string;
+  icon:         string;
+  category:     string;
+  installed:    boolean;
+  active:       boolean;
+  http_ok:      boolean;
+  open_url:     string | null;
+  has_uninstall: boolean;
+  external?:    boolean;
+  config_hint?: string;
+  plugin_id?:   string;
+  install_params?: { key: string; label: string; type: string; placeholder?: string; required?: boolean; description?: string }[];
+  validation?:  { valid: boolean; errors: string[]; warnings: string[] };
 }
 
 export interface ClawhubSkillItem {

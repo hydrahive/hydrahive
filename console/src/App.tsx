@@ -37,6 +37,7 @@ const CodeEditorPage    = lazy(() => import("@/pages/CodeEditorPage").then((m) =
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
 const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
 const HubPage           = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
+const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
 const HydraBrainPage    = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
 const VoicePage         = lazy(() => import("@/pages/VoicePage").then((m) => ({ default: m.VoicePage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
@@ -146,7 +147,7 @@ export default function App() {
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="tools/skill-packages" element={<Navigate to="/hub?tab=skill-packages" replace />} />
             <Route path="federation"        element={<A2APage />} />
-            <Route path="extensions"        element={<Navigate to="/hub?tab=extensions" replace />} />
+            <Route path="extensions"        element={<ExtensionsPage />} />
             <Route path="plugins"           element={<Navigate to="/hub?tab=plugins" replace />} />
             <Route path="secrets"           element={<Navigate to="/usermanagement?tab=secrets" replace />} />
             {/* Legacy-Bookmark-Redirects (IA-Sprint #28 Schritt 2):

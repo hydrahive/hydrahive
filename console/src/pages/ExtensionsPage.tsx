@@ -4,6 +4,7 @@ import {
   CheckCircle, XCircle, AlertCircle, Download, Trash2,
   ExternalLink, Loader2, RefreshCw, AlertTriangle,
 } from "lucide-react";
+import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
 interface ExtValidation {
@@ -174,11 +175,8 @@ export function ExtensionsPage() {
     if (!quiet) setLoading(true);
     else setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/extensions", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setExtensions(await res.json());
+      const data = await api.extensionList();
+      setExtensions(data ?? []);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("extensions.loadError"));
@@ -217,13 +215,7 @@ export function ExtensionsPage() {
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
       const body = (action === "install" && params) ? JSON.stringify({ params }) : undefined;
-      const res = await fetch(`/api/admin/extensions/${id}/${action}`, {
-        method: "POST",
-        credentials: "include",
-        signal: ctrl.signal,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body,
-      });
+      const res = await api.extensionAction(id, action, params);
       if (!res.ok || !res.body) {
         setLog([`Fehler: HTTP ${res.status}`]);
         setLogDone(false);

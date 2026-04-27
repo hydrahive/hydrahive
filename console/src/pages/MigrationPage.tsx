@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Download, Upload, Server, AlertTriangle, CheckCircle, Loader2, ArrowRight } from "lucide-react";
+import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
 function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -25,15 +26,7 @@ export function MigrationPage() {
   async function handleExport() {
     setExportLoading(true); setExportError("");
     try {
-      const res = await fetch(`/api/admin/migration/export?include_amem=${exportAmem}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(d.detail || `HTTP ${res.status}`);
-      }
-      const blob = await res.blob();
+      const blob = await api.migrationExport(exportAmem);
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
@@ -58,17 +51,7 @@ export function MigrationPage() {
     if (!importFile) return;
     setImportLoading(true); setImportError(""); setImportDone(false);
     try {
-      const form = new FormData();
-      form.append("file", importFile);
-      const res = await fetch("/api/admin/migration/import", {
-        method: "POST",
-        credentials: "include",
-        body: form,
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(d.detail || `HTTP ${res.status}`);
-      }
+      await api.migrationImport(importFile);
       setImportDone(true);
       setImportFile(null);
       if (fileRef.current) fileRef.current.value = "";
