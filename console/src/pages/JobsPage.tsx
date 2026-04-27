@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Gauge, RefreshCw, Loader2, XCircle, CheckCircle2,
   Clock, AlertTriangle, Download, X, PlayCircle,
@@ -61,31 +61,40 @@ function ProgressBar({ percent, message }: { percent: number | null; message: st
 
 export default function JobsPage() {
   const { t } = useTranslation();
-  const [jobs,     setJobs]     = useState<JobMeta[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  const [jobs,        setJobs]        = useState<JobMeta[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState("");
+  const [refreshing,   setRefreshing]  = useState(false);
 
-  // Filters
-  const [statusFilter,    setStatusFilter]    = useState<string>("");
-  const [typeFilter,      setTypeFilter]      = useState<string>("");
-  const [projectFilter,   setProjectFilter]   = useState<string>("");
-  const [projectOptions,  setProjectOptions]  = useState<{id:string;name:string}[]>([]);
+  // Filters (refs for synchronous access in loadJobs)
+  const [statusFilter,  setStatusFilter]  = useState<string>("");
+  const [typeFilter,    setTypeFilter]    = useState<string>("");
+  const [projectFilter, setProjectFilter] = useState<string>("");
+  const [projectOptions, setProjectOptions] = useState<{id:string; name:string}[]>([]);
 
   // Confirm cancel
   const [confirmJob, setConfirmJob] = useState<JobMeta | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
+  // Refs for polling + filter access
   const pollingRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const visibleRef    = useRef(true);
+  const statusRef    = useRef(statusFilter);
+  const typeRef      = useRef(typeFilter);
+  const projectRef   = useRef(projectFilter);
+
+  // Keep refs in sync with state
+  statusRef.current  = statusFilter;
+  typeRef.current   = typeFilter;
+  projectRef.current = projectFilter;
 
   // Load projects for filter dropdown
   async function loadProjects() {
     try {
-      const r = await api.projects() as Record<string, unknown>;
-      const pmap = (r as any).projects ?? r;
+      const r = await api.projects() as { projects?: Record<string, { name?: string }> };
+      const pmap = r.projects ?? r as Record<string, { name?: string }>;
       setProjectOptions(
-        Object.entries(pmap).map(([id, cfg]: [string, any]) => ({
+        Object.entries(pmap).map(([id, cfg]) => ({
           id, name: cfg?.name ?? id,
         }))
       );
@@ -94,10 +103,11 @@ export default function JobsPage() {
 
   async function loadJobs() {
     try {
-      const filters: { status?: string; type?: string; project_id?: string } = {};
-      if (statusFilter)   filters.status     = statusFilter;
-      if (typeFilter)     filters.type       = typeFilter;
-      if (projectFilter)  filters.project_id = projectFilter;
+      const filters = {
+        status:     statusRef.current   || undefined,
+        type:       typeRef.current     || undefined,
+        project_id: projectRef.current  || undefined,
+      };
       const r = await api.jobsList(filters);
       setJobs(r.jobs ?? []);
       setError("");
@@ -123,12 +133,19 @@ export default function JobsPage() {
     }
   }
 
+  // Initial load
   useEffect(() => {
     loadProjects();
     loadJobs();
     startPolling();
     return () => stopPolling();
   }, []);
+
+  // Re-load when filter state changes (useEffect reads latest state via refs)
+  useEffect(() => {
+    setLoading(true);
+    loadJobs();
+  }, [statusFilter, typeFilter, projectFilter]);
 
   // Visibility change — polling only when visible
   useEffect(() => {
@@ -137,16 +154,9 @@ export default function JobsPage() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
-  // Refetch when filters change
-  function applyFilters() {
-    setLoading(true);
-    loadJobs();
-  }
-
-  function handleFilterChange(setter: (v: string) => void, value: string, debounce = false) {
+  function handleFilterChange(setter: (v: string) => void, value: string) {
     setter(value);
-    if (!debounce) { setLoading(true); loadJobs(); }
-    else setTimeout(() => { setLoading(true); loadJobs(); }, 300);
+    // loadJobs() triggered automatically via useEffect on filter state
   }
 
   async function handleCancel(job: JobMeta) {
@@ -161,8 +171,6 @@ export default function JobsPage() {
       setCancelling(null);
     }
   }
-
-  const hasRunning = jobs.some(j => j.status === "queued" || j.status === "running");
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -246,8 +254,8 @@ export default function JobsPage() {
       ) : (
         <div className="space-y-3">
           {jobs.map(job => {
-            const isNoop = job.type === "noop";
-            const canCancel = job.status === "queued" || job.status === "running";
+            const isNoop      = job.type === "noop";
+            const canCancel   = job.status === "queued" || job.status === "running";
             const hasArtifacts = job.artifacts && job.artifacts.length > 0;
 
             return (
