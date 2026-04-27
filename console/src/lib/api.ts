@@ -1078,3 +1078,44 @@ export interface JobMeta {
   artifacts:         JobArtifact[];
   error:             string | null;
 }
+
+
+// ── AutoDream ─────────────────────────────────────────────────────────────────
+
+export interface DreamConfig {
+  enabled:                  boolean;
+  min_hours:                number;
+  min_sessions:             number;
+  check_interval_seconds:   number;
+  max_transcript_chars:     number;
+  summary_model:            string;
+}
+
+export interface DreamAgentStatus {
+  agent_id:         string;
+  last_dream_at:    string | null;
+  hours_since_dream: number | null;
+  dream_count:      number;
+}
+
+export const dreamApi = {
+  getConfig: (): Promise<DreamConfig> =>
+    fetch("/api/admin/dream/config", { credentials: "include" }).then(r => r.json()),
+
+  saveConfig: (cfg: Partial<DreamConfig>): Promise<DreamConfig> =>
+    fetch("/api/admin/dream/config", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cfg),
+    }).then(r => r.json()),
+
+  getStatus: (): Promise<DreamAgentStatus[]> =>
+    fetch("/api/admin/dream/status", { credentials: "include" }).then(r => r.json()),
+
+  runNow: (agentId?: string): Promise<{ triggered: string[]; skipped: string[] }> =>
+    fetch(`/api/admin/dream/run${agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""}`, {
+      method: "POST",
+      credentials: "include",
+    }).then(r => r.json()),
+};
