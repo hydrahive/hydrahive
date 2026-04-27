@@ -250,6 +250,8 @@ export const api = {
     api.post<{ resumed: boolean; id: string; messages: SessionFull["messages"] }>(`/projects/${projectId}/sessions/${sessionId}/resume`, {}),
   getSessionById: (agentId: string, sessionId: string) =>
     api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
+  searchAgentSessions: (agentId: string, q: string) =>
+    api.get<{query: string; results: {session_id: string; started_at: string; match_count: number; matches: {role: string; content: string; timestamp: string}[]}[]; total_matches: number}>(`/agents/${agentId}/sessions/search?q=${encodeURIComponent(q)}`),
   resumeSession: (agentId: string, sessionId: string) =>
     api.post<{ resumed: boolean; id: string; messages: SessionFull["messages"] }>(`/agents/${agentId}/sessions/${sessionId}/resume`, {}),
   // #641: CONFIRM-Round-Trip — pendings Tool-Call genehmigen/ablehnen
@@ -757,6 +759,8 @@ export interface SessionMessage {
   content:   string;
   timestamp: string;
   agent_id:  string | null;
+  tool_call_id?: string;
+  metadata?:  Record<string, unknown>;
 }
 
 export interface SessionFull {

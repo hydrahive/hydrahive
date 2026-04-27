@@ -38,7 +38,8 @@
     "more": "More",
     "mcp": "MCP",
     "targetSystems": "Target Systems",
-    "jobs": "Jobs"
+    "jobs": "Jobs",
+    "sessionHistory": "Session History"
   },
   "usage": {
     "title": "API Usage",
@@ -282,7 +283,8 @@
     "secrets": "API keys & tokens for agents",
     "mcp": "MCP servers",
     "targetSystems": "Manage WKS and root/remote servers",
-    "jobs": "Running and completed background tasks"
+    "jobs": "Running and completed background tasks",
+    "sessionHistory": "Search past chat sessions"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1475,7 +1477,8 @@
     "secretsValue": "The secret value — stored encrypted and only accessible by agent tools",
     "hub": "Browse and install plugins",
     "projects": "Manage your projects",
-    "jobs": "All jobs — Image, Video, Music Generation, Smoke Tests."
+    "jobs": "All jobs — Image, Video, Music Generation, Smoke Tests.",
+    "sessionHistory": "Search and read past chat sessions."
   },
   "plugins": {
     "installed": "{{count}} plugin(s) installed",
@@ -1822,5 +1825,15 @@
     "empty": "No jobs yet.",
     "cancelConfirmTitle": "Cancel job?",
     "cancelConfirmMsg": "Are you sure you want to cancel job \"{{id}}\"? This cannot be undone."
+  },
+  "sessionHistory": {
+    "agentSessions": "Agent Sessions",
+    "projectSessions": "Project Sessions",
+    "searchPlaceholder": "Search term (min 2 chars)…",
+    "searchResults": "Full-text search results",
+    "selectAgent": "Select an agent to see sessions",
+    "selectProject": "Select a project to see sessions",
+    "empty": "No sessions found",
+    "back": "Back"
   }
 }

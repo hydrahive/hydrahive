@@ -36,6 +36,7 @@ const SearchPage        = lazy(() => import("@/pages/SearchPage").then((m) => ({
 const CodeEditorPage    = lazy(() => import("@/pages/CodeEditorPage").then((m) => ({ default: m.CodeEditorPage })));
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
 const JobsPage          = lazy(() => import("@/pages/JobsPage"));
+const SessionHistoryPage = lazy(() => import("@/pages/SessionHistoryPage"));
 const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
 const HubPage           = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
 const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
@@ -130,6 +131,7 @@ export default function App() {
             <Route path="code-editor"       element={<CodeEditorPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
             <Route path="jobs"              element={<JobsPage />} />
+            <Route path="session-history"  element={<SessionHistoryPage />} />
             <Route path="blueprint"         element={<BlueprintPage />} />
             <Route path="hub"               element={<HubPage />} />
             <Route path="brain"             element={<HydraBrainPage />} />

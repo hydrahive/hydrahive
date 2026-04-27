@@ -42,7 +42,8 @@
     "more": "更多",
     "mcp": "MCP",
     "targetSystems": "目标系统",
-    "jobs": "任务"
+    "jobs": "任务",
+    "sessionHistory": "Session History"
   },
   "navHint": {
     "dashboard": "概览与状态",
@@ -75,7 +76,8 @@
     "secrets": "智能体的 API 密钥与令牌",
     "mcp": "MCP 服务器",
     "targetSystems": "管理工作站和远程服务器",
-    "jobs": "运行中和已完成的后台任务"
+    "jobs": "运行中和已完成的后台任务",
+    "sessionHistory": "Search past chat sessions"
   },
   "layout": {
     "controlFabric": "控制中枢",
@@ -1436,7 +1438,8 @@
     "secretsValue": "密钥值 — 加密存储，仅代理工具可访问",
     "hub": "浏览并安装插件",
     "projects": "管理你的项目",
-    "jobs": "所有任务 — 图片、视频、音乐生成，烟雾测试。"
+    "jobs": "所有任务 — 图片、视频、音乐生成，烟雾测试。",
+    "sessionHistory": "Search and read past chat sessions."
   },
   "llm": {
     "minimax": {
@@ -1826,5 +1829,15 @@
     "empty": "暂无任务。",
     "cancelConfirmTitle": "取消任务？",
     "cancelConfirmMsg": "确定要取消任务 \"{{id}}\" 吗？此操作无法撤销。"
+  },
+  "sessionHistory": {
+    "agentSessions": "代理会话",
+    "projectSessions": "项目会话",
+    "searchPlaceholder": "搜索词（至少2个字符）…",
+    "searchResults": "全文搜索结果",
+    "selectAgent": "选择代理以查看会话",
+    "selectProject": "选择项目以查看会话",
+    "empty": "未找到会话",
+    "back": "返回"
   }
 }

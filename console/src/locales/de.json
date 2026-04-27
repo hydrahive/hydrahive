@@ -38,7 +38,8 @@
     "more": "Mehr",
     "mcp": "MCP",
     "targetSystems": "Zielsysteme",
-    "jobs": "Jobs"
+    "jobs": "Jobs",
+    "sessionHistory": "Session History"
   },
   "usage": {
     "title": "API Usage",
@@ -282,7 +283,8 @@
     "secrets": "API-Keys & Tokens für Agenten",
     "mcp": "MCP-Server",
     "targetSystems": "WKS und Root-/Remote-Server verwalten",
-    "jobs": "Laufende und abgeschlossene Hintergrund-Tasks"
+    "jobs": "Laufende und abgeschlossene Hintergrund-Tasks",
+    "sessionHistory": "Search past chat sessions"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1475,7 +1477,8 @@
     "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich",
     "hub": "Plugin-Hub durchsuchen und installieren",
     "projects": "Deine Projekte verwalten",
-    "jobs": "Alle Jobs — Image, Video, Music Generation, Smoke Tests."
+    "jobs": "Alle Jobs — Image, Video, Music Generation, Smoke Tests.",
+    "sessionHistory": "Search and read past chat sessions."
   },
   "plugins": {
     "installed": "{{count}} Plugin(s) installiert",
@@ -1822,5 +1825,15 @@
     "empty": "Noch keine Jobs vorhanden.",
     "cancelConfirmTitle": "Job abbrechen?",
     "cancelConfirmMsg": "Job \"{{id}}\" wirklich abbrechen? Dies kann nicht rückgängig gemacht werden."
+  },
+  "sessionHistory": {
+    "agentSessions": "Agent-Sessions",
+    "projectSessions": "Project-Sessions",
+    "searchPlaceholder": "Suchbegriff (min 2 Zeichen)…",
+    "searchResults": "Volltext-Suchergebnisse",
+    "selectAgent": "Agent wählen um Sessions zu sehen",
+    "selectProject": "Project wählen um Sessions zu sehen",
+    "empty": "Keine Sessions gefunden",
+    "back": "Zurück"
   }
 }

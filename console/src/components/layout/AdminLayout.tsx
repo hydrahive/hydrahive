@@ -311,6 +311,7 @@ export function AdminLayout() {
         { to: "/blueprint", icon: Workflow, label: t("nav.blueprint"),                               hint: t("navHint.blueprint") },
         { to: "/proactive", icon: CalendarClock, label: t("nav.proactive", { defaultValue: "Proaktiv" }), hint: t("navHint.proactive", { defaultValue: "Autonome Background-Tasks" }), adminOnly: true },
         { to: "/teams",     icon: Users,    label: t("nav.teams",     { defaultValue: "Teams" }),    hint: t("navHint.teams",     { defaultValue: "Agent-Teams und Rollen verwalten" }), adminOnly: true },
+        { to: "/session-history", icon: MessageSquare, label: t("nav.sessionHistory"),                           hint: t("navHint.sessionHistory"), adminOnly: true },
       ],
     },
     {
