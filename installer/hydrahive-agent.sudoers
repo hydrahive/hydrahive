@@ -1,0 +1,4 @@
+# Agent-Isolation: hydrahive darf als proj_*-User bash ausführen (shell_exec unrestricted).
+# !root verhindert Eskalation auf root.
+hydrahive ALL=(ALL, !root) NOPASSWD: /bin/bash
+hydrahive ALL=(ALL, !root) NOPASSWD: /usr/bin/bash

@@ -31,6 +31,11 @@ fi
 # --- Passwordless sudo für Extension-Manager (sudo -n braucht NOPASSWD) ---
 # #295: sudoers auf minimale Befehle einschränken — keine Wildcards wo vermeidbar
 cat > /etc/sudoers.d/hydrahive << SUDOEOF
+# Agent-Isolation: hydrahive darf als proj_*-User bash ausführen (shell_exec unrestricted).
+# !root verhindert Eskalation auf root. Beide Bash-Pfade abdecken (/bin ist Symlink auf /usr/bin).
+hydrahive ALL=(ALL, !root) NOPASSWD: /bin/bash
+hydrahive ALL=(ALL, !root) NOPASSWD: /usr/bin/bash
+
 # Service-Management (nur hydrahive-* Services + nginx/smbd reload)
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-core
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl stop hydrahive-core

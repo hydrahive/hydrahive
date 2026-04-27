@@ -481,7 +481,7 @@ EOF
     fi
 
     # --- 5b. sudoers: alle sudoers-Dateien synchronisieren (#298) ---
-    for _sudoer in hydrahive-installer hydrahive-update hydrahive-provisioner hydrahive-network-profile; do
+    for _sudoer in hydrahive-installer hydrahive-update hydrahive-provisioner hydrahive-network-profile hydrahive-agent; do
         if [ -f "${TMPDIR_BASE}/installer/${_sudoer}.sudoers" ]; then
             install -m 440 "${TMPDIR_BASE}/installer/${_sudoer}.sudoers" "/etc/sudoers.d/${_sudoer}"
             info "sudoers: ${_sudoer} aktualisiert"
