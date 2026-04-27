@@ -405,7 +405,7 @@ export const api = {
     return api.get<{jobs: JobMeta[]}>(`/admin/jobs${qs ? `?${qs}` : ""}`);
   },
   jobsGet:    (jobId: string) => api.get<JobMeta>(`/admin/jobs/${jobId}`),
-  jobsCancel: (jobId: string) => api.post<JobMeta>(`/admin/jobs/${jobId}/cancel`),
+  jobsCancel: (jobId: string) => api.post<JobMeta>(`/admin/jobs/${jobId}/cancel`, {}),
   // Tailscale (#111)
   tailscaleStatus:    () => api.get<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null;dns_name?:string;online:boolean}}>("/admin/tailscale/status"),
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
