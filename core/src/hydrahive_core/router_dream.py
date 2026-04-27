@@ -9,16 +9,14 @@ Endpoints:
 """
 from __future__ import annotations
 
-import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .auto_dream import DEFAULT_CONFIG, _load_dream_config, save_dream_config, _read_dream_state
+from .auto_dream import DEFAULT_CONFIG, _load_dream_config, save_dream_config, _read_dream_state, _run_dream_for_agent
 from .settings import settings
 
 
@@ -43,11 +41,11 @@ def register_dream_routes(router: APIRouter, require_admin: Callable) -> None:
     @router.get("/admin/dream/config", response_model=DreamConfig)
     async def get_dream_config(_: Any = Depends(require_admin)):
         cfg = _load_dream_config()
-        return DreamConfig(**cfg)
+        return DreamConfig(**{k: cfg[k] for k in DreamConfig.model_fields if k in cfg})
 
     @router.put("/admin/dream/config", response_model=DreamConfig)
     async def put_dream_config(body: DreamConfig, _: Any = Depends(require_admin)):
-        save_dream_config(body.dict())
+        save_dream_config(body.model_dump())
         return body
 
     @router.get("/admin/dream/status", response_model=list[DreamAgentStatus])
@@ -83,9 +81,7 @@ def register_dream_routes(router: APIRouter, require_admin: Callable) -> None:
 
     @router.post("/admin/dream/run")
     async def run_dream_now(agent_id: str | None = None, _: Any = Depends(require_admin)):
-        """Dream sofort auslösen — ohne Gate-Checks."""
-        from .auto_dream import run_dream_for_agent
-
+        """Dream sofort auslösen — Gates werden durch force_min_hours=0 umgangen."""
         projects_dir = settings.projects_dir
         triggered: list[str] = []
         skipped: list[str] = []
@@ -98,13 +94,14 @@ def register_dream_routes(router: APIRouter, require_admin: Callable) -> None:
         else:
             dirs = [d for d in sorted(projects_dir.iterdir()) if d.is_dir()]
 
-        cfg = _load_dream_config()
+        # Force: min_hours=0 damit Gates nicht blockieren
+        cfg = {**_load_dream_config(), "min_hours": 0, "min_sessions": 0}
 
         for proj_dir in dirs:
             try:
-                await run_dream_for_agent(proj_dir, cfg, force=True)
+                await _run_dream_for_agent(proj_dir.name, proj_dir, cfg, notify_fn=None)
                 triggered.append(proj_dir.name)
-            except Exception as e:
+            except Exception:
                 skipped.append(proj_dir.name)
 
         return {"triggered": triggered, "skipped": skipped}
