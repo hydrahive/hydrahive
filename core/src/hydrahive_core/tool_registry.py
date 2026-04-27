@@ -3150,16 +3150,14 @@ class ServerFileWriteTool(BaseTool):
                 return {"error": f"Ungültiger mode '{mode}' (erwartet: oktal, z.B. 0644).", "exit_code": -1}
             mode_part = f" && chmod {mode} {_shlex.quote(path)}"
 
+        # base64 via stdin — vermeidet ARG_MAX-Limit bei großen Chunks
+        stdin_bytes = b64.encode("ascii")
         if append:
-            # Chunk anhängen — kein atomic mv nötig
-            remote_cmd = (
-                f"printf %s {_shlex.quote(b64)} | base64 -d >> {_shlex.quote(path)}"
-            )
+            remote_cmd = f"base64 -d >> {_shlex.quote(path)}"
         else:
-            # Atomic via tmp-Datei im selben Verzeichnis + mv
             remote_cmd = (
                 f"tmp=$(mktemp {_shlex.quote(path)}.XXXXXX) && "
-                f"printf %s {_shlex.quote(b64)} | base64 -d > \"$tmp\" && "
+                f"base64 -d > \"$tmp\" && "
                 f"mv \"$tmp\" {_shlex.quote(path)}"
                 f"{mode_part}"
             )
@@ -3167,7 +3165,8 @@ class ServerFileWriteTool(BaseTool):
             target.ip, target.ssh_user, target.ssh_port,
             target.ssh_key_path, remote_cmd,
             target_type="server", target_id=target.server_id,
-            timeout=60,
+            timeout=120,
+            stdin_data=stdin_bytes,
         )
         if result.get("exit_code") != 0:
             out = {
@@ -3184,6 +3183,120 @@ class ServerFileWriteTool(BaseTool):
             "path": path,
             "bytes": len(payload_bytes),
             "mode": mode or None,
+        }
+
+
+class ServerLocalFileCopyTool(BaseTool):
+    """Lokale Datei (im Projekt-Workspace) direkt per SCP auf den Server übertragen."""
+
+    @property
+    def id(self) -> str: return "server_local_file_copy"
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Server-Datei kopieren (lokal → Server)"
+    @property
+    def description(self) -> str:
+        return (
+            "Kopiert eine Datei aus dem lokalen Projekt-Workspace direkt per SCP auf den "
+            "zugewiesenen Server. Ideal für große Dateien (SQL-Dumps, Archive, Backups) ohne "
+            "Größenlimit. local_path ist relativ zum Workspace (z.B. 'uploads/player.sql'). "
+            "dest_path ist der absolute Zielpfad auf dem Server."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id":   {"type": "string"},
+                "local_path":  {"type": "string", "description": "Pfad relativ zum Projekt-Workspace, z.B. 'uploads/player.sql'"},
+                "dest_path":   {"type": "string", "description": "Absoluter Zielpfad auf dem Server, z.B. '/tmp/player.sql'"},
+            },
+            "required": ["server_id", "local_path", "dest_path"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        server_id: str = "", local_path: str = "", dest_path: str = "",
+        **kwargs,
+    ) -> dict:
+        import asyncio as _asyncio
+        import shlex as _shlex
+        from pathlib import Path as _Path
+        from .target_resolution import (
+            resolve_server_target, TargetAccessError, ssh_known_hosts,
+            _write_temp_known_hosts,
+        )
+        try:
+            target = resolve_server_target(agent_id, server_id, project_id=project_id)
+        except TargetAccessError as e:
+            return {"error": str(e), "exit_code": -1}
+
+        if not local_path or not dest_path:
+            return {"error": "local_path und dest_path sind Pflicht.", "exit_code": -1}
+
+        workspace_base = _Path("/var/lib/hydrahive/projects") / project_id / "workspace"
+        src = (workspace_base / local_path).resolve()
+        if not str(src).startswith(str(workspace_base)):
+            return {"error": "local_path muss innerhalb des Workspace liegen.", "exit_code": -1}
+        if not src.exists():
+            return {"error": f"Datei nicht gefunden: {src}", "exit_code": -1}
+
+        verified_keys = []
+        enforcement = "warn"
+        if target.server_id:
+            verified_keys = ssh_known_hosts.get_verified_keys("server", target.server_id)
+            enforcement = ssh_known_hosts.get_enforcement_mode()
+            if not verified_keys and enforcement == "strict":
+                return {
+                    "error": "Host-Key nicht vertraut — Admin muss Host-Key genehmigen.",
+                    "exit_code": -1, "host_key_unverified": True, "host_key_mode": "strict",
+                }
+
+        known_hosts_path = None
+        args = ["scp", "-i", str(target.ssh_key_path), "-P", str(target.ssh_port), "-o", "BatchMode=yes"]
+        if verified_keys:
+            known_hosts_path = _write_temp_known_hosts(target.ip, verified_keys)
+            args += ["-o", f"UserKnownHostsFile={known_hosts_path}", "-o", "GlobalKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=yes"]
+        else:
+            args += ["-o", "UserKnownHostsFile=/dev/null", "-o", "GlobalKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR"]
+
+        args += [str(src), f"{target.ssh_user}@{target.ip}:{dest_path}"]
+
+        import os as _os
+        env = _os.environ.copy()
+        env["LC_ALL"] = "C"
+
+        file_size = src.stat().st_size
+        scp_timeout = max(120, file_size // (500 * 1024))  # mind. 120s, ~500 KB/s Untergrenze
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                *args,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+                env=env,
+            )
+            try:
+                stdout_b, stderr_b = await _asyncio.wait_for(proc.communicate(), timeout=scp_timeout)
+            except _asyncio.TimeoutError:
+                try: proc.kill()
+                except Exception: pass
+                return {"error": f"SCP-Timeout nach {scp_timeout}s", "exit_code": -1}
+        except FileNotFoundError:
+            return {"error": "scp nicht verfügbar", "exit_code": -1}
+        finally:
+            if known_hosts_path:
+                try: _os.unlink(known_hosts_path)
+                except Exception: pass
+
+        exit_code = proc.returncode if proc.returncode is not None else -1
+        if exit_code != 0:
+            return {"error": stderr_b.decode(errors="replace"), "exit_code": exit_code, "server_id": server_id}
+        return {
+            "server_id": server_id, "local_path": str(src),
+            "dest_path": dest_path, "bytes": file_size,
         }
 
 
@@ -3417,6 +3530,7 @@ registry.register(ToolSearchTool())
 registry.register(ServerShellTool())
 registry.register(ServerFileReadTool())
 registry.register(ServerFileWriteTool())
+registry.register(ServerLocalFileCopyTool())
 registry.register(WksShellExecTool())
 
 

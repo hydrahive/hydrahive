@@ -238,6 +238,7 @@ async def run_ssh_command(
     target_id: str | None = None,
     timeout: int = 60,
     max_output: int | None = MAX_SSH_OUTPUT,
+    stdin_data: bytes | None = None,
 ) -> dict:
     """Führt einen Command via SSH aus und liefert {stdout, stderr, exit_code,
     [host_key_unverified, host_key_changed, host_key_mode]}.
@@ -327,6 +328,7 @@ async def run_ssh_command(
         try:
             proc = await asyncio.create_subprocess_exec(
                 *args,
+                stdin=asyncio.subprocess.PIPE if stdin_data is not None else asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
@@ -336,7 +338,7 @@ async def run_ssh_command(
 
         try:
             stdout_b, stderr_b = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout,
+                proc.communicate(input=stdin_data), timeout=timeout,
             )
         except asyncio.TimeoutError:
             try:
