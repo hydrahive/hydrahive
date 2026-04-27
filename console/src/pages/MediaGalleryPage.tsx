@@ -86,7 +86,7 @@ function MediaCard({ item }: { item: MediaItem }) {
           {job.type} · {formatBytes(artifact.size)}
         </p>
         <p className="text-xs text-muted-foreground">{formatDate(artifact.created_at)}</p>
-        {job.input_summary?.prompt && (
+        {!!job.input_summary?.prompt && (
           <p className="text-xs text-muted-foreground line-clamp-2 mt-1 italic">
             „{String(job.input_summary.prompt)}"
           </p>
