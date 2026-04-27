@@ -40,6 +40,7 @@ import {
   Radar,
   Gauge,
   ShieldCheck,
+  Image,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -343,6 +344,7 @@ export function AdminLayout() {
         { to: "/mcp",                icon: Plug,         label: t("nav.mcp",       { defaultValue: "MCP-Server" }),    hint: t("navHint.mcp", { defaultValue: "MCP-Server verwalten" }) },
         { to: "/schedules",          icon: CalendarClock, label: t("nav.schedules"),                                   hint: t("navHint.schedules"), adminOnly: true },
         { to: "/jobs",               icon: Gauge,        label: t("nav.jobs"),                                      hint: t("navHint.jobs"), adminOnly: true },
+        { to: "/media",              icon: Image,        label: t("nav.mediaGallery", { defaultValue: "Media-Galerie" }),  hint: t("navHint.mediaGallery", { defaultValue: "Generierte Bilder, Videos & Audio" }), adminOnly: true },
       ],
     },
     {
