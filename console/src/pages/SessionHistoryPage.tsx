@@ -68,7 +68,7 @@ function MessagePart({ content }: { content: string }) {
 
 // ── SessionSlideOver ────────────────────────────────────────────────────────────
 interface SessionSlideOverProps {
-  session: SessionFull | null;
+  session: SessionPreview | SessionFull | null;
   tab: "agent" | "project";
   agentId?: string;
   projectId?: string;
@@ -130,14 +130,14 @@ function SessionSlideOver({ session, tab, agentId, projectId, onClose }: Session
           <div className="h-4 w-px bg-border" />
           <div className="flex-1 min-w-0">
             <p className="font-mono text-xs truncate">
-              {(session as SessionPreview).id ?? session.id}
+              {session.id}
             </p>
             <p className="text-xs text-muted-foreground">
-              {(session as SessionPreview).message_count
-                ? `${(session as SessionPreview).message_count} messages`
+              {"message_count" in session && session.message_count
+                ? `${session.message_count} messages`
                 : fmtDate(session.started_at)}
               {" · "}
-              {preview && <span className="truncate max-w-[300px]">{preview}</span>}
+              {"preview" in session && session.preview && <span className="truncate max-w-[300px]">{session.preview}</span>}
             </p>
           </div>
           <button
