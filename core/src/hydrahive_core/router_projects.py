@@ -1672,23 +1672,20 @@ def register_project_routes(
         file: UploadFile = File(...),
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        """Upload a file to /var/lib/hydrahive/uploads/{username}/ (max 500 MB).
-        Persistent, world-readable — agent kann die Datei immer finden."""
+        """Upload a file into the user's personal project workspace (max 500 MB).
+        Landet in /projects/personal_{username}/workspace/uploads/ —
+        identisch mit Projekt-Uploads, Agent findet die Datei direkt."""
         username = _auth[0]
         MAX_BYTES = 500 * 1024 * 1024
         data = await file.read()
         if len(data) > MAX_BYTES:
             raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 500 MB)")
-        upload_dir = Path("/var/lib/hydrahive/uploads") / username
+        upload_dir = Path(projects_dir) / f"personal_{username}" / "workspace" / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
-        upload_dir.chmod(0o755)
-        # Parent /var/lib/hydrahive/uploads/ muss traversierbar sein
-        upload_dir.parent.chmod(0o755)
         dest = upload_dir / file.filename
         dest.write_bytes(data)
-        dest.chmod(0o644)
         return {
-            "path": str(dest),
+            "path": str(dest.relative_to(Path(projects_dir) / f"personal_{username}")),
             "filename": file.filename,
             "size": len(data),
         }
