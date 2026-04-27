@@ -72,7 +72,11 @@ export function DashboardGrid({
     const newIndex = widgets.findIndex((w) => w.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(widgetStates, oldIndex, newIndex);
+    // Reorder widgets (WidgetComponent[]) then derive WidgetState[] by id
+    const reorderedWidgets = arrayMove(widgets, oldIndex, newIndex);
+    const reordered = reorderedWidgets
+      .map((w) => widgetStates.find((s) => s.id === w.id))
+      .filter(Boolean) as WidgetState[];
     onReorder(reordered);
   }
 
