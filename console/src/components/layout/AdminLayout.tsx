@@ -887,7 +887,7 @@ export function AdminLayout() {
 
       {/* Content area */}
       {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
-        <div className="flex-1 min-h-0 overflow-hidden pb-14 lg:pb-0">
+        <div className="flex-1 min-h-0">
           <Outlet />
         </div>
       ) : (
