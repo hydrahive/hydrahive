@@ -1286,7 +1286,7 @@ def _write_system_topology(dest: Path) -> None:
 
 ---
 
-## HydraHive-Server (.181)
+## HydraHive-Server (`{hostname}` / `{local_ip}`)
 
 | Service | Port | Health-Check | Hinweis |
 |---------|------|-------------|---------|

@@ -284,11 +284,12 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
   useEffect(() => {
     if (!sessionId) return;
     try {
-      localStorage.setItem(`hh_lastsess_${target.historyEndpoint}`, sessionId);
+      const lsKey = target.kind === "me" && agentSessionId ? `hh_lastsess_${target.historyEndpoint}_${agentSessionId}` : `hh_lastsess_${target.historyEndpoint}`;
+      localStorage.setItem(lsKey, sessionId);
     } catch {
       /* quota / private-mode */
     }
-  }, [sessionId, target.historyEndpoint]);
+  }, [sessionId, target.historyEndpoint, target.kind, agentSessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,7 +367,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
           const sessionEndpoint = target.historyEndpoint.replace(/^\/api/, "").replace(/\/history$/, "");
           await api.delete(sessionEndpoint);
         } catch { /* Session evtl. schon weg */ }
-        try { localStorage.removeItem(`hh_lastsess_${target.historyEndpoint}`); } catch { /* quota */ }
+        try { localStorage.removeItem(target.kind === "me" && agentSessionId ? `hh_lastsess_${target.historyEndpoint}_${agentSessionId}` : `hh_lastsess_${target.historyEndpoint}`); } catch { /* quota */ }
         setMessages([systemMessage("Chat-Verlauf geleert.")]);
         setPendingConfirms([]);
         setError("");
@@ -623,7 +624,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
       setViewSession(null);
       setShowHistory(false);
       try {
-        localStorage.setItem(`hh_lastsess_${target.historyEndpoint}`, response.id);
+        localStorage.setItem(target.kind === "me" && agentSessionId ? `hh_lastsess_${target.historyEndpoint}_${agentSessionId}` : `hh_lastsess_${target.historyEndpoint}`, response.id);
       } catch {
         // ignore quota/private mode
       }

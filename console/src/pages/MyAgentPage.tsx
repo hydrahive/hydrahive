@@ -194,7 +194,7 @@ export function MyAgentPage() {
   useEffect(() => {
     if (!runtime.agentId) return;
     try {
-      const lastSid = localStorage.getItem(`hh_lastsess_/api/me/agent/session/history`);
+      const lastSid = localStorage.getItem(`hh_lastsess_/api/me/agent/session/history_${runtime.agentId}`);
       if (lastSid) runtime.resumeSession(lastSid).catch(() => {/* Session evtl. gelöscht */});
     } catch { /* localStorage nicht verfügbar */ }
   }, [runtime.agentId]);
