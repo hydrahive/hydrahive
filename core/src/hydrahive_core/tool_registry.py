@@ -3236,7 +3236,8 @@ class ServerLocalFileCopyTool(BaseTool):
         if not local_path or not dest_path:
             return {"error": "local_path und dest_path sind Pflicht.", "exit_code": -1}
 
-        workspace_base = _Path("/var/lib/hydrahive/projects") / project_id / "workspace"
+        from .settings import get_settings as _get_settings
+        workspace_base = _Path(_get_settings().projects_dir) / project_id / "workspace"
         src = (workspace_base / local_path).resolve()
         if not str(src).startswith(str(workspace_base)):
             return {"error": "local_path muss innerhalb des Workspace liegen.", "exit_code": -1}
