@@ -387,10 +387,11 @@ export const api = {
   hubUninstallPlugin: (pluginId: string) => api.delete<{uninstalled:boolean;plugin_id:string}>(`/hub/installed/plugin/${pluginId}`),
   // Extensions (ExtensionsPage refactor — #956)
   extensionList:   () => api.get<Extension[]>("/admin/extensions"),
-  extensionAction: (id: string, action: "install" | "uninstall", params?: Record<string, string>) =>
+  extensionAction: (id: string, action: "install" | "uninstall", params?: Record<string, string>, signal?: AbortSignal) =>
     fetch(`/api/admin/extensions/${id}/${action}`, {
       method: "POST",
       credentials: "include",
+      signal,
       headers: params ? { "Content-Type": "application/json" } : undefined,
       body: params ? JSON.stringify({ params }) : undefined,
     }),

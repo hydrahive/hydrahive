@@ -215,7 +215,7 @@ export function ExtensionsPage() {
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
       const body = (action === "install" && params) ? JSON.stringify({ params }) : undefined;
-      const res = await api.extensionAction(id, action, params);
+      const res = await api.extensionAction(id, action, params, ctrl.signal);
       if (!res.ok || !res.body) {
         setLog([`Fehler: HTTP ${res.status}`]);
         setLogDone(false);
