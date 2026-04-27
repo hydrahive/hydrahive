@@ -638,8 +638,11 @@ export function AdminLayout() {
       </div>
     )}
 
+    {/* ── FULL-VIEWPORT FLEX COLUMN (header + main fill 100vh) ──────── */}
+    <div className="flex flex-col overflow-hidden" style={{ height: "100dvh" }}>
+
     {/* ── HORIZONTAL HEADER ────────────────────────────────────────── */}
-    <div className="sticky top-0 z-40 flex flex-col bg-[hsl(var(--shell))/0.92] backdrop-blur-xl border-b border-border/50">
+    <div className="flex-shrink-0 z-40 flex flex-col bg-[hsl(var(--shell))/0.92] backdrop-blur-xl border-b border-border/50">
 
       {/* Row 1: Logo + Nav + Right Controls */}
       <div className="flex items-center gap-4 px-4 lg:px-6 h-14">
@@ -864,7 +867,7 @@ export function AdminLayout() {
     </div>
 
     {/* ── MAIN CONTENT ─────────────────────────────────────────────── */}
-    <main className="relative min-w-0 flex-1 flex flex-col overflow-hidden">
+    <main className="relative min-w-0 flex-1 min-h-0 flex flex-col overflow-hidden">
 
       {/* Page header with slot (tabs) — only on non-chat routes */}
       {!location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) && (
@@ -896,6 +899,8 @@ export function AdminLayout() {
         </div>
       )}
     </main>
+
+    </div>{/* end full-viewport flex column */}
 
     {/* ── BOTTOM NAV (mobile only) ──────────────────────────────────── */}
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur-sm lg:hidden">

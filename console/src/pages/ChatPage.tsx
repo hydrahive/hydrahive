@@ -167,7 +167,7 @@ export function ChatPage() {
   }, [id, runtime.isRunning, subscribe.isConnected, runtime.reloadHistory]);
 
   return (
-    <section className="flex h-full min-h-0 overflow-hidden">
+    <section className="flex flex-1 min-h-0 overflow-hidden">
       {/* Main Column: Header + Content */}
       <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header */}
