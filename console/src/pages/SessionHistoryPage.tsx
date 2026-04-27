@@ -13,7 +13,7 @@ function fmtDate(iso: string | null) {
   catch { return iso; }
 }
 
-function fmtRelTime(iso: string | null, t: (k: string) => string) {
+function fmtRelTime(iso: string | null, t: (key: string, opts?: {n?: number}) => string) {
   if (!iso) return "";
   try {
     const diff = Date.now() - new Date(iso).getTime();
