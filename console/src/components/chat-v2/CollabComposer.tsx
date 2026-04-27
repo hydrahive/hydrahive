@@ -67,6 +67,7 @@ export function CollabComposer({
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
   const [textareaVersion, setTextareaVersion] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
+  const [attachments, setAttachments] = useState<Array<{ path: string; filename: string; sizeKB: string }>>([]);
 
   // #554 H11: eigene Cursor-Position an awareness melden und remote-Cursor
   // einsammeln. Wir triggern bei jedem relevanten Event ein Re-Layout der
@@ -177,16 +178,19 @@ export function CollabComposer({
 
   const sendNow = async (skipCoach = false) => {
     const text = yjs.ytext.toString().trim();
-    if (!text || runtime.isRunning) return;
-    // Optimistic clear: leeren BEVOR wir auf den Stream warten, sonst bleibt
-    // der Text bis die Antwort fertig ist im Feld (Till-Bug). Falls Coach
-    // die Nachricht abfängt, steht der Originaltext in coachFeedback.content
-    // und der User kann per "Trotzdem senden" / "Vorschlag übernehmen"
-    // reagieren — brauchen den Y.Text dafür nicht zurückzuspielen.
+    const hasAttachments = attachments.length > 0;
+    if ((!text && !hasAttachments) || runtime.isRunning) return;
+    const attachmentBlock = attachments.length > 0
+      ? attachments.map((a) => `📎 ${a.filename} (${a.sizeKB} KB) → ${a.path}`).join("\n")
+      : "";
+    const fullText = attachmentBlock && text
+      ? `${attachmentBlock}\n\n${text}`
+      : attachmentBlock || text;
     yjs.clearText();
     lastTextRef.current = "";
     setTextValue("");
-    await runtime.sendText(text, skipCoach);
+    setAttachments([]);
+    await runtime.sendText(fullText, skipCoach);
   };
 
   const sendAnyway = () => {
@@ -280,7 +284,7 @@ export function CollabComposer({
           {runtime.coachChecking ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
         </label>
       </div>
-      {runtime.pendingImages.length > 0 ? (
+      {(runtime.pendingImages.length > 0 || attachments.length > 0) ? (
         <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2">
           {runtime.pendingImages.map((image, index) => (
             <div key={`${image.preview}-${index}`} className="group relative">
@@ -296,6 +300,21 @@ export function CollabComposer({
                 aria-label="Bild entfernen"
               >
                 <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {attachments.map((att, index) => (
+            <div key={`${att.path}-${index}`} className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-sm shadow-sm">
+              <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="max-w-[160px] truncate font-medium">{att.filename}</span>
+              <span className="text-muted-foreground">{att.sizeKB} KB</span>
+              <button
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition hover:text-destructive"
+                aria-label="Anhang entfernen"
+              >
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
@@ -373,7 +392,7 @@ export function CollabComposer({
                 try {
                   const result = await api.uploadFile(projectId, file);
                   const sizeKB = (result.size / 1024).toFixed(1);
-                  insertIntoYjsComposer(yjs, `[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                  setAttachments((prev) => [...prev, { path: result.path, filename: result.filename, sizeKB }]);
                   setUploadStatus("idle");
                 } catch (err) {
                   console.error('Upload failed:', err);
