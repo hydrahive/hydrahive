@@ -78,7 +78,7 @@ export function DashboardGrid({
   }
 
   // widgetStates is the canonical order; sort widgets to match
-  const sortedIds = widgetStates.map((w) => w.id);
+  const sortedIds = widgetStates.filter((w) => w.enabled).map((w) => w.id);
   const enabledIds = new Set(widgetStates.filter((w) => w.enabled).map((w) => w.id));
   // Sort WidgetComponents to match widgetStates order (not static widgets order)
   const visibleWidgets = widgetStates

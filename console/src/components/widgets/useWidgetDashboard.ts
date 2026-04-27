@@ -32,13 +32,13 @@ function loadLayout(): WidgetState[] {
     if (!raw) return DEFAULT_WIDGETS;
     const parsed: DashboardLayout = JSON.parse(raw);
     if (parsed.version !== 1) return DEFAULT_WIDGETS;
-    // Merge: keep new widgets added since last config
+    // Merge: saved order zuerst, neue Widgets anhängen
     const saved = parsed.widgets;
-    const merged = DEFAULT_WIDGETS.map((def) => {
-      const found = saved.find((s) => s.id === def.id);
-      return found ?? def;
-    });
-    return merged;
+    const knownIds = new Set(DEFAULT_WIDGETS.map((d) => d.id));
+    const ordered = saved.filter((s) => knownIds.has(s.id));
+    const savedIds = new Set(ordered.map((s) => s.id));
+    const newWidgets = DEFAULT_WIDGETS.filter((d) => !savedIds.has(d.id));
+    return [...ordered, ...newWidgets];
   } catch {
     return DEFAULT_WIDGETS;
   }
