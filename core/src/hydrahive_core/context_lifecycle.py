@@ -39,7 +39,8 @@ _TOOL_OP_TYPES: dict[str, ToolOpType] = {
     "write_memory":         ToolOpType.MUTATION,
     "shared_memory_write":  ToolOpType.MUTATION,
     "user_memory_write":    ToolOpType.MUTATION,
-    "server_file_write":    ToolOpType.MUTATION,
+    "server_file_write":        ToolOpType.MUTATION,
+    "server_local_file_copy":   ToolOpType.MUTATION,
     "send_mail":            ToolOpType.MUTATION,
 
     # Reads — Inhalt kann aggressiv gekürzt werden (Agent hat ihn schon verarbeitet)
@@ -112,7 +113,8 @@ _TOOL_POLICIES: dict[str, ToolPolicy] = {
     "shell_exec":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "project_shell":    ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "server_shell":     ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
-    "server_file_write": ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "server_file_write":        ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "server_local_file_copy":   ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
     "wks_shell_exec":   ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "git_commit":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
     "git_push":         ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high"),

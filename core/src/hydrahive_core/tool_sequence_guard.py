@@ -95,7 +95,7 @@ def check_sequence_guard(tool_calls: list[dict[str, Any]]) -> SimpleNamespace:
     if shell_idx is not None:
         for next_call in tool_calls[shell_idx + 1:]:
             nxt = next_call.get("name", "")
-            if nxt in ("file_write", "server_file_write", "http_request"):
+            if nxt in ("file_write", "server_file_write", "server_local_file_copy", "http_request"):
                 return SimpleNamespace(
                     detected=True,
                     sequence_name="shell-then-write-or-network",

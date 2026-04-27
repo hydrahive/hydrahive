@@ -413,7 +413,7 @@ _SHELL_TOOLS: frozenset[str] = frozenset({
     "shell_exec", "server_shell", "wks_shell_exec", "project_shell",
 })
 _FILE_WRITE_TOOLS: frozenset[str] = frozenset({
-    "file_write", "file_patch", "server_file_write",
+    "file_write", "file_patch", "server_file_write", "server_local_file_copy",
 })
 
 

@@ -231,7 +231,7 @@ class Orchestrator:
         "ask_agent", "tool_search",
         # #584-C: Projekt-Target-Tools. Immer verfügbar — Tool liefert bei
         # fehlender Zuweisung einen klaren Fehler, kein Side-Effect.
-        "server_shell", "server_file_read", "server_file_write", "wks_shell_exec",
+        "server_shell", "server_file_read", "server_file_write", "server_local_file_copy", "wks_shell_exec",
     })
 
     def _allowed_tools(

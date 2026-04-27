@@ -222,7 +222,7 @@ async def _execute_tool(
     # _requested_project_id zurückgelegt, damit AskAgentTool die Ziel-Session
     # explizit setzen kann — ohne das Security-Modell der Target-Tools zu berühren.
     _TARGET_TOOLS_NO_OVERRIDE = frozenset({
-        "server_shell", "server_file_read", "server_file_write", "wks_shell_exec",
+        "server_shell", "server_file_read", "server_file_write", "server_local_file_copy", "wks_shell_exec",
     })
     _maybe_injected_pid = args.pop("project_id", None)
     if _maybe_injected_pid and tool_name == "ask_agent":
@@ -467,7 +467,7 @@ async def execute_tool_call(
     # keine Schreibaktion unkontrolliert durchlässt.
     _tool_guard_mutating_tools = {
         "shell_exec", "project_shell", "server_shell", "wks_shell_exec",
-        "file_write", "file_patch", "server_file_write", "server_file_patch",
+        "file_write", "file_patch", "server_file_write", "server_file_patch", "server_local_file_copy",
     }
     try:
         from .tool_guard import check_tool_guard as _check_tool_guard

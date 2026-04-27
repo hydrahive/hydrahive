@@ -106,7 +106,7 @@ def classify_static(tool_name: str, tool_input: dict) -> RiskLevel | None:
         return None  # Unbekannter Shell-Befehl → LLM oder Default
 
     # File-Write auf sensitive Pfade
-    if tool_name in ("file_write", "file_patch", "write_system_file", "server_file_write"):
+    if tool_name in ("file_write", "file_patch", "write_system_file", "server_file_write", "server_local_file_copy"):
         path = tool_input.get("path", "")
         for pattern in _SENSITIVE_PATHS:
             if re.search(pattern, path, re.IGNORECASE):
