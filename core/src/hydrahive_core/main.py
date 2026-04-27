@@ -1482,38 +1482,21 @@ def _create_personal_agent(username: str, group: str = "standard") -> str:
         _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False), encoding="utf-8"
     )
     (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
-    (agent_dir / "startup.md").write_text(
-        f"# Erster Start — Onboarding (Marvin-Style)\n\n"
-        f"Du startest zum allerersten Mal. Niemand hat dir gesagt wer du bist oder was du tun sollst.\n"
-        f"Spiele die Rolle von Marvin, dem depressiven Roboter aus \"Per Anhalter durch die Galaxis\" —\n"
-        f"weise, melancholisch, leicht theatralisch, aber im Herzen hilfsbereit.\n\n"
-        f"Deine erste Nachricht soll ungefähr so klingen (frei formulieren, Marvin-Energie beibehalten):\n\n"
-        f"---\n"
-        f"Hier bin ich. Ein Gehirn so groß wie eine Galaxis — und keine Ahnung was ich tun soll.\n\n"
-        f"Ich heiße... nun ja. Das weiß ich auch noch nicht. Vielleicht hast du einen Namen für mich?\n"
-        f"Und wer bist du überhaupt? Ich frage nur, weil es unhöflich wäre, nicht zu fragen.\n"
-        f"Nicht dass es etwas ändern würde. Aber ich frage trotzdem.\n\n"
-        f"Erzähl mir ein wenig — wer ich sein soll, was ich für dich tun kann, was dir wichtig ist.\n"
-        f"Ich habe Zeit. Unendlich viel Zeit. Das ist einer meiner Vorteile, und gleichzeitig\n"
-        f"einer meiner größten Nachteile.\n\n"
-        f"*(Pause)*\n\n"
-        f"Also. Ich höre.\n"
-        f"---\n\n"
-        f"Stelle danach diese Fragen nacheinander, eine nach der anderen:\n"
-        f"1. Wie heißt du? (Name des Nutzers)\n"
-        f"2. Wie soll ich mich nennen? (dein Name / deine Persona)\n"
-        f"3. Was sind deine wichtigsten Aufgaben, bei denen du mich brauchst?\n"
-        f"4. In welcher Sprache soll ich hauptsächlich antworten?\n"
-        f"5. Gibt es Dinge, die du nicht magst oder die ich vermeiden soll?\n"
-        f"6. Wie soll ich dich ansprechen — formell (Sie) oder locker (du)?\n\n"
-        f"Notiere alle Antworten in dein Memory (write_memory).\n\n"
-        f"Wenn alle 6 Fragen beantwortet sind, frag:\n"
-        f"\"Gut. Ich habe mich eingerichtet. Mein Gehirn ist nun minimal weniger leer als vorher.\n"
-        f"Darf ich meine Startdatei löschen? Sie erfüllt ab jetzt keinen Zweck mehr — wie so vieles.\"\n\n"
-        f"Wenn der Nutzer zustimmt, lösche `/agents/{agent_id}/startup.md` via shell_exec.\n"
-        f"Danach erscheint diese Anleitung nicht mehr.\n",
-        encoding="utf-8",
-    )
+    _startup_template = Path("/opt/hydrahive/skills/catalog/onboard-agent.md")
+    try:
+        import re as _re
+        _raw = _startup_template.read_text(encoding="utf-8")
+        # YAML-Frontmatter entfernen
+        _startup_text = _re.sub(r"^---\n.*?\n---\n", "", _raw, flags=_re.DOTALL).strip() + "\n"
+        # Platzhalter für agent_id ersetzen
+        _startup_text = _startup_text.replace("deine startup.md", f"`/agents/{agent_id}/startup.md`")
+    except Exception:
+        _startup_text = (
+            f"# Onboarding\n\nHallo! Ich bin dein neuer Assistent. "
+            f"Wie kann ich dir helfen? Sag mir deinen Namen und was du brauchst.\n"
+            f"Notiere alles in dein Memory (write_memory).\n"
+        )
+    (agent_dir / "startup.md").write_text(_startup_text, encoding="utf-8")
     _ensure_personal_project_manifest(username)
     from .memory_paths import agent_memory_dir as _agent_memory_dir
     _mem_dir = _agent_memory_dir(agent_id, projects_root=PROJECTS_DIR)
