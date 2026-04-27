@@ -438,7 +438,7 @@ function ServersView(props: {
   async function testServer(id: string) {
     setTestResult(prev => ({ ...prev, [id]: { ok: false, msg: t("targetSystems.servers.testing", { defaultValue: "Teste…" }) } }));
     try {
-      const d = await api.get<{ ok: boolean; error?: string; output?: string }>(`/admin/servers/${id}/test`);
+      const d = await api.post<{ ok: boolean; error?: string; output?: string }>(`/admin/servers/${id}/test`, {});
       setTestResult(prev => ({ ...prev, [id]: {
         ok: d.ok,
         msg: d.ok
