@@ -435,7 +435,7 @@ export function AdminLayout() {
   useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
   const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate, showLog, logLines, logDone, closeLog } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
-  const showDeploymentPanel = isAdmin && (updating || Boolean(updateError) || updateAvailable);
+  const showDeploymentPanel = isAdmin;
   const deploymentUrgent = updating || Boolean(updateError) || updateAvailable;
 
   useEffect(() => {
