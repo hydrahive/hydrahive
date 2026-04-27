@@ -1686,21 +1686,17 @@ def register_project_routes(
         upload_dir = Path(projects_dir) / project_id / "workspace" / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
 
+        data = await file.read()
+        if len(data) > MAX_BYTES:
+            raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 50 MB)")
+
         dest = upload_dir / file.filename
-        written = 0
-        with dest.open('wb') as f:
-            async for chunk in file.iter_chunked(64 * 1024):
-                written += len(chunk)
-                if written > MAX_BYTES:
-                    f.close()
-                    dest.unlink(missing_ok=True)
-                    raise HTTPException(413, "Datei zu groß (max 50 MB)")
-                f.write(chunk)
+        dest.write_bytes(data)
 
         return {
             "path": str(dest.relative_to(Path(projects_dir) / project_id)),
             "filename": file.filename,
-            "size": written,
+            "size": len(data),
         }
 
 

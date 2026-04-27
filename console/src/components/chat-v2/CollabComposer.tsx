@@ -66,6 +66,7 @@ export function CollabComposer({
   const [textValue, setTextValue] = useState("");
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
   const [textareaVersion, setTextareaVersion] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
 
   // #554 H11: eigene Cursor-Position an awareness melden und remote-Cursor
   // einsammeln. Wir triggern bei jedem relevanten Event ein Re-Layout der
@@ -358,24 +359,34 @@ export function CollabComposer({
           </button>
         ) : null}
         {projectId && (
-          <label className="btn-glass inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl">
+          <label
+            className={`btn-glass inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl ${uploadStatus === "uploading" ? "opacity-50 pointer-events-none" : ""} ${uploadStatus === "error" ? "text-red-500" : ""}`}
+            title={uploadStatus === "error" ? "Upload fehlgeschlagen" : "Datei hochladen"}
+          >
             <input
               type="file"
               className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                setUploadStatus("uploading");
                 try {
                   const result = await api.uploadFile(projectId, file);
                   const sizeKB = (result.size / 1024).toFixed(1);
                   insertIntoYjsComposer(yjs, `[Datei hochgeladen: ${result.path} (${sizeKB} KB)]`);
+                  setUploadStatus("idle");
                 } catch (err) {
                   console.error('Upload failed:', err);
+                  setUploadStatus("error");
+                  setTimeout(() => setUploadStatus("idle"), 3000);
                 }
                 e.target.value = '';
               }}
             />
-            <Paperclip className="h-4 w-4" />
+            {uploadStatus === "uploading"
+              ? <RefreshCw className="h-4 w-4 animate-spin" />
+              : <Paperclip className={`h-4 w-4 ${uploadStatus === "error" ? "text-red-500" : ""}`} />
+            }
           </label>
         )}
         <button
