@@ -68,21 +68,23 @@ export function DashboardGrid({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = widgets.findIndex((w) => w.id === active.id);
-    const newIndex = widgets.findIndex((w) => w.id === over.id);
+    // Indices from widgetStates (canonical order)
+    const oldIndex = widgetStates.findIndex((w) => w.id === active.id);
+    const newIndex = widgetStates.findIndex((w) => w.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    // Reorder widgets (WidgetComponent[]) then derive WidgetState[] by id
-    const reorderedWidgets = arrayMove(widgets, oldIndex, newIndex);
-    const reordered = reorderedWidgets
-      .map((w) => widgetStates.find((s) => s.id === w.id))
-      .filter(Boolean) as WidgetState[];
+    const reordered = arrayMove(widgetStates, oldIndex, newIndex);
     onReorder(reordered);
   }
 
-  const sortedIds = widgets.map((w) => w.id);
+  // widgetStates is the canonical order; sort widgets to match
+  const sortedIds = widgetStates.map((w) => w.id);
   const enabledIds = new Set(widgetStates.filter((w) => w.enabled).map((w) => w.id));
-  const visibleWidgets = widgets.filter((w) => enabledIds.has(w.id));
+  // Sort WidgetComponents to match widgetStates order (not static widgets order)
+  const visibleWidgets = widgetStates
+    .filter((s) => enabledIds.has(s.id))
+    .map((s) => widgets.find((w) => w.id === s.id))
+    .filter(Boolean) as WidgetComponent[];
   const activeWidget = activeId ? visibleWidgets.find((w) => w.id === activeId) : null;
 
   return (
