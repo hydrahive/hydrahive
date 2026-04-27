@@ -53,6 +53,7 @@ from .router_skill_packages import register_skill_package_routes
 from .router_a2a import register_a2a_routes
 from .router_agent_secrets import register_agent_secret_routes
 from .router_brain import register_brain_routes
+from .router_dream import register_dream_routes
 from .router_notifications import register_notification_routes
 from .notification_service import notification_service
 from .router_schedules import register_schedule_routes
@@ -1901,6 +1902,7 @@ register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=
 register_schedule_routes(auth_router, require_auth=require_auth)
 register_agent_secret_routes(admin_router, get_current_admin=require_admin)
 register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
+    register_dream_routes(admin_router, require_admin=require_admin)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
 register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
