@@ -51,6 +51,7 @@ const McpConfigPage          = lazy(() => import("@/pages/McpConfigPage").then((
 const QuickstartPage         = lazy(() => import("@/pages/QuickstartPage").then((m) => ({ default: m.QuickstartPage })));
 const PlaygroundPage         = lazy(() => import("@/pages/PlaygroundPage").then((m) => ({ default: m.PlaygroundPage })));
 const ProactivePage          = lazy(() => import("@/pages/ProactivePage").then((m) => ({ default: m.ProactivePage })));
+const DreamPage              = lazy(() => import("@/pages/DreamPage").then((m) => ({ default: m.DreamPage })));
 const TargetSystemsPage      = lazy(() => import("@/pages/TargetSystemsPage").then((m) => ({ default: m.TargetSystemsPage })));
 const TeamsPage            = lazy(() => import("@/pages/TeamsPage").then((m) => ({ default: m.TeamsPage })));
 const AuditPage         = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
@@ -150,6 +151,7 @@ export default function App() {
             <Route path="quickstart"        element={<QuickstartPage />} />
             <Route path="playground"       element={<PlaygroundPage />} />
             <Route path="proactive"       element={<ProactivePage />} />
+            <Route path="dream"           element={<DreamPage />} />
             {/* Redirects für konsolidierte Seiten */}
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="tools/skill-packages" element={<Navigate to="/hub?tab=skill-packages" replace />} />
