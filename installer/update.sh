@@ -735,6 +735,12 @@ PY
         fi
     fi
 
+    # KillMode=process sicherstellen — ältere Installs hatten control-group (killt QEMU-VMs).
+    if ! grep -q "KillMode=process" /etc/systemd/system/hydrahive-core.service 2>/dev/null; then
+        sed -i '/^\[Service\]/a KillMode=process' /etc/systemd/system/hydrahive-core.service 2>/dev/null || true
+        info "hydrahive-core.service: KillMode=process ergänzt (VM-Schutz)"
+    fi
+
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
     systemctl restart hydrahive-core
