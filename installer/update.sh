@@ -198,7 +198,27 @@ main() {
                 cp "${_src}/config.yaml" "${_dst}/config.yaml"
             fi
         done
-        chown -R hydrahive:hydrahive /projects/ 2>/dev/null || true
+        # Nur Top-Level + bekannte System-Dateien chownen, nicht rekursiv alle Subdirs.
+        # Projekt-User (proj_*) haben ihre eigenen Workspace-Dirs (repo/ etc.) — die
+        # dürfen nicht überschrieben werden, sonst können Agenten kein git pull machen.
+        chown hydrahive:hydrahive /projects/ 2>/dev/null || true
+        for _pd in /projects/*/; do
+            [ -d "${_pd}" ] || continue
+            _pn=$(basename "${_pd}")
+            _pu="proj_${_pn}"
+            if id "${_pu}" &>/dev/null; then
+                # Projekt-User existiert → nur System-Dateien chownen, nicht seinen Workspace
+                for _sf in config.yaml AGENT.md agent_profile.yaml; do
+                    [ -f "${_pd}${_sf}" ] && chown hydrahive:hydrahive "${_pd}${_sf}" 2>/dev/null || true
+                done
+                chown -R hydrahive:hydrahive "${_pd}memory" 2>/dev/null || true
+                # Workspace-Dirs dem Projekt-User (zurück)geben
+                chown "${_pu}:hydrahive" "${_pd}" 2>/dev/null || true
+                [ -d "${_pd}repo" ] && chown -R "${_pu}:hydrahive" "${_pd}repo" 2>/dev/null || true
+            else
+                chown -R hydrahive:hydrahive "${_pd}" 2>/dev/null || true
+            fi
+        done
         info "Default-Projekte aktualisiert"
     fi
 
@@ -612,8 +632,24 @@ for agent_dir in sorted(agents_dir.iterdir()):
 print(f"v2-Migration: {migrated} Agents → Projekte konvertiert")
 MIGRATE_EOF
 
-            # Berechtigungen setzen
-            chown -R hydrahive:hydrahive /projects/ 2>/dev/null || true
+            # Berechtigungen setzen — gleiche Logik wie im Default-Projects-Block:
+            # proj_*-User behalten ihre Workspace-Dirs, nur System-Dateien gehen an hydrahive.
+            chown hydrahive:hydrahive /projects/ 2>/dev/null || true
+            for _pd in /projects/*/; do
+                [ -d "${_pd}" ] || continue
+                _pn=$(basename "${_pd}")
+                _pu="proj_${_pn}"
+                if id "${_pu}" &>/dev/null; then
+                    for _sf in config.yaml AGENT.md agent_profile.yaml; do
+                        [ -f "${_pd}${_sf}" ] && chown hydrahive:hydrahive "${_pd}${_sf}" 2>/dev/null || true
+                    done
+                    chown -R hydrahive:hydrahive "${_pd}memory" 2>/dev/null || true
+                    chown "${_pu}:hydrahive" "${_pd}" 2>/dev/null || true
+                    [ -d "${_pd}repo" ] && chown -R "${_pu}:hydrahive" "${_pd}repo" 2>/dev/null || true
+                else
+                    chown -R hydrahive:hydrahive "${_pd}" 2>/dev/null || true
+                fi
+            done
 
             # Flag setzen — Migration nicht nochmal ausführen
             touch /etc/hydrahive/.v2-migrated
