@@ -139,6 +139,10 @@ export const api = {
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/projects/${id}/session/history`),
   agentLogs: (id: string, lines = 100) =>
     api.get<{agent_id:string;lines:string[];count:number}>(`/agents/${id}/logs?lines=${lines}`),
+  agentDebug: (agentId: string) =>
+    api.get<{agent_id:string;output:string}>(`/admin/agents/${agentId}/debug`),
+  agentHealthCheck: (agentId: string) =>
+    api.post<{agent_id:string;healthy:boolean;latency_ms:number;error?:string}>(`/admin/agents/${agentId}/health-check`, {}),
   projectWebhooks:  (id: string) =>
     api.get<{webhooks: Webhook[]}>(`/projects/${id}/webhooks`),
   createWebhook:    (id: string, d: unknown) => api.post<Webhook>(`/projects/${id}/webhooks`, d),

@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bot, Plus, Pencil, Trash2, X,
   Users, Settings, Loader2, Plug,
+  Activity, HeartPulse, ChevronDown,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -78,6 +79,10 @@ export function AgentsPage() {
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Health-check + debug state per agent
+  const [healthStatus, setHealthStatus] = useState<Record<string, {loading: boolean; healthy: boolean|null; latency_ms: number|null; error: string|null}>>({});
+  const [debugOutput, setDebugOutput] = useState<Record<string, {loading: boolean; output: string|null; open: boolean}>>({});
 
   useEffect(() => { void loadAll(); }, []);
 
@@ -224,6 +229,30 @@ export function AgentsPage() {
     }
   }
 
+  async function handleHealthCheck(agentId: string) {
+    setHealthStatus(prev => ({ ...prev, [agentId]: { loading: true, healthy: null, latency_ms: null, error: null } }));
+    try {
+      const result = await api.agentHealthCheck(agentId);
+      setHealthStatus(prev => ({ ...prev, [agentId]: { loading: false, healthy: result.healthy, latency_ms: result.latency_ms, error: result.error ?? null } }));
+    } catch (e) {
+      setHealthStatus(prev => ({ ...prev, [agentId]: { loading: false, healthy: false, latency_ms: null, error: e instanceof Error ? e.message : String(e) } }));
+    }
+  }
+
+  async function handleDebug(agentId: string) {
+    setDebugOutput(prev => ({ ...prev, [agentId]: { loading: true, output: null, open: true } }));
+    try {
+      const result = await api.agentDebug(agentId);
+      setDebugOutput(prev => ({ ...prev, [agentId]: { loading: false, output: result.output, open: true } }));
+    } catch (e) {
+      setDebugOutput(prev => ({ ...prev, [agentId]: { loading: false, output: `Error: ${e instanceof Error ? e.message : String(e)}`, open: true } }));
+    }
+  }
+
+  function toggleDebug(agentId: string) {
+    setDebugOutput(prev => ({ ...prev, [agentId]: { ...(prev[agentId] ?? { loading: false, output: null }), open: !(prev[agentId]?.open ?? false) } }));
+  }
+
   function setField<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm(prev => ({ ...prev, [k]: v }));
   }
@@ -336,6 +365,34 @@ export function AgentsPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            {/* Health-Check */}
+                            <button
+                              onClick={() => void handleHealthCheck(id)}
+                              title="Health-Check"
+                              className={`rounded-lg border p-2 transition-colors ${
+                                healthStatus[id]?.healthy === true ? "border-green-500/40 text-green-400 hover:bg-green-500/10" :
+                                healthStatus[id]?.healthy === false ? "border-red-500/40 text-red-400 hover:bg-red-500/10" :
+                                "border-white/10 text-white/40 hover:text-white hover:border-white/30"
+                              }`}
+                            >
+                              {healthStatus[id]?.loading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <HeartPulse className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            {/* Debug */}
+                            <button
+                              onClick={() => void handleDebug(id)}
+                              title="Debug-Output"
+                              className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-yellow-400 hover:border-yellow-500/30 transition-colors"
+                            >
+                              {debugOutput[id]?.loading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Activity className="h-3.5 w-3.5" />
+                              )}
+                            </button>
                             <button
                               onClick={() => void openEdit(id)}
                               className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-white hover:border-white/30 transition-colors"
@@ -368,6 +425,18 @@ export function AgentsPage() {
                             )}
                           </div>
                         </div>
+                        {/* Debug-Output Panel */}
+                        {debugOutput[id]?.open && debugOutput[id]?.output !== undefined && (
+                          <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-950/10 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-yellow-400">Debug-Output</span>
+                              <button onClick={() => toggleDebug(id)} className="text-white/40 hover:text-white">
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <pre className="text-xs text-white/60 font-mono whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{debugOutput[id].output}</pre>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -416,6 +485,34 @@ export function AgentsPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            {/* Health-Check */}
+                            <button
+                              onClick={() => void handleHealthCheck(id)}
+                              title="Health-Check"
+                              className={`rounded-lg border p-2 transition-colors ${
+                                healthStatus[id]?.healthy === true ? "border-green-500/40 text-green-400 hover:bg-green-500/10" :
+                                healthStatus[id]?.healthy === false ? "border-red-500/40 text-red-400 hover:bg-red-500/10" :
+                                "border-white/10 text-white/40 hover:text-white hover:border-white/30"
+                              }`}
+                            >
+                              {healthStatus[id]?.loading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <HeartPulse className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            {/* Debug */}
+                            <button
+                              onClick={() => void handleDebug(id)}
+                              title="Debug-Output"
+                              className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-yellow-400 hover:border-yellow-500/30 transition-colors"
+                            >
+                              {debugOutput[id]?.loading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Activity className="h-3.5 w-3.5" />
+                              )}
+                            </button>
                             <button
                               onClick={() => void openEdit(id)}
                               className="rounded-lg border border-white/10 p-2 text-white/40 hover:text-white hover:border-white/30 transition-colors"
@@ -448,6 +545,18 @@ export function AgentsPage() {
                             )}
                           </div>
                         </div>
+                        {/* Debug-Output Panel */}
+                        {debugOutput[id]?.open && debugOutput[id]?.output !== undefined && (
+                          <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-950/10 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-yellow-400">Debug-Output</span>
+                              <button onClick={() => toggleDebug(id)} className="text-white/40 hover:text-white">
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <pre className="text-xs text-white/60 font-mono whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{debugOutput[id].output}</pre>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
