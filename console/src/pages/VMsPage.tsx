@@ -841,7 +841,7 @@ export function VMsPage() {
                     <>
                       <button
                         className="btn btn-sm flex items-center gap-1"
-                        onClick={() => window.open(`/vms/${vm.vm_id}/console`, "_blank")}
+                        onClick={() => window.open(`/vms/${vm.vm_id}/console`, `hh-vm-console-${vm.vm_id}`)}
                         disabled={busy(vm.vm_id)}
                       >
                         <Monitor className="w-3.5 h-3.5" />Konsole
