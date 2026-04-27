@@ -1672,17 +1672,18 @@ def register_project_routes(
         file: UploadFile = File(...),
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        """Upload a file to the user's shared upload area (max 500 MB).
-        Stored under /tmp/hh-uploads/{username}/ — world-readable so
-        shell_exec in any execution_mode can access it."""
+        """Upload a file to /var/lib/hydrahive/uploads/{username}/ (max 500 MB).
+        Persistent, world-readable — agent kann die Datei immer finden."""
         username = _auth[0]
         MAX_BYTES = 500 * 1024 * 1024
         data = await file.read()
         if len(data) > MAX_BYTES:
             raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 500 MB)")
-        upload_dir = Path("/tmp/hh-uploads") / username
+        upload_dir = Path("/var/lib/hydrahive/uploads") / username
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_dir.chmod(0o755)
+        # Parent /var/lib/hydrahive/uploads/ muss traversierbar sein
+        upload_dir.parent.chmod(0o755)
         dest = upload_dir / file.filename
         dest.write_bytes(data)
         dest.chmod(0o644)

@@ -31,12 +31,22 @@ _HYDRAHIVE_RUNTIME_DIRS=(
     /var/log/hydrahive             # Fresh-Install BL-04: notification_service Log-DB + AMEM-Logs
 )
 
+# Uploads-Verzeichnis: world-readable (755) damit shell_exec in jedem Modus Zugriff hat.
+_HYDRAHIVE_UPLOAD_DIRS=(
+    /var/lib/hydrahive/uploads     # #960 Chat-Uploads (me-chat)
+)
+
 ensure_hydrahive_runtime_dirs() {
     local _dir
     for _dir in "${_HYDRAHIVE_RUNTIME_DIRS[@]}"; do
         mkdir -p "${_dir}" 2>/dev/null || true
         chown "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" "${_dir}" 2>/dev/null || true
         chmod 750 "${_dir}" 2>/dev/null || true
+    done
+    for _dir in "${_HYDRAHIVE_UPLOAD_DIRS[@]}"; do
+        mkdir -p "${_dir}" 2>/dev/null || true
+        chown "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" "${_dir}" 2>/dev/null || true
+        chmod 755 "${_dir}" 2>/dev/null || true
     done
 }
 
