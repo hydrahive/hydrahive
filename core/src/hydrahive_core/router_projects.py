@@ -1675,7 +1675,7 @@ def register_project_routes(
         """Upload a file to the personal user workspace (max 50 MB)."""
         from .settings import settings as _s
         username = _auth[0]
-        MAX_BYTES = 50 * 1024 * 1024
+        MAX_BYTES = 500 * 1024 * 1024
         data = await file.read()
         if len(data) > MAX_BYTES:
             raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 50 MB)")
@@ -1701,7 +1701,7 @@ def register_project_routes(
         if not cfg:
             raise HTTPException(404, "Projekt nicht gefunden")
 
-        MAX_BYTES = 50 * 1024 * 1024
+        MAX_BYTES = 500 * 1024 * 1024
         if file.size is not None and file.size > MAX_BYTES:
             raise HTTPException(413, f"Datei zu groß: {file.size / 1024 / 1024:.1f} MB (max 50 MB)")
 
