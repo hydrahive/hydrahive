@@ -1902,7 +1902,7 @@ register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=
 register_schedule_routes(auth_router, require_auth=require_auth)
 register_agent_secret_routes(admin_router, get_current_admin=require_admin)
 register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
-    register_dream_routes(admin_router, require_admin=require_admin)
+register_dream_routes(admin_router, require_admin=require_admin)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
 register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
