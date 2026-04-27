@@ -1672,17 +1672,20 @@ def register_project_routes(
         file: UploadFile = File(...),
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        """Upload a file to the personal user workspace (max 50 MB)."""
-        from .settings import settings as _s
+        """Upload a file to the user's shared upload area (max 500 MB).
+        Stored under /tmp/hh-uploads/{username}/ — world-readable so
+        shell_exec in any execution_mode can access it."""
         username = _auth[0]
         MAX_BYTES = 500 * 1024 * 1024
         data = await file.read()
         if len(data) > MAX_BYTES:
-            raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 50 MB)")
-        upload_dir = _s.users_data_dir / username / "uploads"
+            raise HTTPException(413, f"Datei zu groß: {len(data) / 1024 / 1024:.1f} MB (max 500 MB)")
+        upload_dir = Path("/tmp/hh-uploads") / username
         upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_dir.chmod(0o755)
         dest = upload_dir / file.filename
         dest.write_bytes(data)
+        dest.chmod(0o644)
         return {
             "path": str(dest),
             "filename": file.filename,
