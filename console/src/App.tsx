@@ -52,6 +52,7 @@ const PlaygroundPage         = lazy(() => import("@/pages/PlaygroundPage").then(
 const ProactivePage          = lazy(() => import("@/pages/ProactivePage").then((m) => ({ default: m.ProactivePage })));
 const TargetSystemsPage      = lazy(() => import("@/pages/TargetSystemsPage").then((m) => ({ default: m.TargetSystemsPage })));
 const TeamsPage            = lazy(() => import("@/pages/TeamsPage").then((m) => ({ default: m.TeamsPage })));
+const AuditPage         = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
 const VMsPage            = lazy(() => import("@/pages/VMsPage").then((m) => ({ default: m.VMsPage })));
 const VNCConsolePage     = lazy(() => import("@/pages/VNCConsolePage").then((m) => ({ default: m.VNCConsolePage })));
 
@@ -138,7 +139,7 @@ export default function App() {
             <Route path="voice"             element={<VoicePage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="target-systems"   element={<TargetSystemsPage />} />
-            <Route path="audit"             element={<Navigate to="/dashboard?tab=audit" replace />} />
+            <Route path="audit"             element={<AuditPage />} />
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
             <Route path="usermanagement"    element={<UserManagementPage />} />

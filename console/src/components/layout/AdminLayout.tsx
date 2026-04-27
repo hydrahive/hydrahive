@@ -39,6 +39,7 @@ import {
   Cpu,
   Radar,
   Gauge,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -351,6 +352,7 @@ export function AdminLayout() {
         { to: "/usermanagement", icon: Shield,   label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
         { to: "/settings",       icon: Settings, label: t("nav.settings"),       hint: t("navHint.settings") },
         { to: "/playground",     icon: Code,     label: "API Playground",        hint: "API-Endpoints testen", adminOnly: true },
+        { to: "/audit",          icon: ShieldCheck, label: t("nav.audit", { defaultValue: "Audit Log" }), hint: t("navHint.audit", { defaultValue: "System-Audit-Protokoll" }), adminOnly: true },
       ],
     },
   ];
