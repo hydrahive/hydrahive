@@ -3095,8 +3095,9 @@ class ServerFileWriteTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Schreibt eine Datei atomar auf einen zugewiesenen Root-/Remote-Server. "
-            "Content wird base64-codiert übertragen (binary-safe). Maximal 1 MiB. "
+            "Schreibt eine Datei auf einen zugewiesenen Root-/Remote-Server. "
+            "Content wird base64-codiert übertragen (binary-safe). Maximal 10 MiB pro Aufruf. "
+            "Für Dateien > 10 MiB: append=true für Folge-Chunks nutzen. "
             "Optional `mode` (oktal, z.B. \"0644\")."
         )
 
@@ -3109,6 +3110,7 @@ class ServerFileWriteTool(BaseTool):
                 "path":      {"type": "string"},
                 "content":   {"type": "string"},
                 "mode":      {"type": "string", "description": "oktal z.B. '0644' (optional)"},
+                "append":    {"type": "boolean", "description": "true = an bestehende Datei anhängen (für Chunks > 10 MiB)"},
             },
             "required": ["server_id", "path", "content"],
         }
@@ -3116,6 +3118,7 @@ class ServerFileWriteTool(BaseTool):
     async def execute(
         self, agent_id: str, project_id: str,
         server_id: str = "", path: str = "", content: str = "", mode: str = "",
+        append: bool = False,
         **kwargs,
     ) -> dict:
         import base64 as _b64
@@ -3131,29 +3134,35 @@ class ServerFileWriteTool(BaseTool):
 
         if not path:
             return {"error": "path fehlt.", "exit_code": -1}
-        MAX_CONTENT = 1_048_576  # 1 MiB
+        MAX_CONTENT = 10 * 1_048_576  # 10 MiB
         payload = content or ""
         payload_bytes = payload.encode("utf-8")
         if len(payload_bytes) > MAX_CONTENT:
             return {
-                "error": f"Content > {MAX_CONTENT} Bytes nicht erlaubt (aktuell {len(payload_bytes)}).",
+                "error": f"Content > {MAX_CONTENT // 1_048_576} MiB nicht erlaubt (aktuell {len(payload_bytes) // 1_048_576} MiB). Datei in Chunks aufteilen und append=true nutzen.",
                 "exit_code": -1,
             }
         b64 = _b64.b64encode(payload_bytes).decode("ascii")
 
         mode_part = ""
-        if mode:
+        if mode and not append:
             if not _re.match(r"^[0-7]{3,4}$", str(mode)):
                 return {"error": f"Ungültiger mode '{mode}' (erwartet: oktal, z.B. 0644).", "exit_code": -1}
             mode_part = f" && chmod {mode} {_shlex.quote(path)}"
 
-        # Atomic via tmp-Datei im selben Verzeichnis + mv
-        remote_cmd = (
-            f"tmp=$(mktemp {_shlex.quote(path)}.XXXXXX) && "
-            f"printf %s {_shlex.quote(b64)} | base64 -d > \"$tmp\" && "
-            f"mv \"$tmp\" {_shlex.quote(path)}"
-            f"{mode_part}"
-        )
+        if append:
+            # Chunk anhängen — kein atomic mv nötig
+            remote_cmd = (
+                f"printf %s {_shlex.quote(b64)} | base64 -d >> {_shlex.quote(path)}"
+            )
+        else:
+            # Atomic via tmp-Datei im selben Verzeichnis + mv
+            remote_cmd = (
+                f"tmp=$(mktemp {_shlex.quote(path)}.XXXXXX) && "
+                f"printf %s {_shlex.quote(b64)} | base64 -d > \"$tmp\" && "
+                f"mv \"$tmp\" {_shlex.quote(path)}"
+                f"{mode_part}"
+            )
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
             target.ssh_key_path, remote_cmd,
