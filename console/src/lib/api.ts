@@ -1100,7 +1100,9 @@ export interface DreamAgentStatus {
 
 export const dreamApi = {
   getConfig: (): Promise<DreamConfig> =>
-    fetch("/api/admin/dream/config", { credentials: "include" }).then(r => r.json()),
+    fetch("/api/admin/dream/config", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => (d && typeof d === "object" && !Array.isArray(d) && "enabled" in d ? d : null) as DreamConfig),
 
   saveConfig: (cfg: Partial<DreamConfig>): Promise<DreamConfig> =>
     fetch("/api/admin/dream/config", {
@@ -1111,7 +1113,9 @@ export const dreamApi = {
     }).then(r => r.json()),
 
   getStatus: (): Promise<DreamAgentStatus[]> =>
-    fetch("/api/admin/dream/status", { credentials: "include" }).then(r => r.json()),
+    fetch("/api/admin/dream/status", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => (Array.isArray(d) ? d : [])),
 
   runNow: (agentId?: string): Promise<{ triggered: string[]; skipped: string[] }> =>
     fetch(`/api/admin/dream/run${agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""}`, {
