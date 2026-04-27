@@ -1838,6 +1838,10 @@
     "selectAgent": "选择代理以查看会话",
     "selectProject": "选择项目以查看会话",
     "empty": "未找到会话",
-    "back": "返回"
+    "back": "返回",
+    "sessionHistory.justNow": "刚刚",
+    "sessionHistory.minAgo": "{{n}}分钟前",
+    "sessionHistory.hrsAgo": "{{n}}小时前",
+    "sessionHistory.daysAgo": "{{n}}天前"
   }
 }

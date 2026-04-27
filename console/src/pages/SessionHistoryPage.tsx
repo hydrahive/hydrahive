@@ -13,17 +13,17 @@ function fmtDate(iso: string | null) {
   catch { return iso; }
 }
 
-function fmtRelTime(iso: string | null) {
+function fmtRelTime(iso: string | null, t: (k: string) => string) {
   if (!iso) return "";
   try {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1)    return "gerade eben";
-    if (mins < 60)   return `vor ${mins}m`;
+    if (mins < 1)    return t("sessionHistory.justNow");
+    if (mins < 60)   return t("sessionHistory.minAgo", { n: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24)    return `vor ${hrs}h`;
+    if (hrs < 24)    return t("sessionHistory.hrsAgo", { n: hrs });
     const days = Math.floor(hrs / 24);
-    return `vor ${days}d`;
+    return t("sessionHistory.daysAgo", { n: days });
   } catch { return ""; }
 }
 
@@ -238,11 +238,11 @@ export default function SessionHistoryPage() {
   // Load agents
   useEffect(() => {
     api.agents().then(r => {
-      const amap = (r as any).agents ?? r as Record<string, unknown>;
+      const amap = (r as { agents?: Record<string, { config?: { identity?: { name?: string } }; name?: string }> }).agents ?? r as Record<string, { config?: { identity?: { name?: string } }; name?: string }>;
       setAgents(
-        Object.entries(amap as Record<string, unknown>).map(([id, cfg]: [string, unknown]) => ({
+        Object.entries(amap).map(([id, cfg]) => ({
           id,
-          name: (cfg as any)?.config?.identity?.name ?? (cfg as any)?.name ?? id,
+          name: cfg?.config?.identity?.name ?? cfg?.name ?? id,
         }))
       );
     }).catch(() => {});
@@ -251,11 +251,11 @@ export default function SessionHistoryPage() {
   // Load projects
   useEffect(() => {
     api.projects().then(r => {
-      const pmap = (r as any).projects ?? r as Record<string, unknown>;
+      const pmap = (r as { projects?: Record<string, { name?: string }> }).projects ?? r as Record<string, { name?: string }>;
       setProjects(
-        Object.entries(pmap as Record<string, unknown>).map(([id, cfg]: [string, unknown]) => ({
+        Object.entries(pmap).map(([id, cfg]) => ({
           id,
-          name: (cfg as any)?.name ?? id,
+          name: cfg?.name ?? id,
         }))
       );
     }).catch(() => {});
@@ -299,6 +299,7 @@ export default function SessionHistoryPage() {
   }
 
   function handleSearch() {
+    setSearching(true);
     setLoading(true);
     loadSessions(tab, tab === "agent" ? selectedAgent : selectedProject, searchQ);
   }
@@ -310,6 +311,15 @@ export default function SessionHistoryPage() {
     setSearchQ("");
     setError("");
   }
+
+  // Re-load when limit changes
+  useEffect(() => {
+    if (tab === "agent" && selectedAgent) {
+      loadSessions("agent", selectedAgent);
+    } else if (tab === "project" && selectedProject) {
+      loadSessions("project", selectedProject);
+    }
+  }, [limit]);
 
   // Auto-load when tab/id changes
   useEffect(() => {
@@ -516,7 +526,7 @@ export default function SessionHistoryPage() {
                       </span>
                       <span className="text-xs text-muted-foreground">
                         <Clock className="w-3 h-3 inline mr-1" />
-                        {fmtRelTime(s.started_at)} · {fmtDate(s.started_at)}
+                        {fmtRelTime(s.started_at, t)} · {fmtDate(s.started_at)}
                       </span>
                       {s.ended_at && (
                         <span className="text-xs text-muted-foreground">

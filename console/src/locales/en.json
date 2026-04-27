@@ -1834,6 +1834,10 @@
     "selectAgent": "Select an agent to see sessions",
     "selectProject": "Select a project to see sessions",
     "empty": "No sessions found",
-    "back": "Back"
+    "back": "Back",
+    "sessionHistory.justNow": "just now",
+    "sessionHistory.minAgo": "{{n}}m ago",
+    "sessionHistory.hrsAgo": "{{n}}h ago",
+    "sessionHistory.daysAgo": "{{n}}d ago"
   }
 }
