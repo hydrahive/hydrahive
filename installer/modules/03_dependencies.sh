@@ -1,9 +1,18 @@
 # Modul 03 — System-Dependencies (#46)
 info "Installiere System-Dependencies..."
 
+# GitHub CLI apt-Repo einrichten (gh ist nicht im Ubuntu-Standard-Repo)
+if ! dpkg -l gh 2>/dev/null | grep -q "^ii"; then
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+fi
+
 apt-get update -qq
 
-DEPS=(python3 python3-pip python3-venv openssh-client git git-lfs curl samba nginx build-essential rsync sudo tree jq ffmpeg)
+DEPS=(python3 python3-pip python3-venv openssh-client git git-lfs curl samba nginx build-essential rsync sudo tree jq ffmpeg gh)
 
 MISSING=()
 for dep in "${DEPS[@]}"; do
