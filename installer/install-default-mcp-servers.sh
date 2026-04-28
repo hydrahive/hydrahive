@@ -173,6 +173,12 @@ candidates = [
         "command": "${MCP_VENVS_DIR}/sqlite/bin/mcp-server-sqlite",
         "args": ["--db-path", "${WORKSPACE_DIR}/mcp.sqlite"], "env": {},
     },
+    {
+        "id": "maestro", "name": "Maestro Workflow", "transport": "stdio",
+        "command": "/usr/bin/node",
+        "args": ["/usr/bin/maestro-workflow-mcp"],
+        "env": {},
+    },
 ]
 
 token = "${GITHUB_TOKEN}"
@@ -186,24 +192,10 @@ if token:
 added = []
 for s in candidates:
     if s["id"] not in existing:
-        # Nur registrieren wenn Binary/Command auffindbar — sonst kommt Error pro Request
         cmd = s["command"]
         if os.path.isabs(cmd):
             if not os.path.isfile(cmd):
                 continue
-        # Non-absolute: wir nehmen an im PATH (wurde in Schritt 2/3 installiert)
-        d["servers"].append(s)
-        added.append(s["id"])
-
-# HTTP-basierte MCP-Server (kein Binary-Check nötig)
-http_candidates = [
-    {
-        "id": "maestro", "name": "Maestro Workflow", "transport": "streamableHttp",
-        "url": "http://127.0.0.1:3004/mcp",
-    },
-]
-for s in http_candidates:
-    if s["id"] not in existing:
         d["servers"].append(s)
         added.append(s["id"])
 
