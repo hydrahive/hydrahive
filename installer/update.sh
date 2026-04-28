@@ -750,36 +750,37 @@ MIGRATE_EOF
         fi
     fi
 
-    # Gitea-Passwort verifizieren und bei Fehler selbstheilend korrigieren
+    # Gitea-Passwort verifizieren und bei Fehler via CLI selbstheilend korrigieren
     _cred="/etc/hydrahive/admin_credentials"
     _gcfg="/etc/hydrahive/gitea_config.json"
+    _gitea_bin="/usr/local/bin/gitea"
+    _gitea_ini="/etc/gitea/app.ini"
+    _gitea_work="/opt/gitea"
     if [ -f "${_gcfg}" ] && grep -q '^gitea_password=' "${_cred}" 2>/dev/null; then
         _gu="$(grep '^gitea_username=' "${_cred}" | cut -d= -f2- || echo "hydrahive")"
         _gp_stored="$(grep '^gitea_password=' "${_cred}" | cut -d= -f2-)"
-        _token="$(python3 -c "import json; d=json.load(open('${_gcfg}')); print(d.get('token',''))" 2>/dev/null || true)"
-        if [ -n "${_token}" ] && [ -n "${_gp_stored}" ]; then
-            # Login-Test mit gespeichertem Passwort
-            _http="$(curl -s -o /dev/null -w '%{http_code}' \
-                -u "${_gu}:${_gp_stored}" \
-                "http://127.0.0.1:3001/api/v1/user" 2>/dev/null)"
-            if [ "${_http}" != "200" ]; then
-                warn "Gitea-Passwort in admin_credentials stimmt nicht (HTTP ${_http}) — setze neues"
-                _raw="$(openssl rand -base64 18)"; _gp_new="${_raw//[\/+=]/}"
-                _http2="$(curl -s -o /dev/null -w '%{http_code}' \
-                    -X PATCH "http://127.0.0.1:3001/api/v1/admin/users/${_gu}" \
-                    -H "Authorization: token ${_token}" \
-                    -H "Content-Type: application/json" \
-                    -d "{\"login_name\":\"${_gu}\",\"source_id\":0,\"password\":\"${_gp_new}\",\"must_change_password\":false}" \
-                    2>/dev/null)"
-                if [ "${_http2}" = "200" ]; then
+        # Login-Test mit gespeichertem Passwort
+        _http="$(curl -s -o /dev/null -w '%{http_code}' \
+            -u "${_gu}:${_gp_stored}" \
+            "http://127.0.0.1:3001/api/v1/user" 2>/dev/null || echo "000")"
+        if [ "${_http}" != "200" ]; then
+            warn "Gitea-Passwort in admin_credentials stimmt nicht (HTTP ${_http}) — setze neues via CLI"
+            _raw="$(openssl rand -base64 18)"; _gp_new="${_raw//[\/+=]/}"
+            if [ -f "${_gitea_bin}" ] && [ -f "${_gitea_ini}" ]; then
+                if sudo -u git env HOME="${_gitea_work}" GITEA_WORK_DIR="${_gitea_work}" \
+                        "${_gitea_bin}" admin user change-password \
+                        --config "${_gitea_ini}" --work-path "${_gitea_work}" \
+                        --username "${_gu}" --password "${_gp_new}" 2>/dev/null; then
                     sed -i "s|^gitea_password=.*|gitea_password=${_gp_new}|" "${_cred}"
-                    info "Gitea-Passwort korrigiert und in admin_credentials aktualisiert"
+                    info "Gitea-Passwort via CLI korrigiert und in admin_credentials aktualisiert"
                 else
-                    warn "Gitea-Passwort-Reset via API fehlgeschlagen (HTTP ${_http2})"
+                    warn "Gitea-CLI-Passwort-Reset fehlgeschlagen — manuell nötig"
                 fi
             else
-                info "Gitea-Passwort verifiziert"
+                warn "Gitea-Binary nicht gefunden — Passwort-Reset übersprungen"
             fi
+        else
+            info "Gitea-Passwort verifiziert (HTTP 200)"
         fi
     fi
 
