@@ -767,6 +767,9 @@ MIGRATE_EOF
             warn "Gitea-Passwort in admin_credentials stimmt nicht (HTTP ${_http}) — setze neues via CLI"
             _raw="$(openssl rand -base64 18)"; _gp_new="${_raw//[\/+=]/}"
             if [ -f "${_gitea_bin}" ] && [ -f "${_gitea_ini}" ]; then
+                # Gitea stoppen damit SQLite-DB nicht gelockt ist
+                systemctl stop gitea 2>/dev/null || true
+                sleep 1
                 if sudo -u git env HOME="${_gitea_work}" GITEA_WORK_DIR="${_gitea_work}" \
                         "${_gitea_bin}" admin user change-password \
                         --config "${_gitea_ini}" --work-path "${_gitea_work}" \
@@ -774,8 +777,10 @@ MIGRATE_EOF
                     sed -i "s|^gitea_password=.*|gitea_password=${_gp_new}|" "${_cred}"
                     info "Gitea-Passwort via CLI korrigiert und in admin_credentials aktualisiert"
                 else
-                    warn "Gitea-CLI-Passwort-Reset fehlgeschlagen — manuell nötig"
+                    warn "Gitea-CLI-Passwort-Reset fehlgeschlagen"
                 fi
+                systemctl start gitea 2>/dev/null || true
+                sleep 2
             else
                 warn "Gitea-Binary nicht gefunden — Passwort-Reset übersprungen"
             fi
