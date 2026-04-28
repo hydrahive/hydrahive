@@ -878,28 +878,26 @@ def register_system_routes(
         p = Path(gitea_config_file)
         cfg = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
         internal_url = cfg.get("url", "http://127.0.0.1:3001")
-        # Externe URL: intern 127.0.0.1:3001 → auf Port 3002 (nginx-Proxy) umschreiben
         import re as _re
         external_url = _re.sub(r"127\.0\.0\.1:3001", "127.0.0.1:3002", internal_url)
-        username = cfg.get("org", "hydrahive")
         token = cfg.get("token", "")
-        # Passwort aus /etc/hydrahive/admin_credentials (console_password=...)
-        # #813: Datei ist root:root 600. Wenn der Core als hydrahive-User
-        # keinen Zugriff hat (Permission denied), nicht crashen — leeres
-        # Passwort zurückgeben, damit die UI "nicht verfügbar" anzeigen
-        # kann statt eines 500ers.
+        # Credentials aus admin_credentials: explizite gitea_username= / gitea_password=
+        # Fallback auf org / console_password für ältere Installs ohne diese Felder.
+        username = cfg.get("org", "hydrahive")
         password = ""
         cred_file = settings.admin_credentials
         if cred_file.exists():
             try:
+                creds = {}
                 for line in cred_file.read_text(encoding="utf-8").splitlines():
-                    if line.startswith("console_password="):
-                        password = line.split("=", 1)[1].strip()
-                        break
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        creds[k.strip()] = v.strip()
+                username = creds.get("gitea_username") or creds.get("org") or username
+                password = creds.get("gitea_password") or creds.get("console_password") or ""
             except PermissionError:
                 logger.warning(
-                    "get_gitea_credentials: %s nicht lesbar (Permission) — "
-                    "passwort wird leer gesetzt. Fix: chgrp hydrahive + chmod 640.",
+                    "get_gitea_credentials: %s nicht lesbar — fix: chgrp hydrahive + chmod 640.",
                     cred_file,
                 )
         return {

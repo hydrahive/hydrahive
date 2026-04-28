@@ -281,6 +281,21 @@ GITCFG
     chown hydrahive:hydrahive "${GITEA_CONFIG_FILE}" 2>/dev/null || true
     chmod 600 "${GITEA_CONFIG_FILE}"
     success "Gitea-Config: ${GITEA_CONFIG_FILE}"
+
+    # Gitea-Credentials explizit in admin_credentials speichern
+    _CRED_FILE="/etc/hydrahive/admin_credentials"
+    touch "${_CRED_FILE}"
+    if ! grep -q '^gitea_username=' "${_CRED_FILE}" 2>/dev/null; then
+        echo "gitea_username=${GITEA_ADMIN}" >> "${_CRED_FILE}"
+    else
+        sed -i "s|^gitea_username=.*|gitea_username=${GITEA_ADMIN}|" "${_CRED_FILE}"
+    fi
+    if ! grep -q '^gitea_password=' "${_CRED_FILE}" 2>/dev/null; then
+        echo "gitea_password=${GITEA_ADMIN_PASS}" >> "${_CRED_FILE}"
+    else
+        sed -i "s|^gitea_password=.*|gitea_password=${GITEA_ADMIN_PASS}|" "${_CRED_FILE}"
+    fi
+    success "Gitea-Credentials in admin_credentials gespeichert"
 fi
 
 # ────────────────────────────────────────────────── nginx-Proxy (Port 3002)
