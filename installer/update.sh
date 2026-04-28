@@ -720,14 +720,26 @@ MIGRATE_EOF
         info "Migration: gitea_username in admin_credentials eingetragen"
     fi
     if ! grep -q '^gitea_password=' "${_cred}" 2>/dev/null; then
-        # Fallback: console_password (= Gitea-Passwort bei Standardinstall)
+        # Primär: console_password (= Gitea-Passwort bei Standardinstall)
         _gp="$(grep '^console_password=' "${_cred}" | cut -d= -f2- || true)"
-        if [ -n "${_gp}" ]; then
-            echo "gitea_password=${_gp}" >> "${_cred}"
-            info "Migration: gitea_password in admin_credentials eingetragen (=console_password)"
-        else
-            info "Migration: kein console_password gefunden — gitea_password bleibt leer"
+        if [ -z "${_gp}" ]; then
+            # Kein Passwort bekannt → neues generieren + direkt in Gitea setzen
+            _raw="$(openssl rand -base64 18)"; _gp="${_raw//[\/+=]/}"
+            _gu="$(grep '^gitea_username=' "${_cred}" | cut -d= -f2- || echo "hydrahive")"
+            _gitea_bin="/usr/local/bin/gitea"
+            _gitea_cfg="/etc/gitea/app.ini"
+            _gitea_work="/opt/gitea"
+            if [ -f "${_gitea_bin}" ] && [ -f "${_gitea_cfg}" ]; then
+                sudo -u git env HOME="${_gitea_work}" GITEA_WORK_DIR="${_gitea_work}" \
+                    "${_gitea_bin}" admin user change-password \
+                    --config "${_gitea_cfg}" --work-path "${_gitea_work}" \
+                    --username "${_gu}" --password "${_gp}" 2>/dev/null \
+                    && info "Migration: Gitea-Passwort für '${_gu}' zurückgesetzt" \
+                    || warn "Migration: Gitea-Passwort konnte nicht gesetzt werden"
+            fi
         fi
+        echo "gitea_password=${_gp}" >> "${_cred}"
+        info "Migration: gitea_password in admin_credentials eingetragen"
     fi
 
     if [ -f /etc/hydrahive/admin_credentials ] && [ -f /etc/hydrahive/users.json ]; then
