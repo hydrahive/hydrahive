@@ -723,23 +723,64 @@ MIGRATE_EOF
         # Primär: console_password (= Gitea-Passwort bei Standardinstall)
         _gp="$(grep '^console_password=' "${_cred}" | cut -d= -f2- || true)"
         if [ -z "${_gp}" ]; then
-            # Kein Passwort bekannt → neues generieren + direkt in Gitea setzen
+            # Kein Passwort bekannt → neues generieren + via Gitea-API setzen
             _raw="$(openssl rand -base64 18)"; _gp="${_raw//[\/+=]/}"
             _gu="$(grep '^gitea_username=' "${_cred}" | cut -d= -f2- || echo "hydrahive")"
-            _gitea_bin="/usr/local/bin/gitea"
-            _gitea_cfg="/etc/gitea/app.ini"
-            _gitea_work="/opt/gitea"
-            if [ -f "${_gitea_bin}" ] && [ -f "${_gitea_cfg}" ]; then
-                sudo -u git env HOME="${_gitea_work}" GITEA_WORK_DIR="${_gitea_work}" \
-                    "${_gitea_bin}" admin user change-password \
-                    --config "${_gitea_cfg}" --work-path "${_gitea_work}" \
-                    --username "${_gu}" --password "${_gp}" 2>/dev/null \
-                    && info "Migration: Gitea-Passwort für '${_gu}' zurückgesetzt" \
-                    || warn "Migration: Gitea-Passwort konnte nicht gesetzt werden"
+            _token="$(python3 -c "import json; d=json.load(open('${_gcfg}')); print(d.get('token',''))" 2>/dev/null || true)"
+            if [ -n "${_token}" ]; then
+                _http="$(curl -s -o /dev/null -w '%{http_code}' \
+                    -X PATCH "http://127.0.0.1:3001/api/v1/admin/users/${_gu}" \
+                    -H "Authorization: token ${_token}" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"login_name\":\"${_gu}\",\"source_id\":0,\"password\":\"${_gp}\",\"must_change_password\":false}" \
+                    2>/dev/null)"
+                if [ "${_http}" = "200" ]; then
+                    info "Migration: Gitea-Passwort für '${_gu}' via API gesetzt"
+                    echo "gitea_password=${_gp}" >> "${_cred}"
+                    info "Migration: gitea_password in admin_credentials eingetragen"
+                else
+                    warn "Migration: Gitea-API antwortet HTTP ${_http} — gitea_password nicht gesetzt"
+                fi
+            else
+                warn "Migration: kein Gitea-Token verfügbar — gitea_password nicht gesetzt"
+            fi
+        else
+            echo "gitea_password=${_gp}" >> "${_cred}"
+            info "Migration: gitea_password in admin_credentials eingetragen (=console_password)"
+        fi
+    fi
+
+    # Gitea-Passwort verifizieren und bei Fehler selbstheilend korrigieren
+    _cred="/etc/hydrahive/admin_credentials"
+    _gcfg="/etc/hydrahive/gitea_config.json"
+    if [ -f "${_gcfg}" ] && grep -q '^gitea_password=' "${_cred}" 2>/dev/null; then
+        _gu="$(grep '^gitea_username=' "${_cred}" | cut -d= -f2- || echo "hydrahive")"
+        _gp_stored="$(grep '^gitea_password=' "${_cred}" | cut -d= -f2-)"
+        _token="$(python3 -c "import json; d=json.load(open('${_gcfg}')); print(d.get('token',''))" 2>/dev/null || true)"
+        if [ -n "${_token}" ] && [ -n "${_gp_stored}" ]; then
+            # Login-Test mit gespeichertem Passwort
+            _http="$(curl -s -o /dev/null -w '%{http_code}' \
+                -u "${_gu}:${_gp_stored}" \
+                "http://127.0.0.1:3001/api/v1/user" 2>/dev/null)"
+            if [ "${_http}" != "200" ]; then
+                warn "Gitea-Passwort in admin_credentials stimmt nicht (HTTP ${_http}) — setze neues"
+                _raw="$(openssl rand -base64 18)"; _gp_new="${_raw//[\/+=]/}"
+                _http2="$(curl -s -o /dev/null -w '%{http_code}' \
+                    -X PATCH "http://127.0.0.1:3001/api/v1/admin/users/${_gu}" \
+                    -H "Authorization: token ${_token}" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"login_name\":\"${_gu}\",\"source_id\":0,\"password\":\"${_gp_new}\",\"must_change_password\":false}" \
+                    2>/dev/null)"
+                if [ "${_http2}" = "200" ]; then
+                    sed -i "s|^gitea_password=.*|gitea_password=${_gp_new}|" "${_cred}"
+                    info "Gitea-Passwort korrigiert und in admin_credentials aktualisiert"
+                else
+                    warn "Gitea-Passwort-Reset via API fehlgeschlagen (HTTP ${_http2})"
+                fi
+            else
+                info "Gitea-Passwort verifiziert"
             fi
         fi
-        echo "gitea_password=${_gp}" >> "${_cred}"
-        info "Migration: gitea_password in admin_credentials eingetragen"
     fi
 
     if [ -f /etc/hydrahive/admin_credentials ] && [ -f /etc/hydrahive/users.json ]; then
