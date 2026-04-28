@@ -211,6 +211,7 @@ export function MyAgentPage() {
         const TAB_LIST = [
           { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
           { id: "settings",  label: t("myAgent.settingsTab", { defaultValue: "Einstellungen" }), icon: Settings },
+          { id: "skills",    label: t("myAgent.skillsTab", { defaultValue: "Skills" }), icon: Puzzle },
           { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
           { id: "messenger", label: t("myAgent.messengerTab"),  icon: MessageSquare },
           { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
