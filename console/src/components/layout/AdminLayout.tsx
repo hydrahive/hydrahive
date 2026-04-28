@@ -847,15 +847,17 @@ export function AdminLayout() {
         )}
 
         {/* Update — clickable badge triggers update */}
-        {(updateAvailable || updating) && isAdmin && (
+        {isAdmin && (
           <button type="button" onClick={triggerUpdate} disabled={updating}
             className={cn("flex items-center gap-1.5 shrink-0 text-xs rounded-full px-2.5 py-1 border transition-colors cursor-pointer disabled:cursor-not-allowed",
               updating
                 ? "bg-amber-500/20 text-amber-400 border-amber-500/35"
-                : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/35"
+                : updateAvailable
+                  ? "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/35"
+                  : "bg-muted/40 text-muted-foreground border-border hover:bg-muted/70"
             )}>
             <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
-            {updating ? t("layout.updateRunning") : t("layout.updateAvailable")}
+            {updating ? t("layout.updateRunning") : updateAvailable ? t("layout.updateAvailable") : t("layout.triggerUpdate")}
           </button>
         )}
 
