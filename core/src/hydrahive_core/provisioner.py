@@ -301,6 +301,9 @@ class Provisioner:
 
         # Verzeichnis anlegen und Ownership setzen
         self._ensure_dir(files_dir, username)
+        # Sudoers-Eintrag für Personal-Agent-User (shell_exec unrestricted)
+        if username.startswith("proj_personal_"):
+            self._ensure_personal_agent_sudoers(username)
         logger.info("Linux-User '%s' angelegt, Verzeichnis: %s", username, files_dir)
         return None
 
@@ -316,6 +319,42 @@ class Provisioner:
             return f"userdel '{username}' fehlgeschlagen: {r.stderr.strip()}"
         logger.info("Linux-User '%s' gelöscht", username)
         return None
+
+    def _ensure_personal_agent_sudoers(self, username: str) -> None:
+        """Sudoers-Eintrag für proj_personal_*-User anlegen (idempotent)."""
+        import tempfile as _tempfile
+        sudoers_path = f"/etc/sudoers.d/hh-agent-{username}"
+        result = subprocess.run(["test", "-f", sudoers_path], capture_output=True)
+        if result.returncode == 0:
+            return  # bereits vorhanden
+        content = (
+            f"{username} ALL=(ALL, !root) NOPASSWD: /bin/bash\n"
+            f"{username} ALL=(ALL, !root) NOPASSWD: /usr/bin/bash\n"
+        )
+        try:
+            with _tempfile.NamedTemporaryFile(
+                mode="w", prefix="hh-agent-sudoers-", suffix=".tmp",
+                dir="/tmp", delete=False
+            ) as f:
+                f.write(content)
+                tmp_path = f.name
+            subprocess.run(
+                ["sudo", "cp", tmp_path, sudoers_path],
+                check=True, capture_output=True
+            )
+            subprocess.run(
+                ["sudo", "chmod", "440", sudoers_path],
+                check=True, capture_output=True
+            )
+            logger.info("Sudoers-Eintrag für Personal-Agent '%s' angelegt", username)
+        except Exception as e:
+            logger.warning("Sudoers für '%s' fehlgeschlagen: %s", username, e)
+        finally:
+            try:
+                import os as _os
+                _os.unlink(tmp_path)
+            except Exception:
+                pass
 
     def _ensure_dir(self, path: str, owner: str) -> None:
         # Owner: proj_<id> (Samba-User), Gruppe: hydrahive (Core-Prozess)

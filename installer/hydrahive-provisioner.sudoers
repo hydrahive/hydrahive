@@ -37,3 +37,8 @@ hydrahive ALL=(root) NOPASSWD: /bin/chmod 600 /etc/hydrahive/samba_credentials
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol smbd reload-config
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol all reload-config
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd
+
+# --- Personal-Agent Sudoers (shell_exec unrestricted) ---
+hydrahive ALL=(root) NOPASSWD: /bin/cp /tmp/hh-agent-sudoers-*.tmp /etc/sudoers.d/hh-agent-proj_personal_*
+hydrahive ALL=(root) NOPASSWD: /bin/chmod 440 /etc/sudoers.d/hh-agent-proj_personal_*
+hydrahive ALL=(root) NOPASSWD: /bin/rm -f /etc/sudoers.d/hh-agent-proj_personal_*

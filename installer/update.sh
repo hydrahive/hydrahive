@@ -488,6 +488,16 @@ EOF
         fi
     done
 
+    # --- 5b2. Personal-Agent Sudoers für alle vorhandenen proj_personal_*-User ---
+    for _pu in $(getent passwd 2>/dev/null | awk -F: '$1 ~ /^proj_personal_/ {print $1}'); do
+        _sf="/etc/sudoers.d/hh-agent-${_pu}"
+        if [ ! -f "${_sf}" ]; then
+            printf '%s ALL=(ALL, !root) NOPASSWD: /bin/bash\n%s ALL=(ALL, !root) NOPASSWD: /usr/bin/bash\n' "${_pu}" "${_pu}" > "${_sf}"
+            chmod 440 "${_sf}"
+            info "sudoers: ${_pu} (Personal-Agent) eingetragen"
+        fi
+    done
+
     # --- 5c. Plugins deployen (#110) ---
     if [ -d "${TMPDIR_BASE}/plugins" ]; then
         mkdir -p /plugins
