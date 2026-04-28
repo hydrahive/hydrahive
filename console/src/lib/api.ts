@@ -159,6 +159,10 @@ export const api = {
   },
   agentSkills:       (id: string) =>
     api.get<{skills: AgentSkill[]}>(`/agents/${id}/skills`),
+  agentSkillsCatalog: (id: string) =>
+    api.get<{skills: AgentSkill[]; available: {name: string; skill: string; scope: string; triggers: string[]}[]}>(`/agents/${id}/skills?layers=effective`),
+  installSkillFromCatalog: (id: string, name: string) =>
+    api.post(`/agents/${id}/skills/install`, { source: "catalog", name, force: false }),
   createSkill:       (id: string, d: unknown) => api.post(`/agents/${id}/skills`, d),
   updateSkill:       (id: string, filename: string, d: unknown) => api.put(`/agents/${id}/skills/${filename}`, d),
   deleteSkill:       (id: string, filename: string) => api.delete(`/agents/${id}/skills/${filename}`),

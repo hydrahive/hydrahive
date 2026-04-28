@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot, Download } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -14,12 +14,16 @@ const EMPTY_SKILL = {
   content: "",
 };
 
+interface CatalogEntry { name: string; skill: string; scope: string; triggers: string[]; }
 interface Props { agentId: string; }
 
 export function SkillsPanel({ agentId }: Props) {
   const { t } = useTranslation();
   const [skills, setSkills] = useState<AgentSkill[]>([]);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installErr, setInstallErr] = useState("");
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -33,13 +37,27 @@ export function SkillsPanel({ agentId }: Props) {
 
   async function load() {
     try {
-      const d = await api.agentSkills(agentId);
+      const d = await api.agentSkillsCatalog(agentId);
       setSkills(d.skills);
+      setCatalog(d.available || []);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleInstall(name: string) {
+    setInstalling(name);
+    setInstallErr("");
+    try {
+      await api.installSkillFromCatalog(agentId, name);
+      await load();
+    } catch (e) {
+      setInstallErr(e instanceof Error ? e.message : t("common.error"));
+    } finally {
+      setInstalling(null);
     }
   }
 
@@ -217,6 +235,31 @@ export function SkillsPanel({ agentId }: Props) {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {catalog.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">Catalog — verfügbar</p>
+          {installErr && <p className="mb-2 text-xs text-destructive">{installErr}</p>}
+          <div className="space-y-2">
+            {catalog.map((c) => (
+              <div key={c.name} className="flex items-center justify-between gap-3 rounded-2xl border bg-muted/10 px-4 py-2.5">
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{c.skill || c.name}</span>
+                  {c.triggers.length > 0 && <p className="text-xs text-muted-foreground mt-0.5">{c.triggers.slice(0, 4).join(", ")}</p>}
+                </div>
+                <button
+                  onClick={() => handleInstall(c.name)}
+                  disabled={installing === c.name}
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs transition hover:bg-accent disabled:opacity-50"
+                >
+                  <Download className="h-3 w-3" />
+                  {installing === c.name ? "..." : "Installieren"}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
