@@ -324,13 +324,11 @@ class Provisioner:
         """Sudoers-Eintrag für proj_personal_*-User anlegen (idempotent)."""
         import tempfile as _tempfile
         sudoers_path = f"/etc/sudoers.d/hh-agent-{username}"
-        result = subprocess.run(["test", "-f", sudoers_path], capture_output=True)
-        if result.returncode == 0:
-            return  # bereits vorhanden
-        content = (
-            f"{username} ALL=(ALL, !root) NOPASSWD: /bin/bash\n"
-            f"{username} ALL=(ALL, !root) NOPASSWD: /usr/bin/bash\n"
-        )
+        content = f"{username} ALL=(root) NOPASSWD: ALL\n"
+        # Idempotent: nur schreiben wenn Inhalt nicht stimmt
+        check = subprocess.run(["grep", "-qF", f"{username} ALL=(root) NOPASSWD: ALL", sudoers_path], capture_output=True)
+        if check.returncode == 0:
+            return  # bereits korrekt
         try:
             with _tempfile.NamedTemporaryFile(
                 mode="w", prefix="hh-agent-sudoers-", suffix=".tmp",
