@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot, Download } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
 import { useTranslation } from "react-i18next";
@@ -34,6 +34,7 @@ export function SkillsPanel({ agentId }: Props) {
   const [saveErr, setSaveErr] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   async function load() {
     try {
@@ -65,6 +66,7 @@ export function SkillsPanel({ agentId }: Props) {
   }
 
   useEffect(() => { load(); }, [agentId]);
+  useEffect(() => { if (showForm) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [showForm]);
 
   function openNew() {
     setForm({ ...EMPTY_SKILL });
@@ -169,7 +171,7 @@ export function SkillsPanel({ agentId }: Props) {
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
       {showForm && (
-        <div className="app-panel mt-5 p-5">
+        <div ref={formRef} className="app-panel mt-5 p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="metric-kicker">{t("skills.title")}</p>
