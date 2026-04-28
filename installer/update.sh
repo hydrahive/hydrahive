@@ -704,23 +704,29 @@ MIGRATE_EOF
     # 06_core_service.sh setzt chown hydrahive:hydrahive 600 beim Install —
     # bei ältere Installationen liegt die Datei aber mitunter root:root 600
     # (Core-Child kann nicht lesen → Matrix-Token + Gitea-Credentials scheitern).
-    if [ -f /etc/hydrahive/admin_credentials ]; then
-        chown hydrahive:hydrahive /etc/hydrahive/admin_credentials 2>/dev/null || true
-        chmod 600 /etc/hydrahive/admin_credentials 2>/dev/null || true
-        # Migration: gitea_username/gitea_password explizit eintragen wenn fehlt
-        _gcfg="/etc/hydrahive/gitea_config.json"
-        _cred="/etc/hydrahive/admin_credentials"
-        if ! grep -q '^gitea_username=' "${_cred}" 2>/dev/null; then
-            _gu="$(python3 -c "import json; d=json.load(open('${_gcfg}')); print(d.get('org','hydrahive'))" 2>/dev/null || echo "hydrahive")"
-            echo "gitea_username=${_gu}" >> "${_cred}"
-            info "Migration: gitea_username in admin_credentials eingetragen"
-        fi
-        if ! grep -q '^gitea_password=' "${_cred}" 2>/dev/null; then
-            _gp="$(grep '^console_password=' "${_cred}" | cut -d= -f2-)"
-            if [ -n "${_gp}" ]; then
-                echo "gitea_password=${_gp}" >> "${_cred}"
-                info "Migration: gitea_password in admin_credentials eingetragen (=console_password)"
-            fi
+    # admin_credentials anlegen wenn fehlend (Neuinstallation ohne Installer-Modul)
+    _cred="/etc/hydrahive/admin_credentials"
+    _gcfg="/etc/hydrahive/gitea_config.json"
+    if [ ! -f "${_cred}" ]; then
+        touch "${_cred}"
+        info "admin_credentials neu angelegt"
+    fi
+    chown hydrahive:hydrahive "${_cred}" 2>/dev/null || true
+    chmod 600 "${_cred}"
+    # Migration: gitea_username/gitea_password explizit eintragen wenn fehlt
+    if ! grep -q '^gitea_username=' "${_cred}" 2>/dev/null; then
+        _gu="$(python3 -c "import json; d=json.load(open('${_gcfg}')); print(d.get('org','hydrahive'))" 2>/dev/null || echo "hydrahive")"
+        echo "gitea_username=${_gu}" >> "${_cred}"
+        info "Migration: gitea_username in admin_credentials eingetragen"
+    fi
+    if ! grep -q '^gitea_password=' "${_cred}" 2>/dev/null; then
+        # Fallback: console_password (= Gitea-Passwort bei Standardinstall)
+        _gp="$(grep '^console_password=' "${_cred}" | cut -d= -f2- || true)"
+        if [ -n "${_gp}" ]; then
+            echo "gitea_password=${_gp}" >> "${_cred}"
+            info "Migration: gitea_password in admin_credentials eingetragen (=console_password)"
+        else
+            info "Migration: kein console_password gefunden — gitea_password bleibt leer"
         fi
     fi
 
