@@ -161,7 +161,8 @@ export function MyAgentPage() {
       if (!runtime.showHistory) runtime.toggleHistory();
       return true;
     }
-    runtime.pushSystemMessage(`Unbekannter Command: \`${cmd}\`. /help für Übersicht.`);
+    // Unbekannte Commands als normale Nachricht senden — Backend matcht Skill-Trigger-Keywords
+    void runtime.sendText(args ? `${cmd.slice(1)} ${args}` : cmd.slice(1));
     return true;
   }
   const runtime = useHydraHiveRuntime(meTarget, { onSlashCommand: handleSlashCommand });
