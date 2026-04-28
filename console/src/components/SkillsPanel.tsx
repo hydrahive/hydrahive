@@ -37,9 +37,12 @@ export function SkillsPanel({ agentId }: Props) {
 
   async function load() {
     try {
-      const d = await api.agentSkillsCatalog(agentId);
-      setSkills(d.skills || []);
-      setCatalog((d.available || []).filter((c) => c.name));
+      const [installed, catalog] = await Promise.all([
+        api.agentSkills(agentId),
+        api.agentSkillsCatalog(agentId).catch(() => ({ skills: [], available: [] })),
+      ]);
+      setSkills(installed.skills || []);
+      setCatalog((catalog.available || []).filter((c) => c.name));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
