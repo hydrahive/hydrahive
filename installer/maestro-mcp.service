@@ -5,11 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/tmp
-ExecStartPre=/bin/mkdir -p /tmp/.maestro
-ExecStartPre=/bin/touch /tmp/.maestro/audit.jsonl
-ExecStartPre=/bin/touch /tmp/.maestro/decisions.jsonl
-ExecStart=/usr/bin/node /usr/bin/maestro-workflow-mcp --http --port 3004
+ExecStart=/opt/hydrahive/installer/start-maestro.sh
 Restart=always
 RestartSec=5
 StandardOutput=journal

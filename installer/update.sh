@@ -1244,6 +1244,10 @@ PYEOF
     fi
 
     # --- 10c. Maestro MCP Service ---
+    if [ -f "${TMPDIR_BASE}/installer/start-maestro.sh" ]; then
+        cp "${TMPDIR_BASE}/installer/start-maestro.sh" "${HYDRAHIVE_DIR}/installer/start-maestro.sh"
+        chmod +x "${HYDRAHIVE_DIR}/installer/start-maestro.sh"
+    fi
     if [ -f "${TMPDIR_BASE}/installer/maestro-mcp.service" ]; then
         # Permanentes Arbeitsverzeichnis mit .maestro-Daten
         mkdir -p /opt/maestro/.maestro
