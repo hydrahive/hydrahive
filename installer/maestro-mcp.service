@@ -5,6 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
+User=claude
 ExecStart=/opt/hydrahive/installer/start-maestro.sh
 Restart=always
 RestartSec=5
