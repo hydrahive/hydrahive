@@ -154,6 +154,14 @@ main() {
         rsync -a "${TMPDIR_BASE}/scripts/" "${HYDRAHIVE_DIR}/scripts/"
     fi
 
+    # --- 2a1. Skills-Catalog aktualisieren ---
+    if [ -d "${TMPDIR_BASE}/skills/catalog" ]; then
+        mkdir -p "${HYDRAHIVE_DIR}/skills/catalog"
+        rsync -a --delete "${TMPDIR_BASE}/skills/catalog/" "${HYDRAHIVE_DIR}/skills/catalog/"
+        chown -R hydrahive:hydrahive "${HYDRAHIVE_DIR}/skills/" 2>/dev/null || true
+        info "Skills-Catalog aktualisiert"
+    fi
+
     # --- 2b0. Bundled Agent Templates aktualisieren ---
     # Repo-gepflegte Template-Agents brauchen Updates an agent.yaml/soul.md.
     # Runtime-State wie memory/, skills/ und user-eigene personal_*-Agents darf
