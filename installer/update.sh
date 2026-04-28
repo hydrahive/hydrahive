@@ -1243,6 +1243,27 @@ PYEOF
         info "hydrahive-selfupdate.timer aktualisiert"
     fi
 
+    # --- 10c. Maestro MCP Service ---
+    if [ -f "${TMPDIR_BASE}/installer/maestro-mcp.service" ]; then
+        # Permanentes Arbeitsverzeichnis mit .maestro-Daten
+        mkdir -p /opt/maestro/.maestro
+        # Bestehende Daten aus /tmp übernehmen falls vorhanden
+        [ -f /tmp/.maestro/audit.jsonl ]     && cp /tmp/.maestro/audit.jsonl     /opt/maestro/.maestro/ 2>/dev/null || true
+        [ -f /tmp/.maestro/decisions.jsonl ] && cp /tmp/.maestro/decisions.jsonl /opt/maestro/.maestro/ 2>/dev/null || true
+        # Leere Dateien anlegen falls noch nicht vorhanden
+        touch /opt/maestro/.maestro/audit.jsonl /opt/maestro/.maestro/decisions.jsonl
+        chown -R hydrahive:hydrahive /opt/maestro 2>/dev/null || true
+
+        cp "${TMPDIR_BASE}/installer/maestro-mcp.service" /etc/systemd/system/
+        systemctl daemon-reload
+        if systemctl is-active maestro-mcp.service &>/dev/null; then
+            systemctl restart maestro-mcp.service
+        else
+            systemctl enable --now maestro-mcp.service 2>/dev/null || systemctl start maestro-mcp.service
+        fi
+        info "maestro-mcp.service aktualisiert und gestartet"
+    fi
+
     # nginx-Konfig wird absichtlich NICHT automatisch aktualisiert.
     # Nutzer können ihre Konfig (SSL, custom rules etc.) angepasst haben.
     # Fehlende A2A-Regeln → Doctor-Seite → Fix-Button.

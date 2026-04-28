@@ -1,0 +1,19 @@
+[Unit]
+Description=Maestro Workflow MCP Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=hydrahive
+Group=hydrahive
+WorkingDirectory=/opt/maestro
+ExecStartPre=/bin/mkdir -p /opt/maestro/.maestro
+ExecStart=/usr/bin/npx maestro-workflow-mcp --http --port 3004
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
