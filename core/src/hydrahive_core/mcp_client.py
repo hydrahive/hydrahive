@@ -125,6 +125,11 @@ async def _http_list_tools(url: str, headers: dict) -> list[dict]:
         if session_id:
             session_headers["mcp-session-id"] = session_id
 
+        # MCP-Protokoll: initialized-Notification senden bevor weitere Calls
+        await client.post(url, json={
+            "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
+        }, headers=session_headers)
+
         # tools/list mit Session-ID
         r2 = await client.post(url, json={
             "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
@@ -158,6 +163,11 @@ async def _http_call_tool(url: str, headers: dict, tool_name: str, arguments: di
         session_id = r.headers.get("mcp-session-id")
         if session_id:
             session_headers["mcp-session-id"] = session_id
+
+        # MCP-Protokoll: initialized-Notification senden bevor weitere Calls
+        await client.post(url, json={
+            "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
+        }, headers=session_headers)
 
         # tools/call mit Session-ID
         r2 = await client.post(url, json={
