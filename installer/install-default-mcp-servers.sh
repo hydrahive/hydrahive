@@ -195,6 +195,18 @@ for s in candidates:
         d["servers"].append(s)
         added.append(s["id"])
 
+# HTTP-basierte MCP-Server (kein Binary-Check nötig)
+http_candidates = [
+    {
+        "id": "maestro", "name": "Maestro Workflow", "transport": "streamableHttp",
+        "url": "http://127.0.0.1:3004/mcp",
+    },
+]
+for s in http_candidates:
+    if s["id"] not in existing:
+        d["servers"].append(s)
+        added.append(s["id"])
+
 open(p, "w").write(json.dumps(d, indent=2))
 print("added:", added or "(nichts neues)")
 PYEOF
