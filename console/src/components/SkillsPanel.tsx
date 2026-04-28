@@ -38,8 +38,8 @@ export function SkillsPanel({ agentId }: Props) {
   async function load() {
     try {
       const d = await api.agentSkillsCatalog(agentId);
-      setSkills(d.skills);
-      setCatalog(d.available || []);
+      setSkills(d.skills || []);
+      setCatalog((d.available || []).filter((c) => c.name));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
@@ -247,7 +247,7 @@ export function SkillsPanel({ agentId }: Props) {
               <div key={c.name} className="flex items-center justify-between gap-3 rounded-2xl border bg-muted/10 px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-medium">{c.skill || c.name}</span>
-                  {c.triggers.length > 0 && <p className="text-xs text-muted-foreground mt-0.5">{c.triggers.slice(0, 4).join(", ")}</p>}
+                  {(c.triggers?.length ?? 0) > 0 && <p className="text-xs text-muted-foreground mt-0.5">{c.triggers.slice(0, 4).join(", ")}</p>}
                 </div>
                 <button
                   onClick={() => handleInstall(c.name)}
